@@ -1,0 +1,26 @@
+{
+  "notifications": {
+    "recurring_created": "Recurring transaction created",
+    "recurring_created_body": "Transaction \"{name}\" for {amount} {currency} was created automatically",
+    "debt_due_soon": "Debt due date approaching",
+    "debt_due_soon_body": "Debt \"{name}\" is due by {date}",
+    "budget_warning": "Budget almost exhausted",
+    "budget_warning_body": "Category \"{category}\" has reached {percent}% of the limit",
+    "budget_exceeded": "Budget exceeded",
+    "budget_exceeded_body": "Category \"{category}\" has exceeded the limit of {amount}",
+    "push_test": "Test notification",
+    "push_test_body": "If you see this message, Push notifications are working correctly",
+    "bell_test": "Bell test",
+    "bell_test_body": "If you see this in the bell, everything works",
+    "shoutrrr_test": "Shoutrrr test",
+    "shoutrrr_test_body": "If you see this message, Shoutrrr is working correctly",
+    "goal_reached": "Goal reached!",
+    "goal_reached_body": "Savings goal \"{name}\" is complete: {balance} / {target}",
+    "debt_paid": "Debt paid off",
+    "debt_paid_body": "Debt \"{name}\" has been fully paid",
+    "account_overdrawn": "Account overdrawn",
+    "account_overdrawn_body": "Account \"{name}\" is overdrawn: {balance}",
+    "login_failed": "Failed login attempt",
+    "login_failed_body": "User {login} failed to sign in. IP: {ip}"
+  }
+}

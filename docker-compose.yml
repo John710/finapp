@@ -1,0 +1,29 @@
+services:
+  finapp:
+    container_name: finapp
+    image: ghcr.io/john710/finapp:latest
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    ports:
+      - "${PORT:-6253}:6253"
+    environment:
+      PUID: $PUID
+      PGID: $PGID
+      DATABASE_URL: $FIN_DATABASE_URL
+      JWT_SECRET: $FIN_JWT_SECRET
+      PORT: $FIN_PORT
+      JWT_ACCESS_TTL: $FIN_JWT_ACCESS_TTL
+      JWT_REFRESH_TTL: $FIN_JWT_REFRESH_TTL
+      SHOUTRRR_URL: $FIN_SHOUTRRR_URL
+      ALLOWED_ORIGINS: $FIN_ALLOWED_ORIGINS
+      TZ: $TZ
+      VAPID_PUBLIC_KEY: $FIN_VAPID_PUBLIC_KEY
+      VAPID_PRIVATE_KEY: $FIN_VAPID_PRIVATE_KEY
+      VAPID_SUBJECT: $FIN_VAPID_SUBJECT
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:${PORT:-6253}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s

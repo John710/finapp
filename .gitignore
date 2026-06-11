@@ -1,0 +1,23 @@
+# Secrets
+.env
+.env.local
+**/.env
+**/.env.*
+!.env.example 
+
+# Dependencies
+**/node_modules
+
+# Build
+dist
+**/dist
+frontend/.vite
+backend/public
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log

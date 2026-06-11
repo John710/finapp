@@ -1,0 +1,26 @@
+{
+  "notifications": {
+    "recurring_created": "Создана регулярная транзакция",
+    "recurring_created_body": "Транзакция \"{name}\" на сумму {amount} {currency} создана автоматически",
+    "debt_due_soon": "Приближается срок возврата долга",
+    "debt_due_soon_body": "Долг \"{name}\" необходимо вернуть до {date}",
+    "budget_warning": "Бюджет почти исчерпан",
+    "budget_warning_body": "По категории \"{category}\" достигнуто {percent}% от лимита",
+    "budget_exceeded": "Бюджет превышен",
+    "budget_exceeded_body": "По категории \"{category}\" превышен лимит в {amount}",
+    "push_test": "Тестовое уведомление",
+    "push_test_body": "Если вы видите это сообщение, Push-уведомления работают корректно",
+    "bell_test": "Тест колокольчика",
+    "bell_test_body": "Если вы видите это в колокольчике, всё работает",
+    "shoutrrr_test": "Тест Shoutrrr",
+    "shoutrrr_test_body": "Если вы видите это сообщение, Shoutrrr работает корректно",
+    "goal_reached": "Цель достигнута!",
+    "goal_reached_body": "Цель накопления \"{name}\" выполнена: {balance} / {target}",
+    "debt_paid": "Долг погашен",
+    "debt_paid_body": "Долг \"{name}\" полностью погашен",
+    "account_overdrawn": "Минус на счёте",
+    "account_overdrawn_body": "Счёт \"{name}\" ушёл в минус: {balance}",
+    "login_failed": "Неудачная попытка входа",
+    "login_failed_body": "Пользователь {login} не смог войти. IP: {ip}"
+  }
+}
