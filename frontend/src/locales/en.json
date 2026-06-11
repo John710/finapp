@@ -263,6 +263,13 @@
     "test_shoutrrr_sent": "Shoutrrr test sent",
     "test_shoutrrr_failed": "Failed to send Shoutrrr test"
   },
+  "github": {
+    "issue": "Have an issue?",
+    "star": "Star on GitHub",
+    "current_version": "Current version: {version}",
+    "update_available": "New version available: {version}",
+    "checking_updates": "Checking for updates..."
+  },
   "accounts": {
     "title": "Accounts",
     "empty": "Account list will appear here",

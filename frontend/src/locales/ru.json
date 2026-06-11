@@ -263,6 +263,13 @@
     "test_shoutrrr_sent": "Тест Shoutrrr отправлен",
     "test_shoutrrr_failed": "Не удалось отправить тест Shoutrrr"
   },
+  "github": {
+    "issue": "Нашли ошибку?",
+    "star": "Поставить звезду на GitHub",
+    "current_version": "Текущая версия: {version}",
+    "update_available": "Новая версия: {version}",
+    "checking_updates": "Проверка обновлений..."
+  },
   "accounts": {
     "title": "Счета",
     "empty": "Список счетов появится здесь",
