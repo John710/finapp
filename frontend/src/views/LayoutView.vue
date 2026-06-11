@@ -102,13 +102,15 @@
               </div>
               <div class="py-1">
                 <a href="https://github.com/John710/finapp/issues" target="_blank" rel="noopener noreferrer"
-                  class="flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  class="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   @click="showGithubMenu = false">
+                  <Icon name="alert02" class="w-5 h-5" />
                   {{ $t('github.issue') }}
                 </a>
                 <a href="https://github.com/John710/finapp" target="_blank" rel="noopener noreferrer"
-                  class="flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  class="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                   @click="showGithubMenu = false">
+                  <Icon name="star" class="w-5 h-5" />
                   {{ $t('github.star') }}
                 </a>
               </div>
