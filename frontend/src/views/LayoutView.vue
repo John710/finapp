@@ -103,14 +103,18 @@
               <div class="py-1">
                 <a href="https://github.com/John710/finapp/issues" target="_blank" rel="noopener noreferrer"
                   class="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  @click="showGithubMenu = false">
-                  <Icon name="alert02" class="w-5 h-5" />
+                  @click="showGithubMenu = false"
+                  @mouseenter="isHoveringIssue = true"
+                  @mouseleave="isHoveringIssue = false">
+                  <Icon name="alert02" class="w-5 h-5 transition-colors" :class="isHoveringIssue ? 'text-red-500' : 'text-slate-500 dark:text-slate-400'" />
                   {{ $t('github.issue') }}
                 </a>
                 <a href="https://github.com/John710/finapp" target="_blank" rel="noopener noreferrer"
                   class="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  @click="showGithubMenu = false">
-                  <Icon name="star" class="w-5 h-5" />
+                  @click="showGithubMenu = false"
+                  @mouseenter="isHoveringStar = true"
+                  @mouseleave="isHoveringStar = false">
+                  <Icon name="star" class="w-5 h-5 transition-colors" :class="isHoveringStar ? 'text-yellow-500' : 'text-slate-500 dark:text-slate-400'" />
                   {{ $t('github.star') }}
                 </a>
               </div>
@@ -190,6 +194,8 @@ const confirmModalRef = ref(null)
 const isDark = ref(document.documentElement.classList.contains('dark'))
 const showNotifs = ref(false)
 const showGithubMenu = ref(false)
+const isHoveringIssue = ref(false)
+const isHoveringStar = ref(false)
 const notifDropdownRef = ref(null)
 const githubDropdownRef = ref(null)
 
