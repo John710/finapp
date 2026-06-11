@@ -8,6 +8,9 @@ import Search01Icon from '@hugeicons/core-free-icons/Search01Icon'
 import Cancel01Icon from '@hugeicons/core-free-icons/Cancel01Icon'
 import CheckmarkCircle01Icon from '@hugeicons/core-free-icons/CheckmarkCircle01Icon'
 import AlertCircleIcon from '@hugeicons/core-free-icons/AlertCircleIcon'
+import Alert02Icon from '@hugeicons/core-free-icons/Alert02Icon'
+import StarIcon from '@hugeicons/core-free-icons/StarIcon'
+import Github01Icon from '@hugeicons/core-free-icons/Github01Icon'
 import InformationCircleIcon from '@hugeicons/core-free-icons/InformationCircleIcon'
 import ArrowLeft01Icon from '@hugeicons/core-free-icons/ArrowLeft01Icon'
 import ArrowRight01Icon from '@hugeicons/core-free-icons/ArrowRight01Icon'
@@ -36,23 +39,6 @@ import ChartIcon from '@hugeicons/core-free-icons/ChartIcon'
 import Location01Icon from '@hugeicons/core-free-icons/Location01Icon'
 import Briefcase01Icon from '@hugeicons/core-free-icons/Briefcase01Icon'
 import BoatIcon from '@hugeicons/core-free-icons/BoatIcon'
-import { h } from 'vue'
-
-// Custom GitHub Icon
-const GitHubIcon = (props) => h('svg', {
-  viewBox: '0 0 24 24',
-  fill: 'none',
-  stroke: 'currentColor',
-  'stroke-width': '1.5',
-  'stroke-linecap': 'round',
-  'stroke-linejoin': 'round',
-  width: props.size || 24,
-  height: props.size || 24,
-  ...props
-}, [
-  h('path', { d: 'M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4' }),
-  h('path', { d: 'M9 18c-4.51 2-5-2-7-2' })
-])
 
 // Category Icons
 import Tag02Icon from '@hugeicons/core-free-icons/Tag02Icon'
@@ -207,6 +193,9 @@ export const uiIcons = {
   cancel: Cancel01Icon,
   check: CheckmarkCircle01Icon,
   alert: AlertCircleIcon,
+  alert02: Alert02Icon,
+  star: StarIcon,
+  github: Github01Icon,
   info: InformationCircleIcon,
   arrowLeft: ArrowLeft01Icon,
   arrowRight: ArrowRight01Icon,
@@ -237,7 +226,6 @@ export const uiIcons = {
   boat: BoatIcon,
   arrowDown: ArrowDown01Icon,
   money: Money01Icon,
-  github: GitHubIcon,
 }
 
 export const categoryIcons = {
@@ -399,3 +387,4 @@ export const categoryIcons = {
 }
 
 export { HugeiconsIcon }
+
