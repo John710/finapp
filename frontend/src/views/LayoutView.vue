@@ -81,6 +81,39 @@
               </div>
             </div>
           </div>
+          <!-- GitHub Button -->
+          <div class="relative" ref="githubDropdownRef">
+            <button @click="showGithubMenu = !showGithubMenu" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors relative">
+              <Icon name="github" class="w-5 h-5" />
+              <span v-if="hasUpdate" class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            </button>
+            <!-- Dropdown -->
+            <div v-if="showGithubMenu" class="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg z-50">
+              <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+                <p class="text-sm font-medium" v-if="hasUpdate">
+                  {{ $t('github.update_available', { version: latestVersion }) }}
+                </p>
+                <p class="text-sm font-medium" v-else-if="checkingUpdates">
+                  {{ $t('github.checking_updates') }}
+                </p>
+                <p class="text-sm text-slate-500 dark:text-slate-400" v-else>
+                  {{ $t('github.current_version', { version: currentVersion }) }}
+                </p>
+              </div>
+              <div class="py-1">
+                <a href="https://github.com/John710/finapp/issues" target="_blank" rel="noopener noreferrer"
+                  class="flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  @click="showGithubMenu = false">
+                  {{ $t('github.issue') }}
+                </a>
+                <a href="https://github.com/John710/finapp" target="_blank" rel="noopener noreferrer"
+                  class="flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  @click="showGithubMenu = false">
+                  {{ $t('github.star') }}
+                </a>
+              </div>
+            </div>
+          </div>
           <button @click="toggleTheme" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
             <Icon v-if="isDark" name="sun" class="w-5 h-5" />
             <Icon v-else name="moon" class="w-5 h-5" />
@@ -134,6 +167,7 @@ import CommandPalette from '@/components/CommandPalette.vue'
 import HelpModal from '@/components/HelpModal.vue'
 import ToastContainer from '@/components/ToastContainer.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
+import packageJson from '../../package.json'
 
 const route = useRoute()
 const router = useRouter()
@@ -142,9 +176,20 @@ const notifStore = useNotificationsStore()
 const undo = useUndo()
 const { t } = useI18n()
 
+const currentVersion = packageJson.version
+const latestVersion = ref('')
+const checkingUpdates = ref(false)
+const hasUpdate = ref(false)
+
 const showCommandPalette = ref(false)
 const showHelp = ref(false)
 const confirmModalRef = ref(null)
+
+const isDark = ref(document.documentElement.classList.contains('dark'))
+const showNotifs = ref(false)
+const showGithubMenu = ref(false)
+const notifDropdownRef = ref(null)
+const githubDropdownRef = ref(null)
 
 // Global toast & confirm for views
 const toast = useToast()
@@ -155,8 +200,8 @@ if (typeof window !== 'undefined') {
 
 // Global hotkeys — use window listener for reliability across layouts
 function onGlobalKeydown(e) {
-  // Ctrl+Shift+K → Command palette
-  if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'k') {
+  // Ctrl+Shift+K или Ctrl+Shift+л → Command palette
+  if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'k') || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'л')) {
     e.preventDefault()
     showCommandPalette.value = true
     return
@@ -170,50 +215,78 @@ function onGlobalKeydown(e) {
     }
     return
   }
-  // Esc → Close help modal
-  if (e.key === 'Escape' && showHelp.value) {
-    e.preventDefault()
-    showHelp.value = false
+  // Esc → Close help modal or github menu
+  if (e.key === 'Escape') {
+    if (showHelp.value) {
+      e.preventDefault()
+      showHelp.value = false
+    }
+    if (showGithubMenu.value) {
+      e.preventDefault()
+      showGithubMenu.value = false
+    }
     return
   }
-  // Ctrl+Shift+N → New transaction
-  if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'n') {
+  // Ctrl+Shift+N или Ctrl+Shift+т → New transaction
+  if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'n') || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'т')) {
     e.preventDefault()
     window.dispatchEvent(new CustomEvent('open-transaction-modal'))
     return
   }
 }
 
-onMounted(() => {
-  window.addEventListener('keydown', onGlobalKeydown)
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onGlobalKeydown)
-})
-
-const isDark = ref(document.documentElement.classList.contains('dark'))
-const showNotifs = ref(false)
-const notifDropdownRef = ref(null)
-
 function onDocClick(e) {
   if (showNotifs.value && notifDropdownRef.value && !notifDropdownRef.value.contains(e.target)) {
     showNotifs.value = false
+  }
+  if (showGithubMenu.value && githubDropdownRef.value && !githubDropdownRef.value.contains(e.target)) {
+    showGithubMenu.value = false
+  }
+}
+
+async function checkForUpdates() {
+  checkingUpdates.value = true
+  hasUpdate.value = false
+  latestVersion.value = ''
+  try {
+    const res = await fetch('https://api.github.com/repos/John710/finapp/releases/latest')
+    if (res.ok) {
+      const data = await res.json()
+      const tag = data.tag_name.replace(/^v/, '') // strip leading 'v'
+      latestVersion.value = tag
+      // Compare versions
+      const current = currentVersion.split('.').map(Number)
+      const latest = tag.split('.').map(Number)
+      for (let i = 0; i < 3; i++) {
+        if (latest[i] > current[i]) {
+          hasUpdate.value = true
+          break
+        }
+        if (latest[i] < current[i]) break
+      }
+    }
+  } catch (e) {
+    console.error('Failed to check for updates:', e)
+  } finally {
+    checkingUpdates.value = false
   }
 }
 
 let notifPollInterval = null
 
 onMounted(() => {
+  window.addEventListener('keydown', onGlobalKeydown)
   notifStore.fetchUnreadCount()
   notifStore.fetchNotifications()
   document.addEventListener('click', onDocClick)
+  checkForUpdates()
   notifPollInterval = setInterval(() => {
     notifStore.fetchUnreadCount()
   }, 60000)
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onGlobalKeydown)
   document.removeEventListener('click', onDocClick)
   if (notifPollInterval) clearInterval(notifPollInterval)
 })
