@@ -6,7 +6,7 @@
         <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center mr-3">
           <Icon name="money" class="w-5 h-5 text-white" />
         </div>
-        <span class="font-bold text-lg tracking-tight">FinanceApp</span>
+        <span class="font-bold text-lg tracking-tight">FinApp</span>
       </div>
       <nav class="flex-1 px-3 py-4 space-y-1">
         <router-link v-for="item in navItems" :key="item.name" :to="item.path"
@@ -32,7 +32,7 @@
           <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center mr-3">
             <Icon name="money" class="w-5 h-5 text-white" />
           </div>
-          <span class="font-bold text-lg">FinanceApp</span>
+          <span class="font-bold text-lg">FinApp</span>
         </div>
         <div class="hidden lg:block text-sm text-slate-500 dark:text-slate-400">{{ pageTitle }}</div>
         <div class="flex items-center gap-2">
