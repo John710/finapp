@@ -1,8 +1,9 @@
 {
-  "name": "financeapp-backend",
+  "name": "finapp-backend",
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
