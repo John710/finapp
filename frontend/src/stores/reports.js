@@ -58,7 +58,7 @@ export const useReportsStore = defineStore('reports', () => {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `financeapp_export_${new Date().toISOString().split('T')[0]}.csv`
+    a.download = `finapp_export_${new Date().toISOString().split('T')[0]}.csv`
     a.click()
     window.URL.revokeObjectURL(url)
   }

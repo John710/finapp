@@ -43,7 +43,7 @@ async function exportRoutes(fastify, opts) {
       ].join(';'))
     ]
 
-    const filename = `financeapp_export_${new Date().toISOString().split('T')[0]}.csv`
+    const filename = `finapp_export_${new Date().toISOString().split('T')[0]}.csv`
 
     reply.header('Content-Type', 'text/csv; charset=utf-8')
     reply.header('Content-Disposition', `attachment; filename="${filename}"`)
