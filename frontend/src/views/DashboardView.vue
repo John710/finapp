@@ -54,8 +54,8 @@
       <!-- Trend chart -->
       <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
         <h3 class="font-semibold mb-4">{{ $t('dashboard.income_vs_expense') }}</h3>
-        <div v-if="trendData.labels.length" class="relative h-64">
-          <Bar :data="trendData" :options="chartOptions" />
+        <div v-if="reportsStore.trend.length" class="relative h-64">
+          <BaseChart :option="trendChartOption" />
         </div>
         <p v-else class="text-slate-500 text-center py-12">{{ $t('dashboard.no_chart_data') }}</p>
       </div>
@@ -63,8 +63,8 @@
       <!-- Category chart -->
       <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
         <h3 class="font-semibold mb-4">{{ $t('dashboard.expenses_by_category') }}</h3>
-        <div v-if="categoryData.labels.length" class="relative h-64">
-          <Doughnut :data="categoryData" :options="chartOptions" />
+        <div v-if="reportsStore.byCategory.filter(c => parseFloat(c.total) > 0).length" class="relative h-64">
+          <BaseChart :option="categoryChartOption" />
         </div>
         <p v-else class="text-slate-500 text-center py-12">{{ $t('dashboard.no_chart_data') }}</p>
       </div>
@@ -72,8 +72,8 @@
       <!-- Net worth chart -->
       <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
         <h3 class="font-semibold mb-4">{{ $t('dashboard.net_worth') }}</h3>
-        <div v-if="netWorthData.labels.length" class="relative h-64">
-          <Line :data="netWorthData" :options="lineChartOptions" />
+        <div v-if="reportsStore.netWorth.length" class="relative h-64">
+          <BaseChart :option="netWorthChartOption" />
         </div>
         <p v-else class="text-slate-500 text-center py-12">{{ $t('dashboard.no_chart_data') }}</p>
       </div>
@@ -81,12 +81,8 @@
       <!-- Savings rate -->
       <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
         <h3 class="font-semibold mb-4">{{ $t('dashboard.savings_rate') }}</h3>
-        <div v-if="reportsStore.savingsRate" class="flex flex-col items-center justify-center h-64">
-          <div class="relative h-40 w-40">
-            <Doughnut :data="savingsRateData" :options="doughnutOptions" />
-          </div>
-          <p class="text-2xl font-bold mt-4" :class="savingsRateColor">{{ reportsStore.savingsRate.rate }}%</p>
-          <p class="text-sm text-slate-500">{{ $t('dashboard.savings_rate_desc') }}</p>
+        <div v-if="reportsStore.savingsRate" class="relative h-80">
+          <BaseChart :option="savingsRateChartOption" :height="'280px'" />
         </div>
         <p v-else class="text-slate-500 text-center py-12">{{ $t('dashboard.no_chart_data') }}</p>
       </div>
@@ -119,7 +115,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAccountsStore } from '../stores/accounts'
 import { useTransactionsStore } from '../stores/transactions'
@@ -128,12 +124,9 @@ import { useRatesStore } from '../stores/rates'
 import { useDebtsStore } from '../stores/debts'
 import { useRecurringStore } from '../stores/recurring'
 import { formatFull } from '@/utils/currency'
+import BaseChart from '@/components/BaseChart.vue'
 
 const { t } = useI18n()
-import { Bar, Doughnut, Line } from 'vue-chartjs'
-import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, LineElement, PointElement, CategoryScale, LinearScale, ArcElement, Filler } from 'chart.js'
-
-ChartJS.register(Title, Tooltip, Legend, BarElement, LineElement, PointElement, CategoryScale, LinearScale, ArcElement, Filler)
 
 const accountsStore = useAccountsStore()
 const transactionsStore = useTransactionsStore()
@@ -143,7 +136,17 @@ const debtsStore = useDebtsStore()
 const recurringStore = useRecurringStore()
 const baseCurrency = computed(() => ratesStore.baseCurrency)
 
+const isDark = ref(document.documentElement.classList.contains('dark'))
+
 onMounted(async () => {
+  const observer = new MutationObserver(() => {
+    isDark.value = document.documentElement.classList.contains('dark')
+  })
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class']
+  })
+
   accountsStore.fetchAccounts()
   transactionsStore.fetchTransactions({ limit: 5 })
   ratesStore.fetchRates()
@@ -224,115 +227,295 @@ const upcomingRecurringTotal = computed(() => {
 
 const recentTransactions = computed(() => transactionsStore.transactions.slice(0, 5))
 
-const trendData = computed(() => {
-  const labels = reportsStore.trend.map(t => t.month)
+const trendChartOption = computed(() => {
   return {
-    labels,
-    datasets: [
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => {
+        let result = params[0].axisValue + '<br/>'
+        params.forEach(p => {
+          result += `${p.marker} ${p.seriesName}: ${formatFull(p.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}<br/>`
+        })
+        return result
+      }
+    },
+    legend: { show: false },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '10%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: reportsStore.trend.map(t => t.month)
+    },
+    yAxis: {
+      type: 'value'
+    },
+    series: [
       {
-        label: t('reports.income'),
+        name: t('reports.income'),
+        type: 'bar',
         data: reportsStore.trend.map(t => t.income),
-        backgroundColor: '#10b981',
-        borderRadius: 4
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: '#10b981' },
+              { offset: 1, color: '#059669' }
+            ]
+          },
+          borderRadius: [4, 4, 0, 0]
+        }
       },
       {
-        label: t('reports.expense'),
+        name: t('reports.expense'),
+        type: 'bar',
         data: reportsStore.trend.map(t => t.expense),
-        backgroundColor: '#f43f5e',
-        borderRadius: 4
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: '#f43f5e' },
+              { offset: 1, color: '#dc2626' }
+            ]
+          },
+          borderRadius: [4, 4, 0, 0]
+        }
       },
       {
-        label: t('transactions.types.transfer'),
+        name: t('transactions.types.transfer'),
+        type: 'bar',
         data: reportsStore.trend.map(t => t.transfer || 0),
-        backgroundColor: '#3b82f6',
-        borderRadius: 4
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: '#3b82f6' },
+              { offset: 1, color: '#2563eb' }
+            ]
+          },
+          borderRadius: [4, 4, 0, 0]
+        }
       }
     ]
   }
 })
 
-const categoryData = computed(() => {
+const categoryChartOption = computed(() => {
   const items = reportsStore.byCategory.filter(c => parseFloat(c.total) > 0)
   return {
-    labels: items.map(c => c.name),
-    datasets: [{
-      data: items.map(c => c.total),
-      backgroundColor: items.map(c => c.color || '#94a3b8'),
-      borderWidth: 0
-    }]
+    tooltip: {
+      trigger: 'item',
+      formatter: (params) => {
+        return `${params.marker} ${params.name}: ${formatFull(params.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)} (${params.percent}%)`
+      }
+    },
+    legend: { show: false },
+    series: [
+      {
+        name: t('categories.title'),
+        type: 'pie',
+        radius: ['40%', '70%'],
+        center: ['50%', '50%'],
+        avoidLabelOverlap: true,
+        itemStyle: {
+          borderRadius: 6,
+          borderColor: 'transparent',
+          borderWidth: 0
+        },
+        label: {
+          show: true,
+          formatter: '{b}: {d}%',
+          fontSize: 11
+        },
+        emphasis: {
+          scale: true,
+          scaleSize: 10,
+          itemStyle: {
+            borderColor: '#fff',
+            borderWidth: 2
+          },
+          label: {
+            show: true,
+            fontSize: 14,
+            fontWeight: 'bold'
+          }
+        },
+        data: items.map(c => ({
+          value: parseFloat(c.total),
+          name: c.name,
+          itemStyle: { color: c.color || '#94a3b8' }
+        }))
+      }
+    ]
   }
 })
 
-const chartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: 'bottom',
-      labels: { usePointStyle: true, padding: 20 }
-    }
-  },
-  scales: {
-    x: { grid: { display: false } },
-    y: { grid: { color: '#e2e8f0' }, border: { display: false } }
-  }
-}
-
-const lineChartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false }
-  },
-  scales: {
-    x: { grid: { display: false } },
-    y: { grid: { color: '#e2e8f0' }, border: { display: false } }
-  },
-  interaction: { intersect: false, mode: 'index' }
-}
-
-const doughnutOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  cutout: '75%',
-  plugins: { legend: { display: false }, tooltip: { enabled: false } }
-}
-
-const netWorthData = computed(() => {
-  const labels = reportsStore.netWorth.map(n => n.month)
+const netWorthChartOption = computed(() => {
   return {
-    labels,
-    datasets: [{
-      label: t('dashboard.net_worth'),
-      data: reportsStore.netWorth.map(n => n.balance),
-      borderColor: '#0f766e',
-      backgroundColor: 'rgba(15, 118, 110, 0.1)',
-      fill: true,
-      tension: 0.3,
-      pointRadius: 3,
-      pointBackgroundColor: '#0f766e'
-    }]
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params) => {
+        const p = params[0]
+        return `${p.axisValue}<br/>${t('dashboard.net_worth')}: ${formatFull(p.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}`
+      }
+    },
+    legend: { show: false },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '10%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: reportsStore.netWorth.map(n => n.month)
+    },
+    yAxis: {
+      type: 'value'
+    },
+    series: [
+      {
+        name: t('dashboard.net_worth'),
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        data: reportsStore.netWorth.map(n => n.balance),
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(15, 118, 110, 0.3)' },
+              { offset: 1, color: 'rgba(15, 118, 110, 0.05)' }
+            ]
+          }
+        },
+        lineStyle: {
+          color: '#0f766e',
+          width: 2
+        },
+        itemStyle: {
+          color: '#0f766e'
+        }
+      }
+    ]
   }
 })
 
-const savingsRateData = computed(() => {
-  const rate = reportsStore.savingsRate?.rate || 0
+const savingsRateChartOption = computed(() => {
+  const savingsRate = reportsStore.savingsRate
+  const rate = savingsRate?.rate || 0
+  let color = '#10b981'
+  if (rate < 10) color = '#f43f5e'
+  else if (rate < 20) color = '#f59e0b'
+
+  // Data: only show savings rate as a percentage bar
+  const data = [
+    { value: Math.min(100, Math.max(0, rate)), name: t('dashboard.savings_rate'), color: color }
+  ]
+
   return {
-    labels: [t('dashboard.saved'), t('dashboard.spent')],
-    datasets: [{
-      data: [Math.max(0, rate), Math.max(0, 100 - rate)],
-      backgroundColor: ['#10b981', '#f43f5e'],
-      borderWidth: 0
-    }]
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => {
+        const p = params[0]
+        return `${p.marker} ${p.name}: ${savingsRate ? formatFull(savingsRate.savings, baseCurrency.value, baseCurrency.value, ratesStore.rates) : '0'} (${rate.toFixed(1)}%)`
+      }
+    },
+    grid: {
+      left: 0,
+      right: 10,
+      bottom: 5,
+      top: 5,
+      containLabel: true
+    },
+    xAxis: {
+      type: 'value',
+      max: 100,
+      show: true,
+      axisLabel: {
+        formatter: '{value}%',
+        color: isDark.value ? '#94a3b8' : '#64748b'
+      },
+      splitLine: {
+        lineStyle: {
+          color: isDark.value ? 'rgba(148,163,184,0.1)' : 'rgba(100,116,139,0.1)'
+        }
+      }
+    },
+    yAxis: {
+      type: 'category',
+      data: data.map(d => d.name),
+      axisLabel: {
+        color: isDark.value ? '#f1f5f9' : '#1e293b',
+        fontSize: 14,
+        fontWeight: 500,
+        margin: 10
+      },
+      axisLine: { show: false },
+      axisTick: { show: false }
+    },
+    barWidth: '60%',
+    series: [
+      {
+        name: 'Data',
+        type: 'bar',
+        data: data.map(d => d.value),
+        barWidth: '60%',
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 1,
+            y2: 0,
+            colorStops: [
+              { offset: 0, color: color },
+              { offset: 1, color: color === '#10b981' ? '#059669' : color === '#f43f5e' ? '#dc2626' : '#d97706' }
+            ]
+          },
+          borderRadius: 10
+        },
+        label: {
+          show: true,
+          position: 'right',
+          formatter: () => {
+            return `${rate.toFixed(1)}%`
+          },
+          color: isDark.value ? '#f1f5f9' : '#1e293b',
+          fontSize: 14,
+          fontWeight: 500,
+          padding: [0, 0, 0, 8]
+        }
+      }
+    ]
   }
 })
 
-const savingsRateColor = computed(() => {
-  const rate = reportsStore.savingsRate?.rate || 0
-  if (rate >= 20) return 'text-primary-600'
-  if (rate >= 10) return 'text-yellow-500'
-  return 'text-danger-500'
-})
+
 
 function formatCurrency(value) {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: baseCurrency.value }).format(value || 0)
