@@ -31,7 +31,7 @@ export async function notify(fastify, userId, { type, title, message, data = {},
 
   try {
     if (channels.includes('shoutrrr') && fastify.sendShoutrrr) {
-      await fastify.sendShoutrrr({ title: `FinanceApp: ${title}`, message })
+      await fastify.sendShoutrrr({ title: `FinApp: ${title}`, message })
       result.shoutrrr = true
     }
   } catch (err) {

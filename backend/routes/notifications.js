@@ -185,7 +185,7 @@ export default async function (fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db)
     await fastify.sendShoutrrr({
-      title: `FinanceApp: ${t('notifications.shoutrrr_test', {}, lang)}`,
+      title: `FinApp: ${t('notifications.shoutrrr_test', {}, lang)}`,
       message: t('notifications.shoutrrr_test_body', {}, lang)
     })
     return { success: true }
