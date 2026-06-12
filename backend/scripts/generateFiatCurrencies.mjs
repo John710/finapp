@@ -17,7 +17,7 @@ const EXCLUDE_CODES = new Set([
 ])
 
 async function fetchJson(url) {
-  const res = await fetch(url, { headers: { 'Accept': 'application/json', 'User-Agent': 'FinanceApp/1.0' } })
+  const res = await fetch(url, { headers: { 'Accept': 'application/json', 'User-Agent': 'FinApp/1.0' } })
   if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`)
   return res.json()
 }

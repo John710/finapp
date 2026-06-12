@@ -38,7 +38,7 @@ const FIAT_CODES = new Set(fiatCurrencies.map(c => c.code))
 function buildHeaders(apiKey) {
   const headers = {
     'Accept': 'application/json',
-    'User-Agent': 'FinanceApp/1.0'
+    'User-Agent': 'FinApp/1.0'
   }
   if (apiKey) {
     headers['x-cg-demo-api-key'] = apiKey
@@ -101,7 +101,7 @@ async function coingeckoFetch(fastify, path, apiKey, opts = {}) {
 
 async function updateExchangeRates(fastify, userId) {
   const fiatRes = await fetch(FAWAZAHMED0_URL, {
-    headers: { 'Accept': 'application/json', 'User-Agent': 'FinanceApp/1.0' }
+    headers: { 'Accept': 'application/json', 'User-Agent': 'FinApp/1.0' }
   })
   if (!fiatRes.ok) {
     throw new Error(`Fawazahmed0 HTTP ${fiatRes.status}`)
