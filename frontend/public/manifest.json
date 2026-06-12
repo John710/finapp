@@ -1,6 +1,6 @@
 {
-  "name": "FinanceApp",
-  "short_name": "FinanceApp",
+  "name": "FinApp",
+  "short_name": "FinApp",
   "description": "Self-hosted personal finance tracker",
   "start_url": "/",
   "display": "standalone",
