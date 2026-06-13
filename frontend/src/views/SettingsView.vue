@@ -313,13 +313,18 @@ async function sendTestShoutrrr() {
 }
 
 async function loadDemoData() {
-  if (!confirm(t('settings.load_demo_confirm'))) return
+  const confirmed = await window.$confirm({
+    title: t('settings.load_demo'),
+    message: t('settings.load_demo_confirm'),
+    confirmText: t('settings.load'),
+    cancelText: t('common.cancel')
+  })
+  if (!confirmed) return
   demoLoading.value = true
   try {
     await api('/admin/load-demo', { method: 'POST' })
     window.$toast?.success(t('settings.load_demo_success'))
-    // Reload all stores
-    window.location.reload()
+    setTimeout(() => window.location.reload(), 1500)
   } catch (e) {
     console.error('Load demo data failed', e)
     window.$toast?.error(e.message || t('common.error'))
@@ -329,13 +334,19 @@ async function loadDemoData() {
 }
 
 async function clearDatabase() {
-  if (!confirm(t('settings.clear_db_confirm'))) return
+  const confirmed = await window.$confirm({
+    title: t('settings.clear_db'),
+    message: t('settings.clear_db_confirm'),
+    confirmText: t('settings.clear'),
+    cancelText: t('common.cancel'),
+    danger: true
+  })
+  if (!confirmed) return
   clearLoading.value = true
   try {
     await api('/admin/clear-database', { method: 'POST' })
     window.$toast?.success(t('settings.clear_db_success'))
-    // Reload all stores
-    window.location.reload()
+    setTimeout(() => window.location.reload(), 1500)
   } catch (e) {
     console.error('Clear database failed', e)
     window.$toast?.error(e.message || t('common.error'))
