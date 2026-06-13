@@ -4,7 +4,7 @@ async function healthRoutes(fastify, opts) {
       const result = await fastify.db.query('SELECT 1')
       return {
         status: 'ok',
-        version: '1.0.0',
+        version: '1.2.0',
         db: 'connected',
         uptime: Math.floor(process.uptime())
       }

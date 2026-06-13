@@ -136,7 +136,7 @@ async function updateExchangeRates(fastify, userId) {
       const userRes = await fastify.db.query('SELECT coingecko_api_key FROM users WHERE id = $1', [userId])
       const apiKey = userRes.rows[0]?.coingecko_api_key || process.env.COINGECKO_API_KEY
 
-      // Fetch crypto symbols actually used by accounts, fallback to top list
+      // Fetch crypto symbols actually used by any account, fallback to top list
       const accountRes = await fastify.db.query("SELECT DISTINCT UPPER(currency) as currency FROM accounts WHERE type = 'crypto'")
       const accountSymbols = accountRes.rows.map(r => r.currency.toLowerCase()).filter(Boolean)
       const symbols = accountSymbols.length ? accountSymbols.join(',') : FALLBACK_SYMBOLS
