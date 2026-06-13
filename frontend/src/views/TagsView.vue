@@ -7,7 +7,11 @@
       </button>
     </div>
 
-    <div v-if="tags.length === 0" class="bg-white dark:bg-slate-900 rounded-xl p-12 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+    <div v-if="tagsStore.loading" class="text-center py-12">
+      <p class="text-slate-500">{{ $t('common.loading') }}</p>
+    </div>
+
+    <div v-else-if="tagsStore.tags.length === 0" class="bg-white dark:bg-slate-900 rounded-xl p-12 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
       <div class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
         <Icon name="tag" class="w-8 h-8 text-slate-400" />
       </div>
@@ -16,7 +20,7 @@
     </div>
 
     <div v-else class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div v-for="tag in tags" :key="tag.id" @click="goToTransactions(tag.id)" class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+      <div v-for="tag in tagsStore.tags" :key="tag.id" @click="goToTransactions(tag.id)" class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
         <div class="flex items-center gap-3">
           <div class="w-4 h-4 rounded-full" :style="{ backgroundColor: tag.color || '#94a3b8' }"></div>
           <span class="font-medium">{{ tag.name }}</span>
@@ -26,7 +30,7 @@
           <button @click="openModal(tag)" class="p-1.5 text-slate-400 hover:text-primary-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
             <Icon name="edit" class="w-4 h-4" />
           </button>
-          <button @click="deleteTag(tag.id)" class="p-1.5 text-slate-400 hover:text-danger-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+          <button @click="deleteTag(tag.id)" :disabled="deletingId === tag.id" class="p-1.5 text-slate-400 hover:text-danger-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50">
             <Icon name="delete" class="w-4 h-4" />
           </button>
         </div>
@@ -50,8 +54,10 @@
           </div>
         </div>
         <div class="flex justify-end gap-2 mt-6">
-          <button @click="showModal = false" class="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm">{{ $t('common.cancel') }}</button>
-          <button @click="saveTag" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium">{{ $t('common.save') }}</button>
+          <button @click="showModal = false" :disabled="saving" class="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm disabled:opacity-50">{{ $t('common.cancel') }}</button>
+          <button @click="saveTag" :disabled="saving || !form.name.trim()" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
+            {{ saving ? $t('common.loading') : $t('common.save') }}
+          </button>
         </div>
       </div>
     </div>
@@ -62,29 +68,29 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { api } from '@/utils/api'
+import { useTagsStore } from '../stores/tags'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
 
 const { t } = useI18n()
 const router = useRouter()
 const undo = useUndo()
+const tagsStore = useTagsStore()
+
 useHotkeys({
   'ctrl+enter': () => { if (showModal.value) saveTag() },
   'esc': () => { if (showModal.value) closeModal() }
 })
-const tags = ref([])
+
 const showModal = ref(false)
 const editingTag = ref(null)
+const saving = ref(false)
+const deletingId = ref(null)
 const form = ref({ name: '', color: '#0f766e' })
 
 const colors = ['#0f766e', '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#f43f5e', '#ec4899', '#6366f1', '#14b8a6', '#84cc16']
 
-onMounted(fetchTags)
-
-async function fetchTags() {
-  tags.value = await api('/tags')
-}
+onMounted(() => tagsStore.fetchTags())
 
 function openModal(tag = null) {
   editingTag.value = tag
@@ -92,14 +98,26 @@ function openModal(tag = null) {
   showModal.value = true
 }
 
-async function saveTag() {
-  if (editingTag.value) {
-    await api(`/tags/${editingTag.value.id}`, { method: 'PUT', body: JSON.stringify(form.value) })
-  } else {
-    await api('/tags', { method: 'POST', body: JSON.stringify(form.value) })
-  }
+function closeModal() {
   showModal.value = false
-  await fetchTags()
+}
+
+async function saveTag() {
+  const name = form.value.name.trim()
+  if (!name) return
+  saving.value = true
+  try {
+    if (editingTag.value) {
+      await tagsStore.updateTag(editingTag.value.id, { name, color: form.value.color })
+    } else {
+      await tagsStore.createTag({ name, color: form.value.color })
+    }
+    closeModal()
+  } catch (e) {
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    saving.value = false
+  }
 }
 
 function goToTransactions(tagId) {
@@ -108,17 +126,22 @@ function goToTransactions(tagId) {
 
 async function deleteTag(id) {
   if (!(await window.$confirm({ message: t('common.confirm_delete') }))) return
-  const item = tags.value.find(t => t.id === id)
-  await api(`/tags/${id}`, { method: 'DELETE' })
-  await fetchTags()
-  if (item) {
-    undo.push({
-      message: t('common.undo_delete'),
-      action: async () => {
-        await api('/tags', { method: 'POST', body: JSON.stringify({ name: item.name, color: item.color }) })
-        await fetchTags()
-      }
-    })
+  const item = tagsStore.tags.find(t => t.id === id)
+  deletingId.value = id
+  try {
+    await tagsStore.deleteTag(id)
+    if (item) {
+      undo.push({
+        message: t('common.undo_delete'),
+        action: async () => {
+          await tagsStore.createTag({ name: item.name, color: item.color })
+        }
+      })
+    }
+  } catch (e) {
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    deletingId.value = null
   }
 }
 </script>
