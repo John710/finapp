@@ -5,12 +5,12 @@
 
 <h1 align="center">FinApp</h1>
  
-**Трекер личных финансов с открытым исходным кодом **
+**Самохостируемый трекер личных финансов с открытым исходным кодом**
  
-[![Docker Image](https://ghcr-badge.egpl.dev/john710/finapp/size?color=%2344cc11&tag=latest&label=образ)](https://github.com/John710/finapp/pkgs/container/finapp)
+[![Docker Image](https://ghcr-badge.egpl.dev/john710/finapp/size?color=%2344cc11&tag=latest&label=размер+образа)](https://github.com/John710/finapp/pkgs/container/finapp)
 [![GitHub release](https://img.shields.io/github/v/release/John710/finapp?color=%2344cc11)](https://github.com/John710/finapp/releases)
 [![GitHub Actions](https://img.shields.io/github/actions/workflow/status/John710/finapp/docker.yml?label=сборка)](https://github.com/John710/finapp/actions)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](LICENSE)
  
 [🇬🇧 English version](/README.md)
  
@@ -66,7 +66,7 @@
 - **Импорт из CSV** — переносите данные из других финансовых приложений
 - **Экспорт в CSV** — сохраняйте данные для резервного копирования
 ### Безопасность и доступ
-- **Мультипользовательность** — создавайте отдельные аккаунты для членов семьи
+- **Мультипользовательность** — отдельные аккаунты для членов семьи с изоляцией данных по пользователю
 - **Аутентификация JWT** — безопасная работа с приложением
 - **Шифрование паролей** — защита учетных записей
 ### Локализация
@@ -107,6 +107,10 @@ docker compose up -d
  
 Откройте `http://localhost:6253` и пройдите первоначальную настройку.
  
+### HTTPS / Reverse Proxy
+
+Приложение **не** принудительно использует HTTPS и не отправляет заголовки HSTS. Для production-развёртываний разместите FinApp за reverse proxy (Traefik, Nginx, Caddy и т.п.) и настройте TLS и HSTS на его стороне. Это позволяет без проблем работать по HTTP при локальной разработке.
+ 
 ---
  
 ## ⚙️ Переменные окружения
@@ -124,6 +128,8 @@ docker compose up -d
 | `VAPID_SUBJECT` | Контакт для Web Push | `mailto:admin@localhost` |
 | `SHOUTRRR_URL` | URL для Shoutrrr интеграции | — |
 | `ALLOWED_ORIGINS` | Разрешённые CORS источники (через запятую) | — |
+| `DATABASE_SSL` | Включить SSL/TLS для подключения к PostgreSQL | `false` |
+| `DATABASE_SSL_REJECT_UNAUTHORIZED` | Отклонять самоподписанные SSL-сертификаты | `true` |
 | `PUID` | ID пользователя для Docker контейнера | `1000` |
 | `PGID` | ID группы для Docker контейнера | `1000` |
  
@@ -146,7 +152,7 @@ docker compose up -d
 | Уровень | Технологии |
 |---------|-----------|
 | **Backend** | Node.js, Fastify, PostgreSQL, JWT, Web Push, Shoutrrr |
-| **Frontend** | Vue 3, Pinia, Vue Router, Vue I18n, Tailwind CSS v4, Chart.js, Vite |
+| **Frontend** | Vue 3, Pinia, Vue Router, Vue I18n, Tailwind CSS v4, ECharts, Vite |
 | **Инфраструктура** | Docker, GitHub Actions, GHCR |
  
 ---
@@ -209,10 +215,10 @@ cd backend && npm install && npm run dev
 cd frontend && npm install && npm run dev
 ```
  
-Требования: Node.js 22+, PostgreSQL 14+
+Требования: Node.js 22+, PostgreSQL 15+
  
 ---
  
 ## 📄 Лицензия
  
-MIT License — подробности в файле [LICENSE](LICENSE).
+Этот проект лицензирован по лицензии GNU Affero General Public License v3.0 (AGPL v3) — подробности смотрите в файле [LICENSE](/LICENSE).
