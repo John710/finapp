@@ -26,6 +26,7 @@ import tagRoutes from './routes/tags.js'
 import exportRoutes from './routes/export.js'
 import importRoutes from './routes/import.js'
 import notificationRoutes from './routes/notifications.js'
+import demodataRoutes from './routes/demodata.js'
 import { sendPushToAll, createNotification } from './routes/notifications.js'
 import { notify } from './services/notify.js'
 import multipart from '@fastify/multipart'
@@ -33,11 +34,12 @@ import multipart from '@fastify/multipart'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = parseInt(process.env.PORT || '6253', 10)
 const NODE_ENV = process.env.NODE_ENV || 'development'
+const isProduction = NODE_ENV === 'production'
 
 async function start() {
   const app = Fastify({
     logger: {
-      level: NODE_ENV === 'production' ? 'warn' : 'info'
+      level: isProduction ? 'warn' : 'info'
     },
     trustProxy: true
   })
@@ -57,32 +59,45 @@ async function start() {
     }
   })
 
-  // SPA fallback
-  app.get('/*', async (req, reply) => {
-    return reply.sendFile('index.html', staticPath)
-  })
-
   // Security
   await app.register(helmet, {
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrcAttr: ["'none'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'", 'https://api.coingecko.com', 'https://cdn.jsdelivr.net', 'https://api.github.com'],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"]
+      }
+    },
+    // These isolation headers require a secure context (HTTPS/localhost).
+    // Disable them so the app works over plain HTTP on a private IP.
     crossOriginOpenerPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: false,
+    originAgentCluster: false,
+    // HSTS is intentionally disabled here. For HTTPS deployments it should be
+    // configured in the reverse proxy (Traefik/Nginx/Caddy).
     strictTransportSecurity: false
   })
 
-  // Rate limit: GET is unlimited, auth endpoints are strict, other mutations are moderate
+  // Rate limit
   await app.register(rateLimit, {
     max: async (req, key) => {
-      // Auth endpoints: strict limit
       if (req.routerPath?.startsWith('/api/v1/auth')) return 10
-      // Everything else (mutating operations): moderate limit
-      return 60
+      if (req.method === 'GET') return 100
+      return 30
     },
     timeWindow: '1 minute',
     keyGenerator: (req) => req.ip,
     allowList: (req, key) => {
-      // No rate limit for GET requests (page navigation, data loading)
-      if (req.method === 'GET') return true
-      // No rate limit for non-API routes (static files, SPA fallback)
       if (!req.routerPath?.startsWith('/api/v1')) return true
       return false
     }
@@ -130,10 +145,16 @@ async function start() {
   await app.register(tagRoutes, { prefix: '/api/v1' })
   await app.register(importRoutes, { prefix: '/api/v1' })
   await app.register(notificationRoutes, { prefix: '/api/v1' })
+  await app.register(demodataRoutes, { prefix: '/api/v1' })
 
   app.decorate('notify', async (userId, payload) => notify(app, userId, payload))
   app.decorate('sendPushToAll', async (userId, payload) => sendPushToAll(app, userId, payload))
   app.decorate('createNotification', async (payload) => createNotification(app, payload))
+
+  // SPA fallback — must be registered after API routes
+  app.get('/*', async (req, reply) => {
+    return reply.sendFile('index.html', staticPath)
+  })
 
   // Run migrations
   try {
