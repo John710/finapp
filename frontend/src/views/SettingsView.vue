@@ -97,8 +97,8 @@
       </div>
       <div class="p-5 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
         <div>
-          <p class="font-medium">{{ $t('settings.test_notifications') || 'Test notifications' }}</p>
-          <p class="text-sm text-slate-500">{{ $t('settings.test_desc') || 'Send test to all channels' }}</p>
+          <p class="font-medium">{{ $t('settings.test_notifications') }}</p>
+          <p class="text-sm text-slate-500">{{ $t('settings.test_desc') }}</p>
         </div>
         <div class="flex items-center gap-2">
           <button
@@ -107,6 +107,36 @@
             class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
           >
             {{ shoutrrrLoading ? '...' : $t('settings.shoutrrr_test') }}
+          </button>
+        </div>
+      </div>
+      <div class="p-5 flex items-center justify-between">
+        <div>
+          <p class="font-medium">{{ $t('settings.load_demo') }}</p>
+          <p class="text-sm text-slate-500">{{ $t('settings.load_demo_desc') }}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            @click="loadDemoData()"
+            :disabled="demoLoading"
+            class="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+          >
+            {{ demoLoading ? '...' : $t('settings.load') }}
+          </button>
+        </div>
+      </div>
+      <div class="p-5 flex items-center justify-between">
+        <div>
+          <p class="font-medium text-red-600">{{ $t('settings.clear_db') }}</p>
+          <p class="text-sm text-slate-500">{{ $t('settings.clear_db_desc') }}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            @click="clearDatabase()"
+            :disabled="clearLoading"
+            class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+          >
+            {{ clearLoading ? '...' : $t('settings.clear') }}
           </button>
         </div>
       </div>
@@ -132,6 +162,8 @@ const savingKey = ref(false)
 const push = usePush()
 const testLoading = ref(false)
 const shoutrrrLoading = ref(false)
+const demoLoading = ref(false)
+const clearLoading = ref(false)
 
 const showDropdown = ref(false)
 const search = ref('')
@@ -277,6 +309,38 @@ async function sendTestShoutrrr() {
     window.$toast?.error(e.message || t('notifications.test_shoutrrr_failed'))
   } finally {
     shoutrrrLoading.value = false
+  }
+}
+
+async function loadDemoData() {
+  if (!confirm(t('settings.load_demo_confirm'))) return
+  demoLoading.value = true
+  try {
+    await api('/admin/load-demo', { method: 'POST' })
+    window.$toast?.success(t('settings.load_demo_success'))
+    // Reload all stores
+    window.location.reload()
+  } catch (e) {
+    console.error('Load demo data failed', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    demoLoading.value = false
+  }
+}
+
+async function clearDatabase() {
+  if (!confirm(t('settings.clear_db_confirm'))) return
+  clearLoading.value = true
+  try {
+    await api('/admin/clear-database', { method: 'POST' })
+    window.$toast?.success(t('settings.clear_db_success'))
+    // Reload all stores
+    window.location.reload()
+  } catch (e) {
+    console.error('Clear database failed', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    clearLoading.value = false
   }
 }
 </script>

@@ -387,4 +387,3 @@ export const categoryIcons = {
 }
 
 export { HugeiconsIcon }
-
