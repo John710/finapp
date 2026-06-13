@@ -46,7 +46,7 @@ export default async function (fastify, opts) {
       await client.query(
         `INSERT INTO push_subscriptions (endpoint, p256dh, auth, user_id)
          VALUES ($1, $2, $3, $4)
-         ON CONFLICT (endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth, user_id = EXCLUDED.user_id`,
+         ON CONFLICT (user_id, endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth`,
         [subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth, userId]
       )
       return { success: true }
@@ -67,9 +67,10 @@ export default async function (fastify, opts) {
     }
   }, async (request, reply) => {
     const { endpoint } = request.body
+    const userId = request.user?.userId
     const client = await fastify.db.connect()
     try {
-      await client.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint])
+      await client.query('DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id = $2', [endpoint, userId])
       return { success: true }
     } finally {
       client.release()
@@ -153,7 +154,7 @@ export default async function (fastify, opts) {
       return { error: 'Push notifications not configured' }
     }
     const userId = request.user.userId
-    const lang = await getUserLang(fastify.db)
+    const lang = await getUserLang(fastify.db, userId)
     const payload = JSON.stringify({
       title: t('notifications.push_test', {}, lang),
       body: request.body?.message || t('notifications.push_test_body', {}, lang),
@@ -166,7 +167,7 @@ export default async function (fastify, opts) {
 
   fastify.post('/send-test-bell', async (request, reply) => {
     const userId = request.user.userId
-    const lang = await getUserLang(fastify.db)
+    const lang = await getUserLang(fastify.db, userId)
     await createNotification(fastify, {
       userId,
       type: 'test',
@@ -183,7 +184,7 @@ export default async function (fastify, opts) {
       return { error: 'Shoutrrr not configured' }
     }
     const userId = request.user.userId
-    const lang = await getUserLang(fastify.db)
+    const lang = await getUserLang(fastify.db, userId)
     await fastify.sendShoutrrr({
       title: `FinApp: ${t('notifications.shoutrrr_test', {}, lang)}`,
       message: t('notifications.shoutrrr_test_body', {}, lang)
@@ -242,9 +243,9 @@ export async function checkDuplicateNotification(fastify, { userId, type, entity
     const { rows } = await client.query(
       `SELECT 1 FROM notifications
        WHERE user_id = $1 AND type = $2 AND data->>'entity_id' = $3
-         AND is_read = false AND created_at > NOW() - INTERVAL '${hours} hours'
+         AND is_read = false AND created_at > NOW() - make_interval(hours => $4)
        LIMIT 1`,
-      [userId, type, String(entityId)]
+      [userId, type, String(entityId), hours]
     )
     return rows.length > 0
   } finally {
