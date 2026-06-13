@@ -171,9 +171,7 @@ async function upload(opts) {
   const res = await fetch('/api/v1/import/csv', {
     method: 'POST',
     body: formData,
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('accessToken')}`
-    }
+    credentials: 'include'
   })
 
   const data = await res.json()

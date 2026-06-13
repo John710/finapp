@@ -14,32 +14,24 @@ function showCoingeckoRateLimitToast() {
   )
 }
 
-async function refreshToken() {
+async function refreshSession() {
   const res = await fetch(`${API_URL}/auth/refresh`, {
     method: 'POST',
     credentials: 'include'
   })
   if (!res.ok) {
-    localStorage.removeItem('accessToken')
     window.location.href = '/login'
     throw new Error('Session expired')
   }
-  const data = await res.json()
-  localStorage.setItem('accessToken', data.accessToken)
-  return data.accessToken
+  return res.json()
 }
 
 export async function api(path, options = {}) {
   const url = `${API_URL}${path}`
-  const token = localStorage.getItem('accessToken')
 
   const headers = { ...options.headers }
-  if (options.body) {
+  if (options.body && !(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
-  }
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
   }
 
   let res = await fetch(url, {
@@ -48,9 +40,8 @@ export async function api(path, options = {}) {
     credentials: 'include'
   })
 
-  if (res.status === 401 && token) {
-    const newToken = await refreshToken()
-    headers.Authorization = `Bearer ${newToken}`
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    await refreshSession()
     res = await fetch(url, {
       ...options,
       headers,
@@ -58,7 +49,6 @@ export async function api(path, options = {}) {
     })
   }
 
-  // Check CoinGecko rate limit header on any successful response
   if (res.headers.get('x-coingecko-rate-limited')) {
     showCoingeckoRateLimitToast()
   }

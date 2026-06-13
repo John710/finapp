@@ -19,19 +19,24 @@ async function authPlugin(fastify, opts) {
   })
 
   fastify.addHook('onRequest', async (request, reply) => {
-    // Skip auth for non-API routes (static files, SPA fallback, health)
     const path = request.raw.url || request.url
     if (!path?.startsWith('/api/') || path?.startsWith('/api/v1/auth') || path === '/api/v1/vapid-public-key') {
       return
     }
 
+    let token = null
     const authHeader = request.headers.authorization
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.slice(7)
+    } else if (request.cookies?.accessToken) {
+      token = request.cookies.accessToken
+    }
+
+    if (!token) {
       reply.code(401).send({ error: 'Unauthorized' })
       return
     }
 
-    const token = authHeader.slice(7)
     try {
       request.user = fastify.verifyToken(token)
     } catch (err) {

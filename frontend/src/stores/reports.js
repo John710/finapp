@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '../utils/api'
+import { useRatesStore } from './rates'
 
 function buildQuery(params) {
+  const ratesStore = useRatesStore()
   const filtered = {}
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== null && value !== '') {
@@ -11,7 +13,7 @@ function buildQuery(params) {
   }
   // Auto-inject base currency from user settings
   if (!filtered.base_currency) {
-    filtered.base_currency = localStorage.getItem('base_currency') || 'USD'
+    filtered.base_currency = ratesStore.baseCurrency || localStorage.getItem('base_currency') || 'USD'
   }
   return new URLSearchParams(filtered).toString()
 }
@@ -19,6 +21,7 @@ function buildQuery(params) {
 export const useReportsStore = defineStore('reports', () => {
   const summary = ref(null)
   const byCategory = ref([])
+  const byCategoryAll = ref([])
   const trend = ref([])
   const netWorth = ref([])
   const savingsRate = ref(null)
@@ -32,6 +35,11 @@ export const useReportsStore = defineStore('reports', () => {
   async function fetchByCategory(params = {}) {
     const query = buildQuery(params)
     byCategory.value = await api(`/reports/by-category?${query}`)
+  }
+
+  async function fetchByCategoryAll(params = {}) {
+    const query = buildQuery(params)
+    byCategoryAll.value = await api(`/reports/by-category?${query}`)
   }
 
   async function fetchTrend(params = {}) {
@@ -51,9 +59,8 @@ export const useReportsStore = defineStore('reports', () => {
 
   async function exportCsv(params = {}) {
     const query = buildQuery(params)
-    const res = await fetch(`/api/v1/export/csv?${query}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
-    })
+    const res = await fetch(`/api/v1/export/csv?${query}`, { credentials: 'include' })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const blob = await res.blob()
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -63,5 +70,5 @@ export const useReportsStore = defineStore('reports', () => {
     window.URL.revokeObjectURL(url)
   }
 
-  return { summary, byCategory, trend, netWorth, savingsRate, loading, fetchSummary, fetchByCategory, fetchTrend, fetchNetWorth, fetchSavingsRate, exportCsv }
+  return { summary, byCategory, byCategoryAll, trend, netWorth, savingsRate, loading, fetchSummary, fetchByCategory, fetchByCategoryAll, fetchTrend, fetchNetWorth, fetchSavingsRate, exportCsv }
 })
