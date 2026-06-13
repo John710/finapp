@@ -1,9 +1,12 @@
+import Papa from 'papaparse'
+
 async function exportRoutes(fastify, opts) {
   fastify.get('/export/csv', async (request, reply) => {
+    const userId = request.user.userId
     const { from, to, account_id, category_id } = request.query
-    let where = ['1=1']
-    let params = []
-    let idx = 1
+    let where = ['t.user_id = $1']
+    let params = [userId]
+    let idx = 2
 
     if (from) { where.push(`t.date >= $${idx++}`); params.push(from) }
     if (to) { where.push(`t.date <= $${idx++}`); params.push(to) }
@@ -22,32 +25,32 @@ async function exportRoutes(fastify, opts) {
         a.currency,
         t.note
       FROM transactions t
-      LEFT JOIN accounts a ON a.id = t.account_id
-      LEFT JOIN categories c ON c.id = t.category_id
+      LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
+      LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = $1
       WHERE ${whereClause}
       ORDER BY t.date DESC
     `, params)
 
-    const rows = result.rows
-    const headers = ['Date', 'Account', 'Type', 'Category', 'Amount', 'Currency', 'Note']
-    const lines = [
-      '\uFEFF' + headers.join(';'),
-      ...rows.map(r => [
-        r.date,
-        r.account_name || '',
-        r.type,
-        r.category_name || '',
-        r.amount,
-        r.currency,
-        (r.note || '').replace(/;/g, ',')
-      ].join(';'))
-    ]
+    const rows = result.rows.map(r => ({
+      Date: r.date,
+      Account: r.account_name || '',
+      Type: r.type,
+      Category: r.category_name || '',
+      Amount: r.amount,
+      Currency: r.currency,
+      Note: r.note || ''
+    }))
+
+    const csv = Papa.unparse(rows, {
+      delimiter: ';',
+      header: true
+    })
 
     const filename = `finapp_export_${new Date().toISOString().split('T')[0]}.csv`
 
     reply.header('Content-Type', 'text/csv; charset=utf-8')
     reply.header('Content-Disposition', `attachment; filename="${filename}"`)
-    return lines.join('\n')
+    return '\uFEFF' + csv
   })
 }
 
