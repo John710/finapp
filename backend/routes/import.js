@@ -41,6 +41,7 @@ async function importRoutes(fastify, opts) {
   })
 
   fastify.post('/import/csv', async (request, reply) => {
+    const userId = request.user.userId
     const data = await request.file()
     if (!data) {
       reply.code(400)
@@ -76,11 +77,10 @@ async function importRoutes(fastify, opts) {
     try {
       await client.query('BEGIN')
 
-      // Cache accounts and categories by name
-      const accountsRes = await client.query('SELECT id, name, currency FROM accounts')
+      const accountsRes = await client.query('SELECT id, name, currency FROM accounts WHERE user_id = $1', [userId])
       const accountsMap = new Map(accountsRes.rows.map(a => [a.name.toLowerCase(), a]))
 
-      const categoriesRes = await client.query('SELECT id, name, type FROM categories')
+      const categoriesRes = await client.query('SELECT id, name, type FROM categories WHERE user_id = $1', [userId])
       const categoriesMap = new Map(categoriesRes.rows.map(c => [c.name.toLowerCase(), c]))
 
       for (const row of rows) {
@@ -110,7 +110,6 @@ async function importRoutes(fastify, opts) {
             continue
           }
 
-          // Determine type
           let type = 'expense'
           if (typeRaw) {
             const t = String(typeRaw).toLowerCase()
@@ -122,7 +121,6 @@ async function importRoutes(fastify, opts) {
             type = 'income'
           }
 
-          // Find account
           let accountId = null
           let currency = 'USD'
           if (accountRaw) {
@@ -136,8 +134,11 @@ async function importRoutes(fastify, opts) {
             accountId = accountsRes.rows[0].id
             currency = accountsRes.rows[0].currency
           }
+          if (!accountId) {
+            stats.errors.push({ row: row[mapping.date] || '?', error: 'No account found' })
+            continue
+          }
 
-          // Find or create category
           let categoryId = null
           if (categoryRaw) {
             const cat = categoriesMap.get(String(categoryRaw).toLowerCase())
@@ -145,8 +146,8 @@ async function importRoutes(fastify, opts) {
               categoryId = cat.id
             } else {
               const newCat = await client.query(
-                'INSERT INTO categories (name, type, color, icon) VALUES ($1, $2, $3, $4) RETURNING id',
-                [String(categoryRaw), type, '#94a3b8', 'tag']
+                'INSERT INTO categories (user_id, name, type, color, icon) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+                [userId, String(categoryRaw), type, '#94a3b8', 'tag']
               )
               categoryId = newCat.rows[0].id
               categoriesMap.set(String(categoryRaw).toLowerCase(), { id: categoryId, name: categoryRaw, type })
@@ -157,9 +158,15 @@ async function importRoutes(fastify, opts) {
             currency = String(currencyRaw).toUpperCase()
           }
 
+          const txRes = await client.query(
+            'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
+            [userId, accountId, categoryId, Math.abs(amount), type, date, noteRaw || null]
+          )
+
+          const sign = type === 'income' ? 1 : -1
           await client.query(
-            'INSERT INTO transactions (account_id, category_id, amount, type, date, note) VALUES ($1, $2, $3, $4, $5, $6)',
-            [accountId, categoryId, Math.abs(amount), type, date, noteRaw || null]
+            'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
+            [Math.abs(amount) * sign, accountId, userId]
           )
 
           stats.created++
@@ -184,31 +191,26 @@ function parseDate(raw, format) {
   const str = String(raw).trim()
   if (!str) return null
 
-  // Try ISO format
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str
 
-  // Try DD.MM.YYYY
   const ddmmyyyy = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/)
   if (ddmmyyyy) {
     const [, d, m, y] = ddmmyyyy
     return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
   }
 
-  // Try DD/MM/YYYY
   const ddmmyyyy2 = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (ddmmyyyy2) {
     const [, d, m, y] = ddmmyyyy2
     return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
   }
 
-  // Try MM/DD/YYYY
   const mmddyyyy = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (mmddyyyy && format === 'MM/DD/YYYY') {
     const [, m, d, y] = mmddyyyy
     return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
   }
 
-  // Fallback: try native Date
   const d = new Date(str)
   if (!isNaN(d.getTime())) {
     return d.toLocaleDateString('sv-SE')
