@@ -21,21 +21,28 @@ function loadLocale(lang) {
   }
 }
 
+function fallbackForKey(key) {
+  // Return a human-readable placeholder instead of the raw dot-separated key
+  const last = key.split('.').pop()
+  if (!last) return key
+  return last.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 export function t(key, params = {}, lang = 'ru') {
   const locale = loadLocale(lang)
   const keys = key.split('.')
   let value = locale
   for (const k of keys) {
     value = value?.[k]
-    if (value === undefined) return key
+    if (value === undefined) return fallbackForKey(key)
   }
-  if (typeof value !== 'string') return key
+  if (typeof value !== 'string') return fallbackForKey(key)
   return value.replace(/\{(\w+)\}/g, (_, k) => params[k] ?? `{${k}}`)
 }
 
-export async function getUserLang(db) {
+export async function getUserLang(db, userId) {
   try {
-    const { rows } = await db.query('SELECT language FROM users LIMIT 1')
+    const { rows } = await db.query('SELECT language FROM users WHERE id = $1', [userId])
     return rows[0]?.language || process.env.DEFAULT_LANG || 'ru'
   } catch {
     return process.env.DEFAULT_LANG || 'ru'
