@@ -24,7 +24,7 @@
             class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer"
             @click="editCategory(cat)">
             <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" :style="{ backgroundColor: cat.color + '20', color: cat.color }">
-              <span v-if="cat.icon_custom" v-html="cat.icon_custom"></span>
+              <span v-if="cat.icon_custom" v-html="sanitizeSvg(cat.icon_custom)"></span>
               <Icon v-else-if="cat.icon" :name="cat.icon" set="category" class="w-5 h-5" />
               <Icon v-else name="tag" class="w-5 h-5" />
             </div>
@@ -97,6 +97,7 @@
 <script setup>
 import { ref, onMounted, reactive, computed } from 'vue'
 import { useCategoriesStore } from '../stores/categories'
+import { sanitizeSvg } from '../utils/sanitizeSvg.js'
 import { useI18n } from 'vue-i18n'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { categoryIcons } from '@/utils/icons'

@@ -3,14 +3,15 @@ import { loadRates, convertAmount } from '../services/currency.js'
 async function budgetRoutes(fastify, opts) {
   // List with progress — spent is converted into the budget's currency using live rates
   fastify.get('/budgets', async (request, reply) => {
+    const userId = request.user.userId
     const [budgetsResult, rates] = await Promise.all([
       fastify.db.query(`
         SELECT b.*, c.name as category_name, c.color as category_color
         FROM budgets b
-        LEFT JOIN categories c ON c.id = b.category_id
-        WHERE b.is_active = true
+        LEFT JOIN categories c ON c.id = b.category_id AND c.user_id = $1
+        WHERE b.is_active = true AND b.user_id = $1
         ORDER BY b.created_at DESC
-      `),
+      `, [userId]),
       loadRates(fastify.db)
     ])
 
@@ -21,13 +22,14 @@ async function budgetRoutes(fastify, opts) {
     const txResult = await fastify.db.query(`
       SELECT t.amount, a.currency as account_currency, b.id as budget_id, b.currency as budget_currency
       FROM transactions t
-      JOIN accounts a ON a.id = t.account_id
-      JOIN budgets b ON b.category_id = t.category_id
+      JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
+      JOIN budgets b ON b.category_id = t.category_id AND b.user_id = $1
       WHERE t.type = 'expense'
+        AND t.user_id = $1
         AND t.date >= b.start_date
         AND t.date < CASE WHEN b.period = 'month' THEN b.start_date + INTERVAL '1 month' ELSE b.start_date + INTERVAL '7 days' END
         AND b.is_active = true
-    `)
+    `, [userId])
 
     const spentByBudget = {}
     for (const tx of txResult.rows) {
@@ -73,22 +75,39 @@ async function budgetRoutes(fastify, opts) {
       }
     }
   }, async (request, reply) => {
+    const userId = request.user.userId
     const { category_id, amount, currency, period, start_date } = request.body
     const result = await fastify.db.query(
-      'INSERT INTO budgets (category_id, amount, currency, period, start_date) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [category_id, amount, currency || 'USD', period, start_date || new Date().toISOString().split('T')[0]]
+      'INSERT INTO budgets (user_id, category_id, amount, currency, period, start_date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [userId, category_id, amount, currency || 'USD', period, start_date || new Date().toISOString().split('T')[0]]
     )
     reply.code(201)
     return result.rows[0]
   })
 
   // Update
-  fastify.put('/budgets/:id', async (request, reply) => {
+  fastify.put('/budgets/:id', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['category_id', 'amount', 'period'],
+        properties: {
+          category_id: { type: 'integer' },
+          amount: { type: 'number', minimum: 0 },
+          currency: { type: 'string' },
+          period: { type: 'string', enum: ['month', 'week'] },
+          start_date: { type: 'string' },
+          is_active: { type: 'boolean' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const userId = request.user.userId
     const { id } = request.params
     const { category_id, amount, currency, period, start_date, is_active } = request.body
     const result = await fastify.db.query(
-      'UPDATE budgets SET category_id = $1, amount = $2, currency = $3, period = $4, start_date = $5, is_active = $6 WHERE id = $7 RETURNING *',
-      [category_id, amount, currency, period, start_date, is_active, id]
+      'UPDATE budgets SET category_id = $1, amount = $2, currency = $3, period = $4, start_date = $5, is_active = $6 WHERE id = $7 AND user_id = $8 RETURNING *',
+      [category_id, amount, currency, period, start_date, is_active, id, userId]
     )
     if (result.rows.length === 0) {
       reply.code(404)
@@ -99,8 +118,9 @@ async function budgetRoutes(fastify, opts) {
 
   // Delete
   fastify.delete('/budgets/:id', async (request, reply) => {
+    const userId = request.user.userId
     const { id } = request.params
-    await fastify.db.query('DELETE FROM budgets WHERE id = $1', [id])
+    await fastify.db.query('DELETE FROM budgets WHERE id = $1 AND user_id = $2', [id, userId])
     reply.code(204)
   })
 }

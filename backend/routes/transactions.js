@@ -5,10 +5,11 @@ import { notify, checkDuplicateNotification } from '../services/notify.js'
 async function transactionRoutes(fastify, opts) {
   // List with filters
   fastify.get('/transactions', async (request, reply) => {
+    const userId = request.user.userId
     const { account_id, category_id, type, from, to, search, tag_id, limit = 50, offset = 0 } = request.query
-    let where = []
-    let params = []
-    let idx = 1
+    let where = ['t.user_id = $1']
+    let params = [userId]
+    let idx = 2
 
     if (account_id) { where.push(`t.account_id = $${idx++}`); params.push(account_id) }
     if (category_id) { where.push(`t.category_id = $${idx++}`); params.push(category_id) }
@@ -26,26 +27,25 @@ async function transactionRoutes(fastify, opts) {
     )
 
     const result = await fastify.db.query(
-      `SELECT t.*, a.name as account_name, a.currency as account_currency, a.type as account_type, c.name as category_name, c.icon as category_icon
+      `SELECT t.*, a.name as account_name, a.currency as account_currency, a.type as account_type, c.name as category_name, c.icon as category_icon, c.color as category_color
        FROM transactions t
-       LEFT JOIN accounts a ON a.id = t.account_id
-       LEFT JOIN categories c ON c.id = t.category_id
+       LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
+       LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = $1
        ${whereClause}
        ORDER BY t.date DESC, t.created_at DESC
        LIMIT $${idx++} OFFSET $${idx++}`,
       [...params, limit, offset]
     )
 
-    // Fetch tags for each transaction
     const transactionIds = result.rows.map(r => r.id)
     let tagsMap = {}
     if (transactionIds.length) {
       const tagRes = await fastify.db.query(
         `SELECT tt.transaction_id, tg.id, tg.name, tg.color
          FROM transaction_tags tt
-         JOIN tags tg ON tg.id = tt.tag_id
-         WHERE tt.transaction_id = ANY($1)`,
-        [transactionIds]
+         JOIN tags tg ON tg.id = tt.tag_id AND tg.user_id = $1
+         WHERE tt.transaction_id = ANY($2)`,
+        [userId, transactionIds]
       )
       for (const row of tagRes.rows) {
         if (!tagsMap[row.transaction_id]) tagsMap[row.transaction_id] = []
@@ -80,37 +80,75 @@ async function transactionRoutes(fastify, opts) {
       }
     }
   }, async (request, reply) => {
+    const userId = request.user.userId
     const { account_id, category_id, amount, type, date, note, transfer_to_account_id, tags } = request.body
 
     const client = await fastify.db.connect()
     try {
       await client.query('BEGIN')
 
+      // Validate account ownership
+      const accRes = await client.query('SELECT id, currency, type FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
+      if (accRes.rows.length === 0) {
+        await client.query('ROLLBACK')
+        reply.code(404)
+        return { error: 'Account not found' }
+      }
+
+      if (transfer_to_account_id) {
+        const tgtRes = await client.query('SELECT id, currency FROM accounts WHERE id = $1 AND user_id = $2', [transfer_to_account_id, userId])
+        if (tgtRes.rows.length === 0) {
+          await client.query('ROLLBACK')
+          reply.code(404)
+          return { error: 'Transfer target account not found' }
+        }
+      }
+
+      if (category_id) {
+        const catRes = await client.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
+        if (catRes.rows.length === 0) {
+          await client.query('ROLLBACK')
+          reply.code(404)
+          return { error: 'Category not found' }
+        }
+      }
+
       const result = await client.query(
-        'INSERT INTO transactions (account_id, category_id, amount, type, date, note, transfer_to_account_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-        [account_id, category_id, amount, type, date, note, transfer_to_account_id]
+        'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, transfer_to_account_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+        [userId, account_id, category_id, amount, type, date, note, transfer_to_account_id]
       )
       const transaction = result.rows[0]
 
       if (tags && tags.length) {
-        const values = tags.map((_, i) => `($1, $${i + 2})`).join(',')
+        const tagCheck = await client.query('SELECT id FROM tags WHERE id = ANY($1) AND user_id = $2', [tags, userId])
+        if (tagCheck.rows.length !== tags.length) {
+          await client.query('ROLLBACK')
+          reply.code(400)
+          return { error: 'Invalid tags' }
+        }
+        const values = tags.map((_, i) => `($1, $${2 * i + 2}, $${2 * i + 3})`).join(',')
         await client.query(
-          `INSERT INTO transaction_tags (transaction_id, tag_id) VALUES ${values}`,
-          [transaction.id, ...tags]
+          `INSERT INTO transaction_tags (transaction_id, tag_id, user_id) VALUES ${values}`,
+          [transaction.id, ...tags.flatMap(tagId => [tagId, userId])]
         )
       }
 
       // Update account balance
       const sign = type === 'income' ? 1 : -1
       await client.query(
-        'UPDATE accounts SET balance = balance + $1 WHERE id = $2',
-        [amount * sign, account_id]
+        'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
+        [amount * sign, account_id, userId]
       )
 
       if (type === 'transfer' && transfer_to_account_id) {
+        if (transfer_to_account_id === account_id) {
+          await client.query('ROLLBACK')
+          reply.code(400)
+          return { error: 'Transfer target cannot be the same as source account' }
+        }
         const [srcRes, tgtRes] = await Promise.all([
-          client.query('SELECT currency, type FROM accounts WHERE id = $1', [account_id]),
-          client.query('SELECT currency, type FROM accounts WHERE id = $1', [transfer_to_account_id])
+          client.query('SELECT currency, type FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId]),
+          client.query('SELECT currency, type FROM accounts WHERE id = $1 AND user_id = $2', [transfer_to_account_id, userId])
         ])
         const sourceCurrency = srcRes.rows[0]?.currency
         const targetCurrency = tgtRes.rows[0]?.currency
@@ -128,34 +166,32 @@ async function transactionRoutes(fastify, opts) {
         }
 
         await client.query(
-          'UPDATE accounts SET balance = balance + $1 WHERE id = $2',
-          [targetAmount, transfer_to_account_id]
+          'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
+          [targetAmount, transfer_to_account_id, userId]
         )
         // Create paired transaction
-        const paired = await client.query(
-          'INSERT INTO transactions (account_id, category_id, amount, type, date, note, transfer_to_account_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-          [transfer_to_account_id, null, targetAmount, 'income', date, null, account_id]
+        await client.query(
+          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, transfer_to_account_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+          [userId, transfer_to_account_id, null, targetAmount, 'income', date, null, account_id]
         )
       }
 
       await client.query('COMMIT')
 
-      const userId = request.user.userId
-
       // Check budget status for expense transactions
       if (type === 'expense' && category_id) {
         try {
-          const lang = await getUserLang(fastify.db)
+          const lang = await getUserLang(fastify.db, userId)
           const budgetRes = await fastify.db.query(
             `SELECT b.id, b.amount as limit_amount, COALESCE(SUM(t.amount), 0) as spent, c.name as category_name
              FROM budgets b
-             LEFT JOIN transactions t ON t.category_id = b.category_id AND t.type = 'expense'
+             LEFT JOIN transactions t ON t.category_id = b.category_id AND t.type = 'expense' AND t.user_id = b.user_id
                AND t.date >= b.start_date
                AND t.date < CASE WHEN b.period = 'month' THEN b.start_date + INTERVAL '1 month' ELSE b.start_date + INTERVAL '7 days' END
-             JOIN categories c ON c.id = b.category_id
-             WHERE b.category_id = $1 AND b.is_active = true
+             JOIN categories c ON c.id = b.category_id AND c.user_id = b.user_id
+             WHERE b.category_id = $1 AND b.is_active = true AND b.user_id = $2
              GROUP BY b.id, b.amount, c.name`,
-            [category_id]
+            [category_id, userId]
           )
           for (const budget of budgetRes.rows) {
             const spent = parseFloat(budget.spent)
@@ -193,10 +229,10 @@ async function transactionRoutes(fastify, opts) {
       // Check goal achievement for income transactions to goal accounts
       if (type === 'income' && account_id) {
         try {
-          const lang = await getUserLang(fastify.db)
+          const lang = await getUserLang(fastify.db, userId)
           const goalRes = await fastify.db.query(
-            `SELECT id, name, balance, target_amount FROM accounts WHERE id = $1 AND type = 'goal' AND target_amount > 0`,
-            [account_id]
+            `SELECT id, name, balance, target_amount FROM accounts WHERE id = $1 AND type = 'goal' AND target_amount > 0 AND user_id = $2`,
+            [account_id, userId]
           )
           for (const goal of goalRes.rows) {
             const balance = parseFloat(goal.balance)
@@ -221,8 +257,8 @@ async function transactionRoutes(fastify, opts) {
 
       // Check for overdrawn account after transaction
       try {
-        const lang = await getUserLang(fastify.db)
-        const accRes = await fastify.db.query('SELECT id, name, balance, type FROM accounts WHERE id = $1', [account_id])
+        const lang = await getUserLang(fastify.db, userId)
+        const accRes = await fastify.db.query('SELECT id, name, balance, type FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
         const acc = accRes.rows[0]
         if (acc && parseFloat(acc.balance) < 0) {
           const dup = await checkDuplicateNotification(fastify, { userId, type: 'account_overdrawn', entityId: acc.id })
@@ -236,9 +272,8 @@ async function transactionRoutes(fastify, opts) {
             })
           }
         }
-        // Also check transfer target account
         if (type === 'transfer' && transfer_to_account_id) {
-          const tgtRes = await fastify.db.query('SELECT id, name, balance, type FROM accounts WHERE id = $1', [transfer_to_account_id])
+          const tgtRes = await fastify.db.query('SELECT id, name, balance, type FROM accounts WHERE id = $1 AND user_id = $2', [transfer_to_account_id, userId])
           const tgt = tgtRes.rows[0]
           if (tgt && parseFloat(tgt.balance) < 0) {
             const dup = await checkDuplicateNotification(fastify, { userId, type: 'account_overdrawn', entityId: tgt.id })
@@ -268,25 +303,209 @@ async function transactionRoutes(fastify, opts) {
   })
 
   // Update
-  fastify.put('/transactions/:id', async (request, reply) => {
-    const { id } = request.params
-    const { account_id, category_id, amount, type, date, note } = request.body
-    const result = await fastify.db.query(
-      'UPDATE transactions SET account_id = $1, category_id = $2, amount = $3, type = $4, date = $5, note = $6, updated_at = NOW() WHERE id = $7 RETURNING *',
-      [account_id, category_id, amount, type, date, note, id]
-    )
-    if (result.rows.length === 0) {
-      reply.code(404)
-      return { error: 'Transaction not found' }
+  fastify.put('/transactions/:id', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['account_id', 'amount', 'type', 'date'],
+        properties: {
+          account_id: { type: 'integer' },
+          category_id: { type: ['integer', 'null'] },
+          amount: { type: 'number', minimum: 0 },
+          type: { type: 'string', enum: ['income', 'expense', 'transfer'] },
+          date: { type: 'string', format: 'date' },
+          note: { type: 'string' },
+          transfer_to_account_id: { type: ['integer', 'null'] },
+          tags: { type: 'array', items: { type: 'integer' } }
+        }
+      }
     }
-    return result.rows[0]
+  }, async (request, reply) => {
+    const userId = request.user.userId
+    const { id } = request.params
+    const { account_id, category_id, amount, type, date, note, transfer_to_account_id, tags } = request.body
+
+    const client = await fastify.db.connect()
+    try {
+      await client.query('BEGIN')
+
+      const oldRes = await client.query(
+        'SELECT * FROM transactions WHERE id = $1 AND user_id = $2',
+        [id, userId]
+      )
+      if (oldRes.rows.length === 0) {
+        await client.query('ROLLBACK')
+        reply.code(404)
+        return { error: 'Transaction not found' }
+      }
+      const old = oldRes.rows[0]
+
+      // Validate new account ownership
+      const accRes = await client.query('SELECT id, currency, type FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
+      if (accRes.rows.length === 0) {
+        await client.query('ROLLBACK')
+        reply.code(404)
+        return { error: 'Account not found' }
+      }
+
+      if (transfer_to_account_id) {
+        const tgtRes = await client.query('SELECT id, currency FROM accounts WHERE id = $1 AND user_id = $2', [transfer_to_account_id, userId])
+        if (tgtRes.rows.length === 0) {
+          await client.query('ROLLBACK')
+          reply.code(404)
+          return { error: 'Transfer target account not found' }
+        }
+      }
+
+      if (category_id) {
+        const catRes = await client.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
+        if (catRes.rows.length === 0) {
+          await client.query('ROLLBACK')
+          reply.code(404)
+          return { error: 'Category not found' }
+        }
+      }
+
+      // Revert old transaction balance effects
+      const oldSign = old.type === 'income' ? 1 : -1
+      await client.query(
+        'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
+        [parseFloat(old.amount) * oldSign, old.account_id, userId]
+      )
+      if (old.type === 'transfer' && old.transfer_to_account_id) {
+        await client.query(
+          'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
+          [parseFloat(old.amount), old.transfer_to_account_id, userId]
+        )
+        await client.query(
+          'DELETE FROM transactions WHERE transfer_to_account_id = $1 AND account_id = $2 AND user_id = $3 AND type = \'income\'',
+          [old.account_id, old.transfer_to_account_id, userId]
+        )
+      }
+
+      // Update main transaction
+      const result = await client.query(
+        'UPDATE transactions SET account_id = $1, category_id = $2, amount = $3, type = $4, date = $5, note = $6, transfer_to_account_id = $7, updated_at = NOW() WHERE id = $8 AND user_id = $9 RETURNING *',
+        [account_id, category_id, amount, type, date, note, transfer_to_account_id, id, userId]
+      )
+      const transaction = result.rows[0]
+
+      // Update tags
+      await client.query('DELETE FROM transaction_tags WHERE transaction_id = $1', [id])
+      if (tags && tags.length) {
+        const tagCheck = await client.query('SELECT id FROM tags WHERE id = ANY($1) AND user_id = $2', [tags, userId])
+        if (tagCheck.rows.length !== tags.length) {
+          await client.query('ROLLBACK')
+          reply.code(400)
+          return { error: 'Invalid tags' }
+        }
+        const values = tags.map((_, i) => `($1, $${2 * i + 2}, $${2 * i + 3})`).join(',')
+        await client.query(
+          `INSERT INTO transaction_tags (transaction_id, tag_id, user_id) VALUES ${values}`,
+          [transaction.id, ...tags.flatMap(tagId => [tagId, userId])]
+        )
+      }
+
+      // Apply new balance effects
+      const sign = type === 'income' ? 1 : -1
+      await client.query(
+        'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
+        [amount * sign, account_id, userId]
+      )
+
+      if (type === 'transfer' && transfer_to_account_id) {
+        if (transfer_to_account_id === account_id) {
+          await client.query('ROLLBACK')
+          reply.code(400)
+          return { error: 'Transfer target cannot be the same as source account' }
+        }
+        const [srcRes, tgtRes] = await Promise.all([
+          client.query('SELECT currency, type FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId]),
+          client.query('SELECT currency, type FROM accounts WHERE id = $1 AND user_id = $2', [transfer_to_account_id, userId])
+        ])
+        const sourceCurrency = srcRes.rows[0]?.currency
+        const targetCurrency = tgtRes.rows[0]?.currency
+
+        let targetAmount = amount
+        if (sourceCurrency && targetCurrency && sourceCurrency !== targetCurrency) {
+          const rates = await loadRates(client)
+          const converted = convertAmount(amount, sourceCurrency, targetCurrency, rates)
+          if (converted === null) {
+            await client.query('ROLLBACK')
+            reply.code(400)
+            return { error: 'exchange_rate_missing', message: `No exchange rate found for ${sourceCurrency} -> ${targetCurrency}` }
+          }
+          targetAmount = converted
+        }
+
+        await client.query(
+          'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
+          [targetAmount, transfer_to_account_id, userId]
+        )
+        await client.query(
+          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, transfer_to_account_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [userId, transfer_to_account_id, null, targetAmount, 'income', date, null, account_id]
+        )
+      }
+
+      await client.query('COMMIT')
+      return transaction
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
   })
 
   // Delete
   fastify.delete('/transactions/:id', async (request, reply) => {
+    const userId = request.user.userId
     const { id } = request.params
-    await fastify.db.query('DELETE FROM transactions WHERE id = $1', [id])
-    reply.code(204)
+
+    const client = await fastify.db.connect()
+    try {
+      await client.query('BEGIN')
+
+      const oldRes = await client.query(
+        'SELECT * FROM transactions WHERE id = $1 AND user_id = $2',
+        [id, userId]
+      )
+      if (oldRes.rows.length === 0) {
+        await client.query('ROLLBACK')
+        reply.code(404)
+        return { error: 'Transaction not found' }
+      }
+      const old = oldRes.rows[0]
+
+      // Revert old balance effects
+      const oldSign = old.type === 'income' ? 1 : -1
+      await client.query(
+        'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
+        [parseFloat(old.amount) * oldSign, old.account_id, userId]
+      )
+      if (old.type === 'transfer' && old.transfer_to_account_id) {
+        await client.query(
+          'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
+          [parseFloat(old.amount), old.transfer_to_account_id, userId]
+        )
+        await client.query(
+          'DELETE FROM transactions WHERE transfer_to_account_id = $1 AND account_id = $2 AND user_id = $3 AND type = \'income\'',
+          [old.account_id, old.transfer_to_account_id, userId]
+        )
+      }
+
+      await client.query('DELETE FROM transaction_tags WHERE transaction_id = $1', [id])
+      await client.query('DELETE FROM transactions WHERE id = $1 AND user_id = $2', [id, userId])
+
+      await client.query('COMMIT')
+      reply.code(204)
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
   })
 }
 

@@ -3,31 +3,28 @@ import { loadRates, convertAmount } from '../services/currency.js'
 import { notify, checkDuplicateNotification } from '../services/notify.js'
 
 async function debtRoutes(fastify, opts) {
-  async function getDebtCategoryId(client, txType) {
-    const lang = await getUserLang(client)
+  async function getDebtCategoryId(client, txType, userId) {
+    const lang = await getUserLang(client, userId)
     const catName = t('debts.title', {}, lang)
     const legacyNames = txType === 'income'
       ? ['Debts (income)', 'Долги (доход)']
       : ['Debts (expense)', 'Долги (расход)']
-    // Try translated name first
-    let res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2', [catName, txType])
+    let res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2 AND user_id = $3', [catName, txType, userId])
     if (res.rows.length) return res.rows[0].id
-    // Fallback to legacy names
     for (const name of legacyNames) {
-      res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2', [name, txType])
+      res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2 AND user_id = $3', [name, txType, userId])
       if (res.rows.length) return res.rows[0].id
     }
-    // Create new category if none found
     const newRes = await client.query(
-      'INSERT INTO categories (name, type, color, icon) VALUES ($1, $2, $3, $4) RETURNING id',
-      [catName, txType, '#64748b', 'tag']
+      'INSERT INTO categories (user_id, name, type, color, icon) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [userId, catName, txType, '#64748b', 'tag']
     )
     return newRes.rows[0].id
   }
 
-  async function convertForAccount(client, amount, fromCurrency, accountId, rates) {
+  async function convertForAccount(client, amount, fromCurrency, accountId, rates, userId) {
     if (!accountId || !fromCurrency) return amount
-    const accRes = await client.query('SELECT currency FROM accounts WHERE id = $1', [accountId])
+    const accRes = await client.query('SELECT currency FROM accounts WHERE id = $1 AND user_id = $2', [accountId, userId])
     const toCurrency = accRes.rows[0]?.currency
     if (!toCurrency || fromCurrency === toCurrency) return amount
     const converted = convertAmount(amount, fromCurrency, toCurrency, rates)
@@ -40,13 +37,15 @@ async function debtRoutes(fastify, opts) {
 
   // List with converted paid_amount and remaining in the debt's currency
   fastify.get('/debts', async (request, reply) => {
+    const userId = request.user.userId
     const [debtsResult, rates] = await Promise.all([
       fastify.db.query(`
         SELECT d.*, a.name as account_name
         FROM debts d
-        LEFT JOIN accounts a ON a.id = d.account_id
+        LEFT JOIN accounts a ON a.id = d.account_id AND a.user_id = $1
+        WHERE d.user_id = $1
         ORDER BY d.due_date ASC NULLS LAST
-      `),
+      `, [userId]),
       loadRates(fastify.db)
     ])
 
@@ -55,8 +54,8 @@ async function debtRoutes(fastify, opts) {
 
     const debtIds = debts.map(d => d.id)
     const paymentsResult = await fastify.db.query(
-      'SELECT p.* FROM debt_payments p WHERE p.debt_id = ANY($1)',
-      [debtIds]
+      'SELECT p.* FROM debt_payments p WHERE p.debt_id = ANY($1) AND p.user_id = $2',
+      [debtIds, userId]
     )
 
     const paymentsByDebt = {}
@@ -112,6 +111,7 @@ async function debtRoutes(fastify, opts) {
       }
     }
   }, async (request, reply) => {
+    const userId = request.user.userId
     const { name, counterparty, amount, currency, type, due_date, description, account_id } = request.body
     const debtCurrency = currency || 'USD'
     const client = await fastify.db.connect()
@@ -120,25 +120,24 @@ async function debtRoutes(fastify, opts) {
       const rates = await loadRates(client)
 
       const result = await client.query(
-        'INSERT INTO debts (name, counterparty, amount, currency, type, due_date, description, account_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-        [name, counterparty, amount, debtCurrency, type, due_date, description, account_id]
+        'INSERT INTO debts (user_id, name, counterparty, amount, currency, type, due_date, description, account_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+        [userId, name, counterparty, amount, debtCurrency, type, due_date, description, account_id]
       )
       const debt = result.rows[0]
 
-      // Create initial transaction when debt is linked to an account
       if (account_id) {
         const txType = type === 'borrow' ? 'income' : 'expense'
         const sign = txType === 'income' ? 1 : -1
-        const categoryId = await getDebtCategoryId(client, txType)
-        const txAmount = await convertForAccount(client, amount, debtCurrency, account_id, rates)
+        const categoryId = await getDebtCategoryId(client, txType, userId)
+        const txAmount = await convertForAccount(client, amount, debtCurrency, account_id, rates, userId)
 
         await client.query(
-          'INSERT INTO transactions (account_id, category_id, amount, type, date, note) VALUES ($1, $2, $3, $4, CURRENT_DATE, $5)',
-          [account_id, categoryId, txAmount, txType, `debt_created:${name}`]
+          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6)',
+          [userId, account_id, categoryId, txAmount, txType, `debt_created:${name}`]
         )
         await client.query(
-          'UPDATE accounts SET balance = balance + $1 WHERE id = $2',
-          [txAmount * sign, account_id]
+          'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
+          [txAmount * sign, account_id, userId]
         )
       }
 
@@ -154,12 +153,31 @@ async function debtRoutes(fastify, opts) {
   })
 
   // Update
-  fastify.put('/debts/:id', async (request, reply) => {
+  fastify.put('/debts/:id', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['name', 'counterparty', 'amount', 'type'],
+        properties: {
+          name: { type: 'string', minLength: 1 },
+          counterparty: { type: 'string', minLength: 1 },
+          amount: { type: 'number', minimum: 0 },
+          currency: { type: 'string' },
+          type: { type: 'string', enum: ['lend', 'borrow'] },
+          due_date: { type: 'string' },
+          description: { type: 'string' },
+          status: { type: 'string', enum: ['active', 'paid'] },
+          account_id: { type: ['integer', 'null'] }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const userId = request.user.userId
     const { id } = request.params
     const { name, counterparty, amount, currency, type, due_date, description, status, account_id } = request.body
     const result = await fastify.db.query(
-      'UPDATE debts SET name = $1, counterparty = $2, amount = $3, currency = $4, type = $5, due_date = $6, description = $7, status = $8, account_id = $9, updated_at = NOW() WHERE id = $10 RETURNING *',
-      [name, counterparty, amount, currency, type, due_date, description, status, account_id, id]
+      'UPDATE debts SET name = $1, counterparty = $2, amount = $3, currency = $4, type = $5, due_date = $6, description = $7, status = $8, account_id = $9, updated_at = NOW() WHERE id = $10 AND user_id = $11 RETURNING *',
+      [name, counterparty, amount, currency, type, due_date, description, status, account_id, id, userId]
     )
     if (result.rows.length === 0) {
       reply.code(404)
@@ -183,6 +201,7 @@ async function debtRoutes(fastify, opts) {
       }
     }
   }, async (request, reply) => {
+    const userId = request.user.userId
     const { id } = request.params
     const { amount, currency, note, account_id } = request.body
     const client = await fastify.db.connect()
@@ -190,7 +209,7 @@ async function debtRoutes(fastify, opts) {
       await client.query('BEGIN')
       const rates = await loadRates(client)
 
-      const debtRes = await client.query('SELECT amount, currency, type, name FROM debts WHERE id = $1', [id])
+      const debtRes = await client.query('SELECT amount, currency, type, name FROM debts WHERE id = $1 AND user_id = $2', [id, userId])
       const debt = debtRes.rows[0]
       if (!debt) {
         reply.code(404)
@@ -200,29 +219,27 @@ async function debtRoutes(fastify, opts) {
       const paymentCurrency = currency || debtCurrency
 
       const result = await client.query(
-        'INSERT INTO debt_payments (debt_id, amount, currency, note, account_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [id, amount, paymentCurrency, note, account_id]
+        'INSERT INTO debt_payments (user_id, debt_id, amount, currency, note, account_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        [userId, id, amount, paymentCurrency, note, account_id]
       )
 
-      // Create corresponding transaction and update balance
       if (account_id) {
         const txType = debt.type === 'borrow' ? 'expense' : 'income'
         const sign = txType === 'income' ? 1 : -1
-        const categoryId = await getDebtCategoryId(client, txType)
-        const txAmount = await convertForAccount(client, amount, paymentCurrency, account_id, rates)
+        const categoryId = await getDebtCategoryId(client, txType, userId)
+        const txAmount = await convertForAccount(client, amount, paymentCurrency, account_id, rates, userId)
 
         await client.query(
-          'INSERT INTO transactions (account_id, category_id, amount, type, date, note) VALUES ($1, $2, $3, $4, CURRENT_DATE, $5)',
-          [account_id, categoryId, txAmount, txType, `debt_payment:${debt.name}`]
+          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6)',
+          [userId, account_id, categoryId, txAmount, txType, `debt_payment:${debt.name}`]
         )
         await client.query(
-          'UPDATE accounts SET balance = balance + $1 WHERE id = $2',
-          [txAmount * sign, account_id]
+          'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
+          [txAmount * sign, account_id, userId]
         )
       }
 
-      // Check if fully paid — convert all payments to debt currency
-      const paymentsRes = await client.query('SELECT amount, currency FROM debt_payments WHERE debt_id = $1', [id])
+      const paymentsRes = await client.query('SELECT amount, currency FROM debt_payments WHERE debt_id = $1 AND user_id = $2', [id, userId])
       let paid = 0
       for (const p of paymentsRes.rows) {
         const pAmount = parseFloat(p.amount)
@@ -240,11 +257,9 @@ async function debtRoutes(fastify, opts) {
         }
       }
       if (paid >= parseFloat(debt.amount)) {
-        await client.query('UPDATE debts SET status = $1 WHERE id = $2', ['paid', id])
-        // Notify debt paid off
+        await client.query('UPDATE debts SET status = $1 WHERE id = $2 AND user_id = $3', ['paid', id, userId])
         try {
-          const lang = await getUserLang(fastify.db)
-          const userId = request.user.userId
+          const lang = await getUserLang(fastify.db, userId)
           const title = t('notifications.debt_paid', {}, lang)
           const message = t('notifications.debt_paid_body', { name: debt.name }, lang)
           await notify(fastify, userId, {
@@ -270,18 +285,20 @@ async function debtRoutes(fastify, opts) {
 
   // Get payments
   fastify.get('/debts/:id/payments', async (request, reply) => {
+    const userId = request.user.userId
     const { id } = request.params
     const result = await fastify.db.query(
-      'SELECT p.*, a.name as account_name FROM debt_payments p LEFT JOIN accounts a ON a.id = p.account_id WHERE p.debt_id = $1 ORDER BY p.created_at DESC',
-      [id]
+      'SELECT p.*, a.name as account_name FROM debt_payments p LEFT JOIN accounts a ON a.id = p.account_id AND a.user_id = $1 WHERE p.debt_id = $2 AND p.user_id = $1 ORDER BY p.created_at DESC',
+      [userId, id]
     )
     return result.rows
   })
 
   // Delete
   fastify.delete('/debts/:id', async (request, reply) => {
+    const userId = request.user.userId
     const { id } = request.params
-    await fastify.db.query('DELETE FROM debts WHERE id = $1', [id])
+    await fastify.db.query('DELETE FROM debts WHERE id = $1 AND user_id = $2', [id, userId])
     reply.code(204)
   })
 }
