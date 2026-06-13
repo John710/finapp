@@ -10,7 +10,7 @@
 [![Docker Image](https://ghcr-badge.egpl.dev/john710/finapp/size?color=%2344cc11&tag=latest&label=image+size)](https://github.com/John710/finapp/pkgs/container/finapp)
 [![GitHub release](https://img.shields.io/github/v/release/John710/finapp?color=%2344cc11)](https://github.com/John710/finapp/releases)
 [![GitHub Actions](https://img.shields.io/github/actions/workflow/status/John710/finapp/docker.yml?label=build)](https://github.com/John710/finapp/actions)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](LICENSE)
  
 [🇷🇺 Русская версия](/docs/README_RU.md)
  
@@ -66,7 +66,7 @@
 - **CSV Import** — import data from other finance apps
 - **CSV Export** — save your data for backup purposes
 ### Security & Access
-- **Multi-User Support** — create separate accounts for family members
+- **Multi-User Support** — separate accounts for family members with per-user data isolation
 - **JWT Authentication** — secure app access
 - **Password Encryption** — account protection
 ### Localization
@@ -107,6 +107,10 @@ docker compose up -d
  
 Open `http://localhost:6253` and complete the initial setup.
  
+### HTTPS / Reverse Proxy
+
+The application does **not** enforce HTTPS or send HSTS headers itself. For production deployments, place FinApp behind a reverse proxy (Traefik, Nginx, Caddy, etc.) and configure TLS and HSTS there. This keeps plain HTTP access working for local development without breaking the app.
+ 
 ---
  
 ## ⚙️ Environment Variables
@@ -124,6 +128,8 @@ Open `http://localhost:6253` and complete the initial setup.
 | `VAPID_SUBJECT` | Web Push subject | `mailto:admin@localhost` |
 | `SHOUTRRR_URL` | Shoutrrr notification URL | — |
 | `ALLOWED_ORIGINS` | Allowed CORS origins (comma-separated) | — |
+| `DATABASE_SSL` | Enable SSL/TLS for PostgreSQL connection | `false` |
+| `DATABASE_SSL_REJECT_UNAUTHORIZED` | Reject unauthorized SSL certificates | `true` |
 | `PUID` | Docker container user ID | `1000` |
 | `PGID` | Docker container group ID | `1000` |
  
@@ -146,7 +152,7 @@ Open `http://localhost:6253` and complete the initial setup.
 | Layer | Technologies |
 |-------|-------------|
 | **Backend** | Node.js, Fastify, PostgreSQL, JWT, Web Push, Shoutrrr |
-| **Frontend** | Vue 3, Pinia, Vue Router, Vue I18n, Tailwind CSS v4, Chart.js, Vite |
+| **Frontend** | Vue 3, Pinia, Vue Router, Vue I18n, Tailwind CSS v4, ECharts, Vite |
 | **Infrastructure** | Docker, GitHub Actions, GHCR |
  
 ---
@@ -209,10 +215,10 @@ cd backend && npm install && npm run dev
 cd frontend && npm install && npm run dev
 ```
  
-Requirements: Node.js 22+, PostgreSQL 14+
+Requirements: Node.js 22+, PostgreSQL 15+
  
 ---
  
 ## 📄 License
  
-MIT License — see [LICENSE](LICENSE) for details.
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL v3) - see the [LICENSE](LICENSE) file for details.
