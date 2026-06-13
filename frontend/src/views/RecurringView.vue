@@ -125,6 +125,7 @@ import { useRatesStore } from '../stores/rates'
 import { useI18n } from 'vue-i18n'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { useUndo } from '@/composables/useUndo'
+import { getUserLocale } from '@/utils/locale'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import QuickCategoryModal from '../components/QuickCategoryModal.vue'
 import CurrencySelect from '../components/CurrencySelect.vue'
@@ -161,7 +162,7 @@ function formatConverted(value, currency) {
 }
 
 function formatDate(date) {
-  return new Date(date).toLocaleDateString('ru-RU')
+  return new Date(date).toLocaleDateString(getUserLocale())
 }
 
 function openModal() {

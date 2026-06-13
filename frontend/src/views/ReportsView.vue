@@ -81,7 +81,7 @@
 
       <!-- Sankey chart -->
       <div v-if="sankeyData.links.length" class="mt-6 bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
-        <h3 class="font-semibold mb-4">{{ $t('reports.cash_flow') || 'Cash Flow' }}</h3>
+        <h3 class="font-semibold mb-4">{{ $t('reports.cash_flow') }}</h3>
         <div class="relative h-[400px]">
           <BaseChart :option="sankeyChartOption" :height="'400px'" />
         </div>
@@ -148,7 +148,7 @@
                   <span class="text-xs text-slate-400">{{ acc.currency }}</span>
                 </div>
               </td>
-              <td class="px-5 py-3 text-right font-medium">{{ parseFloat(acc.balance).toLocaleString('ru-RU', { maximumFractionDigits: 8 }) }}</td>
+              <td class="px-5 py-3 text-right font-medium">{{ parseFloat(acc.balance).toLocaleString(getUserLocale(), { maximumFractionDigits: 8 }) }}</td>
               <td class="px-5 py-3 text-right font-medium">{{ formatCurrency(ratesStore.convert(parseFloat(acc.balance), acc.currency, baseCurrency.value) ?? parseFloat(acc.balance)) }}</td>
             </tr>
           </tbody>
@@ -227,7 +227,7 @@
                 <td class="px-5 py-3">{{ d.counterparty || d.name }}</td>
                 <td class="px-5 py-3 text-right font-medium">{{ formatCurrency(d.amount) }}</td>
                 <td class="px-5 py-3 text-right text-danger-500 font-medium">{{ formatCurrency(d.remaining) }}</td>
-                <td class="px-5 py-3 text-right">{{ d.due_date ? new Date(d.due_date).toLocaleDateString('ru-RU') : '-' }}</td>
+                <td class="px-5 py-3 text-right">{{ d.due_date ? new Date(d.due_date).toLocaleDateString(getUserLocale()) : '-' }}</td>
                 <td class="px-5 py-3 text-right">
                   <span class="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">{{ d.status }}</span>
                 </td>
@@ -264,7 +264,7 @@
                 {{ r.type === 'income' ? '+' : '−' }}{{ formatCurrency(r.amount) }}
               </td>
               <td class="px-5 py-3 text-right">{{ $t('recurring.frequencies.' + r.frequency) || r.frequency }}</td>
-              <td class="px-5 py-3 text-right">{{ new Date(r.next_date).toLocaleDateString('ru-RU') }}</td>
+              <td class="px-5 py-3 text-right">{{ new Date(r.next_date).toLocaleDateString(getUserLocale()) }}</td>
             </tr>
           </tbody>
         </table>
@@ -273,7 +273,7 @@
   </template>
 
   <script setup>
-  import { ref, computed, onMounted, reactive } from 'vue'
+  import { ref, computed, onMounted, onBeforeUnmount, reactive } from 'vue'
   import { useI18n } from 'vue-i18n'
   import { useReportsStore } from '../stores/reports'
   import { useAccountsStore } from '../stores/accounts'
@@ -282,6 +282,7 @@
   import { useRecurringStore } from '../stores/recurring'
   import { useRatesStore } from '../stores/rates'
   import { formatFull } from '@/utils/currency'
+  import { getUserLocale } from '@/utils/locale'
   import BaseChart from '@/components/BaseChart.vue'
 
   const { t } = useI18n()
@@ -297,15 +298,20 @@
   const baseCurrency = computed(() => ratesStore.baseCurrency)
 
   const isDark = ref(document.documentElement.classList.contains('dark'))
+  let themeObserver = null
 
   onMounted(() => {
-    const observer = new MutationObserver(() => {
+    themeObserver = new MutationObserver(() => {
       isDark.value = document.documentElement.classList.contains('dark')
     })
-    observer.observe(document.documentElement, {
+    themeObserver.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['class']
     })
+  })
+
+  onBeforeUnmount(() => {
+    themeObserver?.disconnect()
   })
 
   const periodOptions = computed(() => [
@@ -325,7 +331,9 @@
       from = to = now.toLocaleDateString('sv-SE')
     } else if (period === 'week') {
       const first = now.getDate() - now.getDay()
-      from = new Date(now.setDate(first)).toLocaleDateString('sv-SE')
+      const weekStart = new Date(now)
+      weekStart.setDate(first)
+      from = weekStart.toLocaleDateString('sv-SE')
       to = new Date().toLocaleDateString('sv-SE')
     } else if (period === 'month') {
       from = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('sv-SE')
@@ -347,6 +355,7 @@
     recurringStore.fetchRules()
     ratesStore.fetchRates()
   })
+
 
   const net = computed(() => {
     if (!reportsStore.summary) return 0
@@ -539,16 +548,17 @@ const sankeyData = computed(() => {
   const links = []
   const nodeNames = new Set()
   const nodeValues = {}
+  const cashFlowName = t('reports.cash_flow')
 
   // Загружаем данные по доходам
   const incomeCategories = reportsStore.byCategoryAll.filter(c => c.type === 'income' && parseFloat(c.total) > 0)
   incomeCategories.forEach(cat => {
     if (!nodeNames.has(cat.name)) {
       const value = parseFloat(cat.total)
-      nodes.push({ 
-        name: cat.name, 
+      nodes.push({
+        name: cat.name,
         value,
-        itemStyle: { color: cat.color || '#94a3b8' } 
+        itemStyle: { color: cat.color || '#94a3b8' }
       })
       nodeNames.add(cat.name)
       nodeValues[cat.name] = value
@@ -556,7 +566,7 @@ const sankeyData = computed(() => {
     // Связываем доходы с Cash Flow
     links.push({
       source: cat.name,
-      target: 'Cash Flow',
+      target: cashFlowName,
       value: parseFloat(cat.total),
       lineStyle: {
         color: cat.color || '#94a3b8',
@@ -566,15 +576,15 @@ const sankeyData = computed(() => {
   })
 
   // Добавляем центральный узел Cash Flow
-  if (!nodeNames.has('Cash Flow')) {
+  if (!nodeNames.has(cashFlowName)) {
     const totalIncome = incomeCategories.reduce((sum, c) => sum + parseFloat(c.total), 0)
-    nodes.push({ 
-      name: 'Cash Flow', 
+    nodes.push({
+      name: cashFlowName,
       value: totalIncome,
-      itemStyle: { color: '#059669' } 
+      itemStyle: { color: '#059669' }
     })
-    nodeNames.add('Cash Flow')
-    nodeValues['Cash Flow'] = totalIncome
+    nodeNames.add(cashFlowName)
+    nodeValues[cashFlowName] = totalIncome
   }
 
   // Загружаем данные по расходам
@@ -582,17 +592,17 @@ const sankeyData = computed(() => {
   expenseCategories.forEach(cat => {
     if (!nodeNames.has(cat.name)) {
       const value = parseFloat(cat.total)
-      nodes.push({ 
-        name: cat.name, 
+      nodes.push({
+        name: cat.name,
         value,
-        itemStyle: { color: cat.color || '#94a3b8' } 
+        itemStyle: { color: cat.color || '#94a3b8' }
       })
       nodeNames.add(cat.name)
       nodeValues[cat.name] = value
     }
     // Связываем Cash Flow с расходами
     links.push({
-      source: 'Cash Flow',
+      source: cashFlowName,
       target: cat.name,
       value: parseFloat(cat.total),
       lineStyle: {
@@ -607,12 +617,13 @@ const sankeyData = computed(() => {
 
 const sankeyChartOption = computed(() => {
   const { nodes, links } = sankeyData.value
+  const cashFlowName = t('reports.cash_flow')
   // Separate nodes by side
   const incomeNodes = nodes.filter(n => {
-    return links.some(l => l.source === n.name && l.target === 'Cash Flow')
+    return links.some(l => l.source === n.name && l.target === cashFlowName)
   })
   const expenseNodes = nodes.filter(n => {
-    return links.some(l => l.target === n.name && l.source === 'Cash Flow')
+    return links.some(l => l.target === n.name && l.source === cashFlowName)
   })
 
   return {
@@ -643,7 +654,7 @@ const sankeyChartOption = computed(() => {
           ...node,
           label: {
             show: true,
-            position: (incomeNodes.find(n => n.name === node.name) || node.name === 'Cash Flow') ? 'right' : 'left',
+            position: (incomeNodes.find(n => n.name === node.name) || node.name === cashFlowName) ? 'right' : 'left',
             formatter: (params) => {
               return `${params.name}\n${formatFull(params.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}`
             },
@@ -696,7 +707,7 @@ const sankeyChartOption = computed(() => {
   }
 
   function formatCurrency(value) {
-    return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: baseCurrency.value }).format(value || 0)
+    return new Intl.NumberFormat(getUserLocale(), { style: 'currency', currency: baseCurrency.value }).format(value || 0)
   }
 
   function exportData() {

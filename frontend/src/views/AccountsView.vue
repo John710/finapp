@@ -246,6 +246,7 @@ import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { api } from '@/utils/api'
+import { getUserLocale } from '@/utils/locale'
 import CurrencySelect from '../components/CurrencySelect.vue'
 
 const { t } = useI18n()
@@ -339,11 +340,11 @@ onBeforeUnmount(() => {
 })
 
 function formatCurrency(value, currency) {
-  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency }).format(value)
+  return new Intl.NumberFormat(getUserLocale(), { style: 'currency', currency }).format(value)
 }
 
 function formatCryptoBalance(value) {
-  return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 8 }).format(value)
+  return new Intl.NumberFormat(getUserLocale(), { minimumFractionDigits: 0, maximumFractionDigits: 8 }).format(value)
 }
 
 function cryptoValue(account) {
@@ -442,7 +443,6 @@ function onDrop(e, targetAccount) {
   dragOverId.value = null
   dragOverPosition.value = null
   draggingId.value = null
-  isDragClick.value = false
 
   if (!sourceId || sourceId === targetAccount.id) return
   if (!accountsStore.accounts.find(a => a.id === sourceId)) return

@@ -77,6 +77,7 @@ import { useAccountsStore } from '../stores/accounts'
 import { useTransactionsStore } from '../stores/transactions'
 import { useRatesStore } from '../stores/rates'
 import { formatFull } from '@/utils/currency'
+import { getUserLocale } from '@/utils/locale'
 
 const { t } = useI18n()
 
@@ -135,7 +136,7 @@ function typeIcon(type) {
 }
 
 function formatCryptoBalance(value) {
-  return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 8 }).format(value)
+  return new Intl.NumberFormat(getUserLocale(), { minimumFractionDigits: 0, maximumFractionDigits: 8 }).format(value)
 }
 
 function formatNote(tx) {
@@ -159,7 +160,7 @@ function formatNote(tx) {
 }
 
 function formatDate(date) {
-  return new Date(date).toLocaleDateString('ru-RU')
+  return new Date(date).toLocaleDateString(getUserLocale())
 }
 
 function formatAmount(tx) {

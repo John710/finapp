@@ -174,6 +174,7 @@ import HelpModal from '@/components/HelpModal.vue'
 import ToastContainer from '@/components/ToastContainer.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import packageJson from '../../package.json'
+import { getUserLocale } from '@/utils/locale'
 
 const route = useRoute()
 const router = useRouter()
@@ -262,16 +263,8 @@ async function checkForUpdates() {
       const data = await res.json()
       const tag = data.tag_name.replace(/^v/, '') // strip leading 'v'
       latestVersion.value = tag
-      // Compare versions
-      const current = currentVersion.split('.').map(Number)
-      const latest = tag.split('.').map(Number)
-      for (let i = 0; i < 3; i++) {
-        if (latest[i] > current[i]) {
-          hasUpdate.value = true
-          break
-        }
-        if (latest[i] < current[i]) break
-      }
+      // Compare versions numerically by segments
+      hasUpdate.value = isVersionGreater(tag, currentVersion)
     }
   } catch (e) {
     console.error('Failed to check for updates:', e)
@@ -306,7 +299,21 @@ function openNotif(n) {
 }
 
 function formatNotifDate(date) {
-  return new Date(date).toLocaleDateString()
+  return new Date(date).toLocaleDateString(getUserLocale())
+}
+
+function isVersionGreater(latest, current) {
+  const parse = (v) => v.replace(/^v/, '').split('.').map(Number).filter(n => !Number.isNaN(n))
+  const l = parse(latest)
+  const c = parse(current)
+  const len = Math.max(l.length, c.length)
+  for (let i = 0; i < len; i++) {
+    const lv = l[i] || 0
+    const cv = c[i] || 0
+    if (lv > cv) return true
+    if (lv < cv) return false
+  }
+  return false
 }
 
 const pageTitle = computed(() => {
@@ -349,7 +356,10 @@ const navItems = [
 const mobileNavItems = [
   { path: '/', name: 'dashboard', labelKey: 'nav.dashboard', icon: 'home', iconClass: 'w-6 h-6' },
   { path: '/transactions', name: 'transactions', labelKey: 'nav.transactions', icon: 'creditCard', iconClass: 'w-6 h-6' },
+  { path: '/accounts', name: 'accounts', labelKey: 'nav.accounts', icon: 'layers', iconClass: 'w-6 h-6' },
   { path: '/categories', name: 'categories', labelKey: 'nav.categories', icon: 'folder', iconClass: 'w-6 h-6' },
+  { path: '/budgets', name: 'budgets', labelKey: 'nav.budgets', icon: 'wallet', iconClass: 'w-6 h-6' },
+  { path: '/debts', name: 'debts', labelKey: 'nav.debts', icon: 'briefcase', iconClass: 'w-6 h-6' },
   { path: '/recurring', name: 'recurring', labelKey: 'nav.recurring', icon: 'repeat', iconClass: 'w-6 h-6' },
   { path: '/tags', name: 'tags', labelKey: 'nav.tags', icon: 'tag', iconClass: 'w-6 h-6' },
   { path: '/settings', name: 'settings', labelKey: 'nav.settings', icon: 'settings', iconClass: 'w-6 h-6' }

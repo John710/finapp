@@ -115,7 +115,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAccountsStore } from '../stores/accounts'
 import { useTransactionsStore } from '../stores/transactions'
@@ -124,6 +124,7 @@ import { useRatesStore } from '../stores/rates'
 import { useDebtsStore } from '../stores/debts'
 import { useRecurringStore } from '../stores/recurring'
 import { formatFull } from '@/utils/currency'
+import { getUserLocale } from '@/utils/locale'
 import BaseChart from '@/components/BaseChart.vue'
 
 const { t } = useI18n()
@@ -137,12 +138,13 @@ const recurringStore = useRecurringStore()
 const baseCurrency = computed(() => ratesStore.baseCurrency)
 
 const isDark = ref(document.documentElement.classList.contains('dark'))
+let themeObserver = null
 
 onMounted(async () => {
-  const observer = new MutationObserver(() => {
+  themeObserver = new MutationObserver(() => {
     isDark.value = document.documentElement.classList.contains('dark')
   })
-  observer.observe(document.documentElement, {
+  themeObserver.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ['class']
   })
@@ -150,17 +152,25 @@ onMounted(async () => {
   accountsStore.fetchAccounts()
   transactionsStore.fetchTransactions({ limit: 5 })
   ratesStore.fetchRates()
+
+  const now = new Date()
+  const monthFrom = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('sv-SE')
+  const monthTo = now.toLocaleDateString('sv-SE')
+  reportsStore.fetchSummary({ from: monthFrom, to: monthTo })
   debtsStore.fetchDebts()
   recurringStore.fetchRules()
 
   // Fetch trend for last 6 months
-  const now = new Date()
   const from = new Date(now.getFullYear(), now.getMonth() - 5, 1).toLocaleDateString('sv-SE')
   const to = now.toLocaleDateString('sv-SE')
   reportsStore.fetchTrend({ from, to })
   reportsStore.fetchByCategory({ from, to, type: 'expense' })
   reportsStore.fetchNetWorth({ months: 12 })
   reportsStore.fetchSavingsRate({ from, to })
+})
+
+onBeforeUnmount(() => {
+  themeObserver?.disconnect()
 })
 
 const totalBalance = computed(() => {
@@ -171,21 +181,11 @@ const totalBalance = computed(() => {
 })
 
 const monthIncome = computed(() => {
-  return transactionsStore.transactions
-    .filter(t => t.type === 'income')
-    .reduce((sum, t) => {
-      const converted = ratesStore.convert(parseFloat(t.amount), t.account_currency || baseCurrency.value, baseCurrency.value)
-      return sum + (converted !== null ? converted : parseFloat(t.amount))
-    }, 0)
+  return reportsStore.summary ? parseFloat(reportsStore.summary.total_income) : 0
 })
 
 const monthExpense = computed(() => {
-  return transactionsStore.transactions
-    .filter(t => t.type === 'expense')
-    .reduce((sum, t) => {
-      const converted = ratesStore.convert(parseFloat(t.amount), t.account_currency || baseCurrency.value, baseCurrency.value)
-      return sum + (converted !== null ? converted : parseFloat(t.amount))
-    }, 0)
+  return reportsStore.summary ? parseFloat(reportsStore.summary.total_expense) : 0
 })
 
 const cryptoBalance = computed(() => {
@@ -518,7 +518,7 @@ const savingsRateChartOption = computed(() => {
 
 
 function formatCurrency(value) {
-  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: baseCurrency.value }).format(value || 0)
+  return new Intl.NumberFormat(getUserLocale(), { style: 'currency', currency: baseCurrency.value }).format(value || 0)
 }
 
 function formatNote(note) {
@@ -531,6 +531,6 @@ function formatNote(note) {
 }
 
 function formatDate(date) {
-  return new Date(date).toLocaleDateString('ru-RU')
+  return new Date(date).toLocaleDateString(getUserLocale())
 }
 </script>

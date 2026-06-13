@@ -16,7 +16,7 @@
 
     <!-- Filters -->
     <div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm mb-4 flex flex-wrap gap-3">
-      <input v-model="filters.search" @input="applyFilters" type="text" :placeholder="$t('common.search') + '...'" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent text-sm w-full lg:w-64 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+      <input v-model="filters.search" @input="debouncedApplyFilters" type="text" :placeholder="$t('common.search') + '...'" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent text-sm w-full lg:w-64 focus:outline-none focus:ring-2 focus:ring-primary-500" />
       <select v-model="filters.account_id" @change="applyFilters" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm">
         <option value="">{{ $t('accounts.title') }}</option>
         <option v-for="acc in accountsStore.accounts" :key="acc.id" :value="acc.id">{{ acc.name }}</option>
@@ -226,6 +226,8 @@ import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { formatFull } from '@/utils/currency'
+import { getUserLocale } from '@/utils/locale'
+import { debounce } from '@/utils/debounce'
 import ImportCsvModal from '../components/ImportCsvModal.vue'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import QuickCategoryModal from '../components/QuickCategoryModal.vue'
@@ -234,7 +236,7 @@ import Icon from '../components/Icon.vue'
 const { t } = useI18n()
 const route = useRoute()
 const ratesStore = useRatesStore()
-const baseCurrency = computed(() => localStorage.getItem('base_currency') || 'USD')
+const baseCurrency = computed(() => ratesStore.baseCurrency)
 const undo = useUndo()
 
 useHotkeys({
@@ -293,6 +295,8 @@ function applyFilters() {
   transactionsStore.fetchTransactions(params)
 }
 
+const debouncedApplyFilters = debounce(applyFilters, 300)
+
 function resetFilters() {
   filters.search = ''
   filters.account_id = ''
@@ -323,7 +327,7 @@ function formatNote(tx) {
 }
 
 function formatDate(date) {
-  return new Date(date).toLocaleDateString('ru-RU')
+  return new Date(date).toLocaleDateString(getUserLocale())
 }
 
 function formatAmount(tx) {

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../utils/api'
+import { getUserLocale } from '../utils/locale'
 
 export const useRatesStore = defineStore('rates', () => {
   const rates = ref([])
@@ -47,7 +48,7 @@ export const useRatesStore = defineStore('rates', () => {
   }
 
   function format(amount, currency) {
-    return new Intl.NumberFormat('ru-RU', { style: 'currency', currency }).format(amount || 0)
+    return new Intl.NumberFormat(getUserLocale(), { style: 'currency', currency }).format(amount || 0)
   }
 
   function formatConverted(amount, fromCurrency, showOriginal = true) {
@@ -56,11 +57,11 @@ export const useRatesStore = defineStore('rates', () => {
     if (Number.isNaN(num)) return '-'
 
     const converted = convert(num, fromCurrency, baseCurrency.value)
-    const baseFormatted = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: baseCurrency.value }).format(converted !== null ? converted : num)
+    const baseFormatted = new Intl.NumberFormat(getUserLocale(), { style: 'currency', currency: baseCurrency.value }).format(converted !== null ? converted : num)
 
     if (!showOriginal || fromCurrency === baseCurrency.value || converted === null) return baseFormatted
 
-    const origFormatted = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: fromCurrency }).format(num)
+    const origFormatted = new Intl.NumberFormat(getUserLocale(), { style: 'currency', currency: fromCurrency }).format(num)
     return `${origFormatted} ≈ ${baseFormatted}`
   }
 
