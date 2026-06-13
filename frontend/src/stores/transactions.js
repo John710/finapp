@@ -19,7 +19,6 @@ export const useTransactionsStore = defineStore('transactions', () => {
   async function createTransaction(data) {
     const transaction = await api('/transactions', { method: 'POST', body: JSON.stringify(data) })
     transactions.value.unshift(transaction)
-    total.value++
     return transaction
   }
 
@@ -33,7 +32,6 @@ export const useTransactionsStore = defineStore('transactions', () => {
   async function deleteTransaction(id) {
     await api(`/transactions/${id}`, { method: 'DELETE' })
     transactions.value = transactions.value.filter(t => t.id !== id)
-    total.value--
   }
 
   return { transactions, total, loading, fetchTransactions, createTransaction, updateTransaction, deleteTransaction }
