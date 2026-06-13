@@ -37,10 +37,9 @@ export const useAccountsStore = defineStore('accounts', () => {
       const acc = accounts.value.find(a => a.id === item.id)
       if (acc) acc.sort_order = item.sort_order
     }
-    // Re-sort to reflect new order
+    // Re-sort to reflect new order (backend already sorts by is_archived, sort_order)
     accounts.value.sort((a, b) => {
       if (a.is_archived !== b.is_archived) return a.is_archived ? 1 : -1
-      if (a.type !== b.type) return a.type.localeCompare(b.type)
       return (a.sort_order || 0) - (b.sort_order || 0)
     })
   }
