@@ -1,7 +1,12 @@
 <template>
   <div>
     <h1 class="text-2xl font-bold mb-6">{{ $t('settings.title') }}</h1>
-    <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800">
+
+    <!-- Profile -->
+    <section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 mb-6">
+      <div class="p-4 border-b border-slate-100 dark:border-slate-800">
+        <h2 class="font-semibold">{{ $t('settings.profile_title') }}</h2>
+      </div>
       <div class="p-5 flex items-center justify-between">
         <div>
           <p class="font-medium">{{ $t('settings.theme') }}</p>
@@ -49,22 +54,111 @@
           </div>
         </div>
       </div>
+    </section>
+
+    <!-- Integrations -->
+    <section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 mb-6">
+      <div class="p-4 border-b border-slate-100 dark:border-slate-800">
+        <h2 class="font-semibold">{{ $t('settings.integrations_title') }}</h2>
+      </div>
+
+      <!-- CoinGecko -->
       <div class="p-5">
         <div class="flex items-center justify-between mb-2">
           <div>
             <p class="font-medium">{{ $t('settings.coingecko_key') }}</p>
             <p class="text-sm text-slate-500">{{ $t('settings.coingecko_key_desc') }}</p>
           </div>
+          <StatusBadge :dirty="isCoingeckoDirty" />
         </div>
         <div class="flex gap-2">
           <input v-model="coingeckoKey" type="text" placeholder="CG-..." class="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
           <button v-if="isCoingeckoDirty" @click="saveCoingeckoKey" :disabled="savingKey || !coingeckoKey.trim()" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
             {{ savingKey ? '...' : $t('common.save') }}
           </button>
+          <button v-else-if="auth.user?.coingecko_api_key" @click="testCoingeckoKey" :disabled="coingeckoTestLoading" class="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
+            {{ coingeckoTestLoading ? '...' : $t('settings.coingecko_test') }}
+          </button>
         </div>
       </div>
 
-      <!-- VAPID / Push keys -->
+      <!-- Shoutrrr -->
+      <div class="p-5">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <p class="font-medium">{{ $t('settings.shoutrrr_title') }}</p>
+            <p class="text-sm text-slate-500">{{ $t('settings.shoutrrr_desc') }}</p>
+          </div>
+          <StatusBadge :dirty="isShoutrrrDirty" />
+        </div>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">{{ $t('settings.shoutrrr_provider') }}</label>
+            <select
+              v-model="shoutrrrProvider"
+              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm"
+            >
+              <option value="">{{ $t('settings.shoutrrr_provider_placeholder') }}</option>
+              <option v-for="p in SHOUTRRR_PROVIDERS" :key="p.key" :value="p.key">{{ p.label }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">{{ $t('settings.shoutrrr_url') }}</label>
+            <input
+              v-model="shoutrrrUrl"
+              type="text"
+              :placeholder="shoutrrrPlaceholder"
+              :disabled="shoutrrrLoading || shoutrrrTestLoading"
+              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm disabled:opacity-50"
+            />
+            <p v-if="shoutrrrUrlError" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ shoutrrrUrlError }}</p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button
+              v-if="!auth.user?.shoutrrr_url || isShoutrrrDirty"
+              @click="saveShoutrrrUrl"
+              :disabled="shoutrrrLoading || shoutrrrTestLoading || !shoutrrrUrl.trim() || !!shoutrrrUrlError"
+              class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+            >
+              {{ shoutrrrLoading ? '...' : $t('settings.shoutrrr_save') }}
+            </button>
+            <template v-else>
+              <button
+                @click="sendTestShoutrrr"
+                :disabled="shoutrrrLoading || shoutrrrTestLoading"
+                class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {{ shoutrrrTestLoading ? '...' : $t('settings.shoutrrr_test') }}
+              </button>
+              <button
+                @click="disableShoutrrr"
+                :disabled="shoutrrrLoading || shoutrrrTestLoading"
+                class="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50"
+              >
+                {{ shoutrrrLoading ? '...' : $t('settings.shoutrrr_disable') }}
+              </button>
+            </template>
+            <a
+              v-if="selectedShoutrrrProvider?.docsUrl"
+              :href="selectedShoutrrrProvider.docsUrl"
+              target="_blank"
+              rel="noopener"
+              class="text-sm text-primary-600 hover:underline"
+            >
+              {{ $t('settings.shoutrrr_docs') }}
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Notifications -->
+    <section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 mb-6">
+      <div class="p-4 border-b border-slate-100 dark:border-slate-800">
+        <h2 class="font-semibold">{{ $t('settings.notifications_title') }}</h2>
+      </div>
+
+      <!-- VAPID -->
       <div class="p-5">
         <div class="flex items-center justify-between mb-2">
           <div>
@@ -143,65 +237,76 @@
           {{ push.loading.value ? '...' : $t('settings.push_subscribe') }}
         </button>
       </div>
+    </section>
 
-      <!-- Shoutrrr -->
+    <!-- Security -->
+    <section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 mb-6">
+      <div class="p-4 border-b border-slate-100 dark:border-slate-800">
+        <h2 class="font-semibold">{{ $t('settings.security_title') }}</h2>
+      </div>
+
+      <!-- Change password -->
       <div class="p-5">
-        <div class="flex items-center justify-between mb-2">
-          <div>
-            <p class="font-medium">{{ $t('settings.shoutrrr_title') }}</p>
-            <p class="text-sm text-slate-500">{{ $t('settings.shoutrrr_desc') }}</p>
-          </div>
+        <div class="mb-3">
+          <p class="font-medium">{{ $t('settings.password_title') }}</p>
+          <p class="text-sm text-slate-500">{{ $t('settings.password_desc') }}</p>
         </div>
-        <div class="space-y-3">
-          <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('settings.shoutrrr_provider') }}</label>
-            <select
-              v-model="shoutrrrProvider"
-              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm"
-            >
-              <option value="">{{ $t('settings.shoutrrr_provider_placeholder') }}</option>
-              <option v-for="p in SHOUTRRR_PROVIDERS" :key="p.key" :value="p.key">{{ p.label }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('settings.shoutrrr_url') }}</label>
-            <input
-              v-model="shoutrrrUrl"
-              type="text"
-              :placeholder="shoutrrrPlaceholder"
-              :disabled="shoutrrrLoading || shoutrrrTestLoading"
-              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm disabled:opacity-50"
-            />
-          </div>
-          <div class="flex items-center gap-2">
-            <button
-              v-if="!auth.user?.shoutrrr_url || isShoutrrrDirty"
-              @click="saveShoutrrrUrl"
-              :disabled="shoutrrrLoading || shoutrrrTestLoading || !shoutrrrUrl.trim()"
-              class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
-            >
-              {{ shoutrrrLoading ? '...' : $t('settings.shoutrrr_save') }}
-            </button>
-            <template v-else>
-              <button
-                @click="sendTestShoutrrr"
-                :disabled="shoutrrrLoading || shoutrrrTestLoading"
-                class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {{ shoutrrrTestLoading ? '...' : $t('settings.shoutrrr_test') }}
-              </button>
-              <button
-                @click="disableShoutrrr"
-                :disabled="shoutrrrLoading || shoutrrrTestLoading"
-                class="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50"
-              >
-                {{ shoutrrrLoading ? '...' : $t('settings.shoutrrr_disable') }}
-              </button>
-            </template>
-          </div>
+        <div class="space-y-3 max-w-md">
+          <input v-model="currentPassword" type="password" :placeholder="$t('settings.password_current')" class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+          <input v-model="newPassword" type="password" :placeholder="$t('settings.password_new')" class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+          <input v-model="confirmPassword" type="password" :placeholder="$t('settings.password_confirm')" class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+          <button
+            @click="changePassword"
+            :disabled="passwordLoading || !currentPassword || !newPassword || newPassword !== confirmPassword || newPassword.length < 6"
+            class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+          >
+            {{ passwordLoading ? '...' : $t('settings.password_change') }}
+          </button>
         </div>
       </div>
 
+      <!-- Sessions -->
+      <div class="p-5">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <p class="font-medium">{{ $t('settings.sessions_title') }}</p>
+            <p class="text-sm text-slate-500">{{ $t('settings.sessions_desc') }}</p>
+          </div>
+          <button
+            v-if="sessions.length > 1"
+            @click="logoutAllOtherSessions"
+            :disabled="sessionsLoading"
+            class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+          >
+            {{ sessionsLoading ? '...' : $t('settings.sessions_terminate_all') }}
+          </button>
+        </div>
+        <div v-if="sessions.length === 0" class="text-sm text-slate-500">{{ $t('settings.sessions_empty') }}</div>
+        <ul v-else class="space-y-2">
+          <li v-for="session in sessions" :key="session.id" class="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+            <div class="text-sm">
+              <span class="font-medium">{{ formatDateTime(session.created_at) }}</span>
+              <span v-if="session.is_current" class="ml-2 text-xs px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300">{{ $t('settings.sessions_current') }}</span>
+              <p class="text-xs text-slate-500">{{ $t('settings.sessions_expires') }}: {{ formatDateTime(session.expires_at) }}</p>
+            </div>
+            <button
+              v-if="!session.is_current"
+              @click="terminateSession(session.id)"
+              :disabled="sessionsLoading"
+              class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50"
+            >
+              {{ $t('settings.sessions_terminate') }}
+            </button>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Data -->
+    <section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800">
+      <div class="p-4 border-b border-slate-100 dark:border-slate-800">
+        <h2 class="font-semibold">{{ $t('settings.data_title') }}</h2>
+      </div>
       <div class="p-5 flex items-center justify-between">
         <div>
           <p class="font-medium">{{ $t('settings.load_demo') }}</p>
@@ -232,7 +337,7 @@
           </button>
         </div>
       </div>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -244,28 +349,29 @@ import { api } from '@/utils/api.js'
 import { useAuthStore } from '../stores/auth'
 import { useRatesStore } from '../stores/rates'
 import { useSettingsStore } from '../stores/settings'
+import StatusBadge from '../components/StatusBadge.vue'
 
 const SHOUTRRR_PROVIDERS = [
-  { key: 'telegram',   label: 'Telegram',          placeholder: 'telegram://bot-token@telegram?chats=@channel-1,chat-id-1' },
-  { key: 'discord',    label: 'Discord',           placeholder: 'discord://token@id' },
-  { key: 'gotify',     label: 'Gotify',            placeholder: 'gotify://gotify-host/token' },
-  { key: 'slack',      label: 'Slack',             placeholder: 'slack://token-a/token-b/token-c' },
-  { key: 'matrix',     label: 'Matrix',            placeholder: 'matrix://username:password@host:port/?rooms=!roomID1' },
-  { key: 'ntfy',       label: 'Ntfy',              placeholder: 'ntfy://username:password@ntfy.sh/topic' },
-  { key: 'pushover',   label: 'Pushover',          placeholder: 'pushover://shoutrrr:apiToken@userKey/?devices=device1' },
-  { key: 'pushbullet', label: 'Pushbullet',        placeholder: 'pushbullet://api-token/device/#channel/email' },
-  { key: 'bark',       label: 'Bark',              placeholder: 'bark://devicekey@host' },
-  { key: 'email',      label: 'Email (SMTP)',      placeholder: 'smtp://username:password@host:port/?from=fromAddress&to=recipient1' },
-  { key: 'googlechat', label: 'Google Chat',       placeholder: 'googlechat://chat.googleapis.com/v1/spaces/FOO/messages?key=bar&token=baz' },
-  { key: 'mattermost', label: 'Mattermost',        placeholder: 'mattermost://username@mattermost-host/token/channel' },
-  { key: 'rocketchat', label: 'Rocket.Chat',       placeholder: 'rocketchat://username@rocketchat-host/token/channel' },
-  { key: 'teams',      label: 'Microsoft Teams',   placeholder: 'teams://group@tenant/altId/groupOwner?host=organization.webhook.office.com' },
-  { key: 'zulip',      label: 'Zulip',             placeholder: 'zulip://bot-mail:bot-key@zulip-domain/?stream=name-or-id&topic=name' },
-  { key: 'ifttt',      label: 'IFTTT',             placeholder: 'ifttt://key/?events=event1&value1=value1' },
-  { key: 'join',       label: 'Join',              placeholder: 'join://shoutrrr:api-key@join/?devices=device1' },
-  { key: 'opsgenie',   label: 'OpsGenie',          placeholder: 'opsgenie://host/token?responders=responder1' },
-  { key: 'generic',    label: 'Generic Webhook',   placeholder: 'generic://example.com?template=json' },
-  { key: 'custom',     label: 'Custom HTTP(S)',    placeholder: 'https://example.com/webhook' }
+  { key: 'telegram',   label: 'Telegram',          placeholder: 'telegram://bot-token@telegram?chats=@channel-1,chat-id-1', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/telegram/' },
+  { key: 'discord',    label: 'Discord',           placeholder: 'discord://token@id', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/discord/' },
+  { key: 'gotify',     label: 'Gotify',            placeholder: 'gotify://gotify-host/token', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/gotify/' },
+  { key: 'slack',      label: 'Slack',             placeholder: 'slack://token-a/token-b/token-c', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/slack/' },
+  { key: 'matrix',     label: 'Matrix',            placeholder: 'matrix://username:password@host:port/?rooms=!roomID1', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/matrix/' },
+  { key: 'ntfy',       label: 'Ntfy',              placeholder: 'ntfy://username:password@ntfy.sh/topic', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/ntfy/' },
+  { key: 'pushover',   label: 'Pushover',          placeholder: 'pushover://shoutrrr:apiToken@userKey/?devices=device1', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/pushover/' },
+  { key: 'pushbullet', label: 'Pushbullet',        placeholder: 'pushbullet://api-token/device/#channel/email', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/pushbullet/' },
+  { key: 'bark',       label: 'Bark',              placeholder: 'bark://devicekey@host', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/bark/' },
+  { key: 'email',      label: 'Email (SMTP)',      placeholder: 'smtp://username:password@host:port/?from=fromAddress&to=recipient1', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/smtp/' },
+  { key: 'googlechat', label: 'Google Chat',       placeholder: 'googlechat://chat.googleapis.com/v1/spaces/FOO/messages?key=bar&token=baz', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/googlechat/' },
+  { key: 'mattermost', label: 'Mattermost',        placeholder: 'mattermost://username@mattermost-host/token/channel', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/mattermost/' },
+  { key: 'rocketchat', label: 'Rocket.Chat',       placeholder: 'rocketchat://username@rocketchat-host/token/channel', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/rocketchat/' },
+  { key: 'teams',      label: 'Microsoft Teams',   placeholder: 'teams://group@tenant/altId/groupOwner?host=organization.webhook.office.com', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/teams/' },
+  { key: 'zulip',      label: 'Zulip',             placeholder: 'zulip://bot-mail:bot-key@zulip-domain/?stream=name-or-id&topic=name', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/zulip/' },
+  { key: 'ifttt',      label: 'IFTTT',             placeholder: 'ifttt://key/?events=event1&value1=value1', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/ifttt/' },
+  { key: 'join',       label: 'Join',              placeholder: 'join://shoutrrr:api-key@join/?devices=device1', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/join/' },
+  { key: 'opsgenie',   label: 'OpsGenie',          placeholder: 'opsgenie://host/token?responders=responder1', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/opsgenie/' },
+  { key: 'generic',    label: 'Generic Webhook',   placeholder: 'generic://example.com?template=json', docsUrl: 'https://containrrr.dev/shoutrrr/v0.8/services/generic/' },
+  { key: 'custom',     label: 'Custom HTTP(S)',    placeholder: 'https://example.com/webhook', docsUrl: '' }
 ]
 
 function detectProvider(url) {
@@ -281,6 +387,11 @@ function detectProvider(url) {
   return ''
 }
 
+function normalizeShoutrrrUrl(url) {
+  // Remove accidental http(s) scheme inside non-http Shoutrrr URLs, e.g. gotify://https://host/token
+  return url.replace(/^([a-z][a-z0-9+.-]*):\/\/(https?:\/\/)/i, '$1://')
+}
+
 const { locale, t } = useI18n()
 const auth = useAuthStore()
 const settingsStore = useSettingsStore()
@@ -289,11 +400,7 @@ const theme = ref(localStorage.getItem('theme') || 'auto')
 const baseCurrency = ref(localStorage.getItem('base_currency') || 'USD')
 const coingeckoKey = ref('')
 const savingKey = ref(false)
-
-const isCoingeckoDirty = computed(() => {
-  const saved = auth.user?.coingecko_api_key || ''
-  return coingeckoKey.value.trim() !== saved
-})
+const coingeckoTestLoading = ref(false)
 const push = usePush()
 const testLoading = ref(false)
 const demoLoading = ref(false)
@@ -308,16 +415,44 @@ const shoutrrrProvider = ref('')
 const shoutrrrLoading = ref(false)
 const shoutrrrTestLoading = ref(false)
 
+const currentPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const passwordLoading = ref(false)
+const sessions = ref([])
+const sessionsLoading = ref(false)
+
+const isCoingeckoDirty = computed(() => {
+  const saved = auth.user?.coingecko_api_key || ''
+  return coingeckoKey.value.trim() !== saved
+})
+
 const isShoutrrrDirty = computed(() => {
   const saved = auth.user?.shoutrrr_url || ''
   return shoutrrrUrl.value.trim() !== saved
 })
 
-const vapidSubjectEmail = computed(() => auth.user?.vapid_subject?.replace(/^mailto:/i, '') || '')
-const shoutrrrPlaceholder = computed(() => {
-  const p = SHOUTRRR_PROVIDERS.find(p => p.key === shoutrrrProvider.value)
-  return p?.placeholder || 'telegram://bot-token@telegram?chats=@channel-1'
+const selectedShoutrrrProvider = computed(() => SHOUTRRR_PROVIDERS.find(p => p.key === shoutrrrProvider.value))
+const shoutrrrPlaceholder = computed(() => selectedShoutrrrProvider.value?.placeholder || 'telegram://bot-token@telegram?chats=@channel-1')
+
+const shoutrrrUrlError = computed(() => {
+  const url = shoutrrrUrl.value.trim()
+  if (!url) return ''
+  const normalized = normalizeShoutrrrUrl(url)
+  const lower = normalized.toLowerCase()
+  const provider = shoutrrrProvider.value
+  if (!provider) return t('settings.shoutrrr_provider_required')
+  if (provider === 'custom') {
+    if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
+      return t('settings.shoutrrr_url_invalid')
+    }
+  } else if (!lower.startsWith(`${provider}://`) && !lower.startsWith(`${provider}+`)) {
+    return t('settings.shoutrrr_url_invalid_provider', { provider: selectedShoutrrrProvider.value?.label || provider })
+  }
+  return ''
 })
+
+const vapidSubjectEmail = computed(() => auth.user?.vapid_subject?.replace(/^mailto:/i, '') || '')
 
 const showDropdown = ref(false)
 const search = ref('')
@@ -357,11 +492,30 @@ onMounted(async () => {
     shoutrrrUrl.value = auth.user.shoutrrr_url
     shoutrrrProvider.value = detectProvider(auth.user.shoutrrr_url)
   }
+
+  await loadSessions()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClick)
 })
+
+function formatDateTime(value) {
+  if (!value) return '-'
+  return new Date(value).toLocaleString(locale.value)
+}
+
+async function loadSessions() {
+  sessionsLoading.value = true
+  try {
+    const data = await settingsStore.fetchSessions()
+    sessions.value = data.sessions || []
+  } catch (e) {
+    console.error('Failed to load sessions', e)
+  } finally {
+    sessionsLoading.value = false
+  }
+}
 
 function onDocClick(e) {
   if (showDropdown.value && selectRef.value && !selectRef.value.contains(e.target)) {
@@ -436,15 +590,31 @@ async function changeBaseCurrency() {
 }
 
 async function saveCoingeckoKey() {
+  const key = coingeckoKey.value.trim()
   savingKey.value = true
   try {
-    await auth.updateSettings({ coingecko_api_key: coingeckoKey.value.trim() || null })
+    await auth.updateSettings({ coingecko_api_key: key || null })
     window.$toast?.success(t('common.saved'))
   } catch (e) {
     console.error('Failed to save API key', e)
     window.$toast?.error(t('common.error'))
   } finally {
     savingKey.value = false
+  }
+}
+
+async function testCoingeckoKey() {
+  const key = coingeckoKey.value.trim()
+  if (!key) return
+  coingeckoTestLoading.value = true
+  try {
+    await settingsStore.testCoingeckoKey(key)
+    window.$toast?.success(t('settings.coingecko_test_success'))
+  } catch (e) {
+    console.error('CoinGecko key test failed', e)
+    window.$toast?.error(e.message || t('settings.coingecko_test_failed'))
+  } finally {
+    coingeckoTestLoading.value = false
   }
 }
 
@@ -521,8 +691,11 @@ async function sendTestPush() {
 }
 
 async function saveShoutrrrUrl() {
-  const url = shoutrrrUrl.value.trim()
+  let url = shoutrrrUrl.value.trim()
   if (!url) return
+  url = normalizeShoutrrrUrl(url)
+  shoutrrrUrl.value = url
+  if (shoutrrrUrlError.value) return
   shoutrrrLoading.value = true
   try {
     await settingsStore.saveShoutrrrUrl(url)
@@ -570,6 +743,59 @@ async function sendTestShoutrrr() {
     window.$toast?.error(e.message || t('notifications.test_shoutrrr_failed'))
   } finally {
     shoutrrrTestLoading.value = false
+  }
+}
+
+async function changePassword() {
+  if (newPassword.value !== confirmPassword.value) {
+    window.$toast?.error(t('settings.password_mismatch'))
+    return
+  }
+  if (newPassword.value.length < 6) {
+    window.$toast?.error(t('settings.password_too_short'))
+    return
+  }
+  passwordLoading.value = true
+  try {
+    await settingsStore.changePassword(currentPassword.value, newPassword.value)
+    currentPassword.value = ''
+    newPassword.value = ''
+    confirmPassword.value = ''
+    await loadSessions()
+    window.$toast?.success(t('settings.password_changed'))
+  } catch (e) {
+    console.error('Failed to change password', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    passwordLoading.value = false
+  }
+}
+
+async function terminateSession(sessionId) {
+  sessionsLoading.value = true
+  try {
+    await settingsStore.terminateSession(sessionId)
+    await loadSessions()
+    window.$toast?.success(t('settings.sessions_terminated'))
+  } catch (e) {
+    console.error('Failed to terminate session', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    sessionsLoading.value = false
+  }
+}
+
+async function logoutAllOtherSessions() {
+  sessionsLoading.value = true
+  try {
+    await settingsStore.logoutAllSessions()
+    await loadSessions()
+    window.$toast?.success(t('settings.sessions_terminated'))
+  } catch (e) {
+    console.error('Failed to logout all sessions', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    sessionsLoading.value = false
   }
 }
 
