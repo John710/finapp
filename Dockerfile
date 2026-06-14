@@ -1,5 +1,14 @@
-# ─── Stage 1: Frontend ───────────────────────────────────────────────
-FROM node:22.16.0-alpine3.22 AS frontend-builder
+# ─── Stage 1: Backend dependencies (built on native build platform) ────
+FROM --platform=$BUILDPLATFORM node:22-alpine AS backend-builder
+WORKDIR /app
+
+COPY backend/package*.json ./
+RUN npm ci --omit=dev
+
+COPY backend/ ./
+
+# ─── Stage 2: Frontend (built on native build platform) ────────────────
+FROM --platform=$BUILDPLATFORM node:22.16.0-alpine3.22 AS frontend-builder
 WORKDIR /app/frontend
 
 # Аргумент для инвалидации кэша
@@ -10,7 +19,7 @@ RUN npm ci
 COPY frontend/ ./
 RUN chmod +x node_modules/.bin/vite && npm run build
 
-# ─── Stage 2: Runtime ────────────────────────────────────────────────
+# ─── Stage 3: Runtime (target platform) ────────────────────────────────
 FROM node:22-alpine
 WORKDIR /app
 
@@ -36,10 +45,7 @@ RUN apk add --no-cache wget \
     && shoutrrr --version \
     && apk del wget  # ← удаляем wget в том же слое
 
-COPY backend/package*.json ./
-RUN npm ci --omit=dev
-
-COPY backend/ ./
+COPY --from=backend-builder /app ./
 COPY --from=frontend-builder /app/frontend/dist ./public
 
 COPY docker-entrypoint.sh /usr/local/bin/entrypoint.sh
