@@ -175,7 +175,7 @@
           </div>
           <div class="flex items-center gap-2">
             <button
-              v-if="!auth.user?.shoutrrr_url"
+              v-if="!auth.user?.shoutrrr_url || isShoutrrrDirty"
               @click="saveShoutrrrUrl"
               :disabled="shoutrrrLoading || shoutrrrTestLoading || !shoutrrrUrl.trim()"
               class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
@@ -302,6 +302,11 @@ const shoutrrrUrl = ref('')
 const shoutrrrProvider = ref('')
 const shoutrrrLoading = ref(false)
 const shoutrrrTestLoading = ref(false)
+
+const isShoutrrrDirty = computed(() => {
+  const saved = auth.user?.shoutrrr_url || ''
+  return shoutrrrUrl.value.trim() !== saved
+})
 
 const vapidSubjectEmail = computed(() => auth.user?.vapid_subject?.replace(/^mailto:/i, '') || '')
 const shoutrrrPlaceholder = computed(() => {
