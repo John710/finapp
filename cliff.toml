@@ -11,9 +11,18 @@ body = """
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group | striptags | trim | upper_first }}
 {% for commit in commits %}
-- {{ commit.message | upper_first }}\
+- {{ commit.message | upper_first }} by @{{ commit.author.name }}\
 {% endfor %}
-{% endfor %}\n
+{% endfor %}
+{% if previous.version %}
+**Full Changelog**: [{{ previous.version }}...{{ version }}](https://github.com/John710/finapp/compare/{{ previous.version }}...{{ version }})
+{% endif %}
+{% if commits %}
+### Contributors
+{% for author, author_commits in commits | group_by(attribute="author.name") %}
+- @{{ author }}
+{% endfor %}
+{% endif %}\n
 """
 trim = true
 
