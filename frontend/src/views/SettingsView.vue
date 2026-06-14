@@ -58,7 +58,7 @@
         </div>
         <div class="flex gap-2">
           <input v-model="coingeckoKey" type="text" placeholder="CG-..." class="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
-          <button @click="saveCoingeckoKey" :disabled="savingKey" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
+          <button v-if="isCoingeckoDirty" @click="saveCoingeckoKey" :disabled="savingKey || !coingeckoKey.trim()" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
             {{ savingKey ? '...' : $t('common.save') }}
           </button>
         </div>
@@ -289,6 +289,11 @@ const theme = ref(localStorage.getItem('theme') || 'auto')
 const baseCurrency = ref(localStorage.getItem('base_currency') || 'USD')
 const coingeckoKey = ref('')
 const savingKey = ref(false)
+
+const isCoingeckoDirty = computed(() => {
+  const saved = auth.user?.coingecko_api_key || ''
+  return coingeckoKey.value.trim() !== saved
+})
 const push = usePush()
 const testLoading = ref(false)
 const demoLoading = ref(false)
