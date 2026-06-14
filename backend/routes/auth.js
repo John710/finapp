@@ -260,6 +260,136 @@ async function authRoutes(fastify, opts) {
     return { success: true }
   })
 
+  fastify.post('/auth/change-password', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['current_password', 'new_password'],
+        properties: {
+          current_password: { type: 'string' },
+          new_password: { type: 'string', minLength: 6 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const userId = request.user.userId
+    const { current_password, new_password } = request.body
+    const { rows } = await fastify.db.query('SELECT password_hash FROM users WHERE id = $1', [userId])
+    if (rows.length === 0) {
+      reply.code(404)
+      return { error: 'User not found' }
+    }
+    const valid = await bcrypt.compare(current_password, rows[0].password_hash)
+    if (!valid) {
+      reply.code(401)
+      return { error: 'Invalid current password' }
+    }
+    const newHash = await bcrypt.hash(new_password, 12)
+    await fastify.db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, userId])
+
+    // Invalidate all other sessions, keep current
+    const currentRefresh = request.cookies?.refreshToken
+    if (currentRefresh) {
+      const currentHash = hashToken(currentRefresh)
+      await fastify.db.query(
+        'DELETE FROM refresh_tokens WHERE user_id = $1 AND token_hash != $2',
+        [userId, currentHash]
+      )
+    }
+
+    return { success: true }
+  })
+
+  fastify.get('/auth/sessions', async (request, reply) => {
+    const userId = request.user.userId
+    const currentRefresh = request.cookies?.refreshToken
+    const currentHash = currentRefresh ? hashToken(currentRefresh) : null
+    const { rows } = await fastify.db.query(
+      `SELECT id, token_hash, created_at, expires_at
+       FROM refresh_tokens
+       WHERE user_id = $1 AND expires_at > NOW()
+       ORDER BY created_at DESC`,
+      [userId]
+    )
+    return {
+      sessions: rows.map(s => ({
+        id: s.id,
+        created_at: s.created_at,
+        expires_at: s.expires_at,
+        is_current: currentHash ? currentHash === s.token_hash : false
+      }))
+    }
+  })
+
+  fastify.delete('/auth/sessions/:id', async (request, reply) => {
+    const userId = request.user.userId
+    const { id } = request.params
+    const currentRefresh = request.cookies?.refreshToken
+    const currentHash = currentRefresh ? hashToken(currentRefresh) : null
+    const { rows } = await fastify.db.query(
+      'SELECT token_hash FROM refresh_tokens WHERE id = $1 AND user_id = $2',
+      [id, userId]
+    )
+    if (rows.length === 0) {
+      reply.code(404)
+      return { error: 'Session not found' }
+    }
+    if (currentHash && rows[0].token_hash === currentHash) {
+      reply.code(400)
+      return { error: 'Cannot terminate current session' }
+    }
+    await fastify.db.query('DELETE FROM refresh_tokens WHERE id = $1 AND user_id = $2', [id, userId])
+    return { success: true }
+  })
+
+  fastify.post('/auth/logout-all', async (request, reply) => {
+    const userId = request.user.userId
+    const currentRefresh = request.cookies?.refreshToken
+    if (currentRefresh) {
+      const currentHash = hashToken(currentRefresh)
+      await fastify.db.query(
+        'DELETE FROM refresh_tokens WHERE user_id = $1 AND token_hash != $2',
+        [userId, currentHash]
+      )
+    } else {
+      await fastify.db.query('DELETE FROM refresh_tokens WHERE user_id = $1', [userId])
+    }
+    return { success: true }
+  })
+
+  fastify.post('/users/test-coingecko-key', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['coingecko_api_key'],
+        properties: {
+          coingecko_api_key: { type: 'string', minLength: 1 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { coingecko_api_key } = request.body
+    try {
+      const res = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&x_cg_demo_api_key=${encodeURIComponent(coingecko_api_key)}`,
+        { method: 'GET' }
+      )
+      if (res.ok) {
+        return { valid: true }
+      }
+      if (res.status === 401 || res.status === 403) {
+        reply.code(401)
+        return { valid: false, error: 'Invalid API key' }
+      }
+      reply.code(502)
+      return { valid: false, error: 'CoinGecko API error' }
+    } catch (err) {
+      fastify.log.warn(err, 'CoinGecko key test failed')
+      reply.code(502)
+      return { valid: false, error: 'Failed to reach CoinGecko' }
+    }
+  })
+
   fastify.post('/auth/logout', async (request, reply) => {
     const refreshToken = request.cookies?.refreshToken
     if (refreshToken) {
