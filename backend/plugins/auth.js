@@ -20,7 +20,7 @@ async function authPlugin(fastify, opts) {
 
   fastify.addHook('onRequest', async (request, reply) => {
     const path = request.raw.url || request.url
-    if (!path?.startsWith('/api/') || path?.startsWith('/api/v1/auth') || path === '/api/v1/vapid-public-key') {
+    if (!path?.startsWith('/api/') || path?.startsWith('/api/v1/auth')) {
       return
     }
 
