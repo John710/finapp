@@ -16,12 +16,6 @@ body = """
 {% endfor %}
 {% if previous.version %}
 **Full Changelog**: [{{ previous.version }}...{{ version }}](https://github.com/John710/finapp/compare/{{ previous.version }}...{{ version }})
-{% endif %}
-{% if commits %}
-### Contributors
-{% for author, author_commits in commits | group_by(attribute="author.name") %}
-- @{{ author }}
-{% endfor %}
 {% endif %}\n
 """
 trim = true
