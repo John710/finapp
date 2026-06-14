@@ -95,12 +95,7 @@ DATABASE_URL=postgres://finapp:yourpassword@postgres:5432/finapp
 JWT_SECRET=your_random_secret_here
 ```
  
-### 3. Generate VAPID keys (for Push notifications)
-```bash
-npx web-push generate-vapid-keys
-```
- 
-### 4. Start
+### 3. Start
 ```bash
 docker compose up -d
 ```
@@ -123,10 +118,6 @@ The application does **not** enforce HTTPS or send HSTS headers itself. For prod
 | `JWT_ACCESS_TTL` | Access token lifetime | `15m` |
 | `JWT_REFRESH_TTL` | Refresh token lifetime | `30d` |
 | `TZ` | Timezone | `UTC` |
-| `VAPID_PUBLIC_KEY` | Web Push public key | — |
-| `VAPID_PRIVATE_KEY` | Web Push private key | — |
-| `VAPID_SUBJECT` | Web Push subject | `mailto:admin@localhost` |
-| `SHOUTRRR_URL` | Shoutrrr notification URL | — |
 | `ALLOWED_ORIGINS` | Allowed CORS origins (comma-separated) | — |
 | `DATABASE_SSL` | Enable SSL/TLS for PostgreSQL connection | `false` |
 | `DATABASE_SSL_REJECT_UNAUTHORIZED` | Reject unauthorized SSL certificates | `true` |
@@ -158,7 +149,14 @@ The application does **not** enforce HTTPS or send HSTS headers itself. For prod
 ---
  
 ## 🔔 Notifications
- 
+
+Notifications are configured per-user in **Settings**:
+
+- **Web Push** — generate your personal VAPID keys, subscribe the browser, and receive push notifications.
+- **Shoutrrr** — configure one or more Shoutrrr URLs to send notifications to Telegram, Discord, Gotify, email, generic webhooks, etc.
+
+> **Note:** Web Push requires a secure context (`https://` or `localhost`). It will not work on plain `http://` IP addresses.
+
 The app sends automatic notifications for:
 - Recurring transaction created
 - Upcoming debt due date

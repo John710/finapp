@@ -95,12 +95,7 @@ DATABASE_URL=postgres://finapp:yourpassword@postgres:5432/finapp
 JWT_SECRET=ваш_случайный_секрет
 ```
  
-### 3. Сгенерировать VAPID ключи (для Push-уведомлений)
-```bash
-npx web-push generate-vapid-keys
-```
- 
-### 4. Запустить
+### 3. Запустить
 ```bash
 docker compose up -d
 ```
@@ -123,10 +118,6 @@ docker compose up -d
 | `JWT_ACCESS_TTL` | Время жизни access токена | `15m` |
 | `JWT_REFRESH_TTL` | Время жизни refresh токена | `30d` |
 | `TZ` | Часовой пояс | `UTC` |
-| `VAPID_PUBLIC_KEY` | Публичный ключ для Web Push | — |
-| `VAPID_PRIVATE_KEY` | Приватный ключ для Web Push | — |
-| `VAPID_SUBJECT` | Контакт для Web Push | `mailto:admin@localhost` |
-| `SHOUTRRR_URL` | URL для Shoutrrr интеграции | — |
 | `ALLOWED_ORIGINS` | Разрешённые CORS источники (через запятую) | — |
 | `DATABASE_SSL` | Включить SSL/TLS для подключения к PostgreSQL | `false` |
 | `DATABASE_SSL_REJECT_UNAUTHORIZED` | Отклонять самоподписанные SSL-сертификаты | `true` |
@@ -158,7 +149,14 @@ docker compose up -d
 ---
  
 ## 🔔 Уведомления
- 
+
+Уведомления настраиваются персонально для каждого пользователя в разделе **Настройки**:
+
+- **Web Push** — сгенерируйте персональные VAPID-ключи, подпишите браузер и получайте push-уведомления.
+- **Shoutrrr** — настройте один или несколько Shoutrrr URL для отправки уведомлений в Telegram, Discord, Gotify, email, generic webhook и другие сервисы.
+
+> **Важно:** Web Push требует secure context (`https://` или `localhost`). На чистом `http://` по IP-адресу push-уведомления работать не будут.
+
 Приложение автоматически отправляет уведомления о:
 - Создании регулярной транзакции
 - Приближении срока возврата долга
