@@ -264,6 +264,8 @@
     "password_changed": "Password changed successfully",
     "password_mismatch": "Passwords do not match",
     "password_too_short": "Password must be at least 6 characters",
+    "password_show": "Show password",
+    "password_hide": "Hide password",
     "sessions_title": "Active sessions",
     "sessions_desc": "Devices and browsers where you are signed in",
     "sessions_empty": "No active sessions",

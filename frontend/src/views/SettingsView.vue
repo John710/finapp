@@ -252,9 +252,24 @@
           <p class="text-sm text-slate-500">{{ $t('settings.password_desc') }}</p>
         </div>
         <div class="space-y-3 max-w-md">
-          <input v-model="currentPassword" type="password" :placeholder="$t('settings.password_current')" class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
-          <input v-model="newPassword" type="password" :placeholder="$t('settings.password_new')" class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
-          <input v-model="confirmPassword" type="password" :placeholder="$t('settings.password_confirm')" class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+          <div class="relative">
+            <input v-model="currentPassword" :type="showPasswords.current ? 'text' : 'password'" :placeholder="$t('settings.password_current')" class="w-full px-3 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+            <button type="button" @click="showPasswords.current = !showPasswords.current" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.current ? $t('settings.password_hide') : $t('settings.password_show')">
+              <Icon :name="showPasswords.current ? 'eyeOff' : 'eye'" size="18" />
+            </button>
+          </div>
+          <div class="relative">
+            <input v-model="newPassword" :type="showPasswords.new ? 'text' : 'password'" :placeholder="$t('settings.password_new')" class="w-full px-3 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+            <button type="button" @click="showPasswords.new = !showPasswords.new" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.new ? $t('settings.password_hide') : $t('settings.password_show')">
+              <Icon :name="showPasswords.new ? 'eyeOff' : 'eye'" size="18" />
+            </button>
+          </div>
+          <div class="relative">
+            <input v-model="confirmPassword" :type="showPasswords.confirm ? 'text' : 'password'" :placeholder="$t('settings.password_confirm')" class="w-full px-3 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+            <button type="button" @click="showPasswords.confirm = !showPasswords.confirm" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.confirm ? $t('settings.password_hide') : $t('settings.password_show')">
+              <Icon :name="showPasswords.confirm ? 'eyeOff' : 'eye'" size="18" />
+            </button>
+          </div>
           <button
             @click="changePassword"
             :disabled="passwordLoading || !currentPassword || !newPassword || newPassword !== confirmPassword || newPassword.length < 6"
@@ -419,6 +434,7 @@ const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
 const passwordLoading = ref(false)
+const showPasswords = ref({ current: false, new: false, confirm: false })
 const sessions = ref([])
 const sessionsLoading = ref(false)
 
@@ -761,6 +777,7 @@ async function changePassword() {
     currentPassword.value = ''
     newPassword.value = ''
     confirmPassword.value = ''
+    showPasswords.value = { current: false, new: false, confirm: false }
     await loadSessions()
     window.$toast?.success(t('settings.password_changed'))
   } catch (e) {

@@ -264,6 +264,8 @@
     "password_changed": "Пароль успешно изменён",
     "password_mismatch": "Пароли не совпадают",
     "password_too_short": "Пароль должен быть не менее 6 символов",
+    "password_show": "Показать пароль",
+    "password_hide": "Скрыть пароль",
     "sessions_title": "Активные сессии",
     "sessions_desc": "Устройства и браузеры, в которых выполнен вход",
     "sessions_empty": "Нет активных сессий",

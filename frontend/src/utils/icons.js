@@ -99,6 +99,7 @@ import Medicine01Icon from '@hugeicons/core-free-icons/Medicine01Icon'
 import StethoscopeIcon from '@hugeicons/core-free-icons/StethoscopeIcon'
 import AmbulanceIcon from '@hugeicons/core-free-icons/AmbulanceIcon'
 import EyeIcon from '@hugeicons/core-free-icons/EyeIcon'
+import EyeOffIcon from '@hugeicons/core-free-icons/EyeOffIcon'
 import Brain01Icon from '@hugeicons/core-free-icons/Brain01Icon'
 import Book01Icon from '@hugeicons/core-free-icons/Book01Icon'
 import GraduationCapIcon from '@hugeicons/core-free-icons/GraduationCapIcon'
@@ -219,6 +220,8 @@ export const uiIcons = {
   lock: LockPasswordIcon,
   upload: FileUploadIcon,
   more: MoreVerticalCircle01Icon,
+  eye: EyeIcon,
+  eyeOff: EyeOffIcon,
   creditCard: CreditCardIcon,
   chart: ChartIcon,
   location: Location01Icon,
