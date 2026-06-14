@@ -1,4 +1,15 @@
 {
+  "auth": {
+    "invalid_credentials": "Invalid login or password",
+    "user_already_exists": "User already exists",
+    "user_not_found": "User not found",
+    "no_refresh_token": "No refresh token",
+    "invalid_refresh_token": "Invalid refresh token",
+    "invalid_current_password": "Invalid current password",
+    "password_too_short": "Password must be at least 6 characters",
+    "session_not_found": "Session not found",
+    "cannot_terminate_current": "Cannot terminate current session"
+  },
   "notifications": {
     "recurring_created": "Recurring transaction created",
     "recurring_created_body": "Transaction \"{name}\" for {amount} {currency} was created automatically",

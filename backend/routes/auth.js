@@ -51,7 +51,7 @@ async function authRoutes(fastify, opts) {
       if (existing.rows.length > 0) {
         await client.query('ROLLBACK')
         reply.code(400)
-        return { error: 'User already exists' }
+        return { error: t('auth.user_already_exists', {}, language || 'ru') }
       }
 
       const hash = await bcrypt.hash(password, 12)
@@ -105,8 +105,9 @@ async function authRoutes(fastify, opts) {
       } catch (notifErr) {
         fastify.log.warn(notifErr, 'Login failed notification error')
       }
+      const lang = await getUserLang(fastify.db, userId)
       reply.code(401)
-      return { error: 'Invalid credentials' }
+      return { error: t('auth.invalid_credentials', {}, lang) }
     }
 
     const user = result.rows[0]
@@ -133,8 +134,9 @@ async function authRoutes(fastify, opts) {
       } catch (notifErr) {
         fastify.log.warn(notifErr, 'Login failed notification error')
       }
+      const lang = await getUserLang(fastify.db, user.id)
       reply.code(401)
-      return { error: 'Invalid credentials' }
+      return { error: t('auth.invalid_credentials', {}, lang) }
     }
     fastify.log.info(`Login successful for user: ${login}`)
 
@@ -169,7 +171,7 @@ async function authRoutes(fastify, opts) {
     const refreshToken = request.cookies?.refreshToken
     if (!refreshToken) {
       reply.code(401)
-      return { error: 'No refresh token' }
+      return { error: t('auth.no_refresh_token', {}, 'ru') }
     }
 
     try {
@@ -181,13 +183,13 @@ async function authRoutes(fastify, opts) {
       )
       if (tokenRes.rows.length === 0) {
         reply.code(401)
-        return { error: 'Invalid refresh token' }
+        return { error: t('auth.invalid_refresh_token', {}, 'ru') }
       }
 
       const result = await fastify.db.query('SELECT * FROM users WHERE id = $1', [payload.userId])
       if (result.rows.length === 0) {
         reply.code(401)
-        return { error: 'User not found' }
+        return { error: t('auth.user_not_found', {}, 'ru') }
       }
 
       const user = result.rows[0]
@@ -274,15 +276,16 @@ async function authRoutes(fastify, opts) {
   }, async (request, reply) => {
     const userId = request.user.userId
     const { current_password, new_password } = request.body
+    const lang = await getUserLang(fastify.db, userId)
     const { rows } = await fastify.db.query('SELECT password_hash FROM users WHERE id = $1', [userId])
     if (rows.length === 0) {
       reply.code(404)
-      return { error: 'User not found' }
+      return { error: t('auth.user_not_found', {}, lang) }
     }
     const valid = await bcrypt.compare(current_password, rows[0].password_hash)
     if (!valid) {
       reply.code(401)
-      return { error: 'Invalid current password' }
+      return { error: t('auth.invalid_current_password', {}, lang) }
     }
     const newHash = await bcrypt.hash(new_password, 12)
     await fastify.db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, userId])
@@ -330,13 +333,14 @@ async function authRoutes(fastify, opts) {
       'SELECT token_hash FROM refresh_tokens WHERE id = $1 AND user_id = $2',
       [id, userId]
     )
+    const lang = await getUserLang(fastify.db, userId)
     if (rows.length === 0) {
       reply.code(404)
-      return { error: 'Session not found' }
+      return { error: t('auth.session_not_found', {}, lang) }
     }
     if (currentHash && rows[0].token_hash === currentHash) {
       reply.code(400)
-      return { error: 'Cannot terminate current session' }
+      return { error: t('auth.cannot_terminate_current', {}, lang) }
     }
     await fastify.db.query('DELETE FROM refresh_tokens WHERE id = $1 AND user_id = $2', [id, userId])
     return { success: true }

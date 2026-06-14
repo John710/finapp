@@ -1,4 +1,15 @@
 {
+  "auth": {
+    "invalid_credentials": "Неверный логин или пароль",
+    "user_already_exists": "Пользователь уже существует",
+    "user_not_found": "Пользователь не найден",
+    "no_refresh_token": "Отсутствует refresh токен",
+    "invalid_refresh_token": "Недействительный refresh токен",
+    "invalid_current_password": "Неверный текущий пароль",
+    "password_too_short": "Пароль должен быть не менее 6 символов",
+    "session_not_found": "Сессия не найдена",
+    "cannot_terminate_current": "Нельзя завершить текущую сессию"
+  },
   "notifications": {
     "recurring_created": "Создана регулярная транзакция",
     "recurring_created_body": "Транзакция \"{name}\" на сумму {amount} {currency} создана автоматически",
