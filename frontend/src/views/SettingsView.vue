@@ -63,6 +63,54 @@
           </button>
         </div>
       </div>
+
+      <!-- VAPID / Push keys -->
+      <div class="p-5">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <p class="font-medium">{{ $t('settings.vapid_title') }}</p>
+            <p class="text-sm text-slate-500">{{ $t('settings.vapid_desc') }}</p>
+          </div>
+        </div>
+        <div class="space-y-3">
+          <div v-if="auth.user?.vapid_public_key" class="text-sm text-emerald-600 dark:text-emerald-400">
+            {{ $t('settings.vapid_configured_for', { email: vapidSubjectEmail || '-' }) }}
+          </div>
+          <div v-else class="text-sm text-amber-600 dark:text-amber-400">
+            {{ $t('settings.vapid_not_configured') }}
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">{{ $t('settings.vapid_email') }}</label>
+            <p class="text-xs text-slate-500 mb-1">{{ $t('settings.vapid_email_desc') }}</p>
+            <input
+              v-model="vapidEmail"
+              type="email"
+              :placeholder="$t('settings.vapid_email')"
+              :disabled="vapidLoading || vapidDeleteLoading"
+              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm disabled:opacity-50"
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              @click="generateVapidKeys"
+              :disabled="vapidLoading || vapidDeleteLoading || !vapidEmail"
+              class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+            >
+              {{ vapidLoading ? '...' : (auth.user?.vapid_public_key ? $t('settings.vapid_regenerate') : $t('settings.vapid_generate')) }}
+            </button>
+            <button
+              v-if="auth.user?.vapid_public_key"
+              @click="deleteVapidKeys"
+              :disabled="vapidLoading || vapidDeleteLoading"
+              class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+            >
+              {{ vapidDeleteLoading ? '...' : $t('settings.vapid_delete') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Push subscription -->
       <div class="p-5 flex items-center justify-between">
         <div>
           <p class="font-medium">{{ $t('settings.push_notifications') }}</p>
@@ -95,21 +143,65 @@
           {{ push.loading.value ? '...' : $t('settings.push_subscribe') }}
         </button>
       </div>
-      <div class="p-5 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
-        <div>
-          <p class="font-medium">{{ $t('settings.test_notifications') }}</p>
-          <p class="text-sm text-slate-500">{{ $t('settings.test_desc') }}</p>
+
+      <!-- Shoutrrr -->
+      <div class="p-5">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <p class="font-medium">{{ $t('settings.shoutrrr_title') }}</p>
+            <p class="text-sm text-slate-500">{{ $t('settings.shoutrrr_desc') }}</p>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-          <button
-            @click="sendTestShoutrrr()"
-            :disabled="shoutrrrLoading"
-            class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {{ shoutrrrLoading ? '...' : $t('settings.shoutrrr_test') }}
-          </button>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium mb-1">{{ $t('settings.shoutrrr_provider') }}</label>
+            <select
+              v-model="shoutrrrProvider"
+              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm"
+            >
+              <option value="">{{ $t('settings.shoutrrr_provider_placeholder') }}</option>
+              <option v-for="p in SHOUTRRR_PROVIDERS" :key="p.key" :value="p.key">{{ p.label }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">{{ $t('settings.shoutrrr_url') }}</label>
+            <input
+              v-model="shoutrrrUrl"
+              type="text"
+              :placeholder="shoutrrrPlaceholder"
+              :disabled="shoutrrrLoading || shoutrrrTestLoading"
+              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm disabled:opacity-50"
+            />
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="!auth.user?.shoutrrr_url"
+              @click="saveShoutrrrUrl"
+              :disabled="shoutrrrLoading || shoutrrrTestLoading || !shoutrrrUrl.trim()"
+              class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+            >
+              {{ shoutrrrLoading ? '...' : $t('settings.shoutrrr_save') }}
+            </button>
+            <template v-else>
+              <button
+                @click="sendTestShoutrrr"
+                :disabled="shoutrrrLoading || shoutrrrTestLoading"
+                class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {{ shoutrrrTestLoading ? '...' : $t('settings.shoutrrr_test') }}
+              </button>
+              <button
+                @click="disableShoutrrr"
+                :disabled="shoutrrrLoading || shoutrrrTestLoading"
+                class="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50"
+              >
+                {{ shoutrrrLoading ? '...' : $t('settings.shoutrrr_disable') }}
+              </button>
+            </template>
+          </div>
         </div>
       </div>
+
       <div class="p-5 flex items-center justify-between">
         <div>
           <p class="font-medium">{{ $t('settings.load_demo') }}</p>
@@ -151,9 +243,47 @@ import { usePush } from '@/composables/usePush.js'
 import { api } from '@/utils/api.js'
 import { useAuthStore } from '../stores/auth'
 import { useRatesStore } from '../stores/rates'
+import { useSettingsStore } from '../stores/settings'
+
+const SHOUTRRR_PROVIDERS = [
+  { key: 'telegram',   label: 'Telegram',          placeholder: 'telegram://bot-token@telegram?chats=@channel-1,chat-id-1' },
+  { key: 'discord',    label: 'Discord',           placeholder: 'discord://token@id' },
+  { key: 'gotify',     label: 'Gotify',            placeholder: 'gotify://gotify-host/token' },
+  { key: 'slack',      label: 'Slack',             placeholder: 'slack://token-a/token-b/token-c' },
+  { key: 'matrix',     label: 'Matrix',            placeholder: 'matrix://username:password@host:port/?rooms=!roomID1' },
+  { key: 'ntfy',       label: 'Ntfy',              placeholder: 'ntfy://username:password@ntfy.sh/topic' },
+  { key: 'pushover',   label: 'Pushover',          placeholder: 'pushover://shoutrrr:apiToken@userKey/?devices=device1' },
+  { key: 'pushbullet', label: 'Pushbullet',        placeholder: 'pushbullet://api-token/device/#channel/email' },
+  { key: 'bark',       label: 'Bark',              placeholder: 'bark://devicekey@host' },
+  { key: 'email',      label: 'Email (SMTP)',      placeholder: 'smtp://username:password@host:port/?from=fromAddress&to=recipient1' },
+  { key: 'googlechat', label: 'Google Chat',       placeholder: 'googlechat://chat.googleapis.com/v1/spaces/FOO/messages?key=bar&token=baz' },
+  { key: 'mattermost', label: 'Mattermost',        placeholder: 'mattermost://username@mattermost-host/token/channel' },
+  { key: 'rocketchat', label: 'Rocket.Chat',       placeholder: 'rocketchat://username@rocketchat-host/token/channel' },
+  { key: 'teams',      label: 'Microsoft Teams',   placeholder: 'teams://group@tenant/altId/groupOwner?host=organization.webhook.office.com' },
+  { key: 'zulip',      label: 'Zulip',             placeholder: 'zulip://bot-mail:bot-key@zulip-domain/?stream=name-or-id&topic=name' },
+  { key: 'ifttt',      label: 'IFTTT',             placeholder: 'ifttt://key/?events=event1&value1=value1' },
+  { key: 'join',       label: 'Join',              placeholder: 'join://shoutrrr:api-key@join/?devices=device1' },
+  { key: 'opsgenie',   label: 'OpsGenie',          placeholder: 'opsgenie://host/token?responders=responder1' },
+  { key: 'generic',    label: 'Generic Webhook',   placeholder: 'generic://example.com?template=json' },
+  { key: 'custom',     label: 'Custom HTTP(S)',    placeholder: 'https://example.com/webhook' }
+]
+
+function detectProvider(url) {
+  if (!url) return ''
+  const lower = url.toLowerCase()
+  for (const p of SHOUTRRR_PROVIDERS) {
+    if (p.key === 'custom') {
+      if (lower.startsWith('http://') || lower.startsWith('https://')) return p.key
+      continue
+    }
+    if (lower.startsWith(`${p.key}://`) || lower.startsWith(`${p.key}+`)) return p.key
+  }
+  return ''
+}
 
 const { locale, t } = useI18n()
 const auth = useAuthStore()
+const settingsStore = useSettingsStore()
 const ratesStore = useRatesStore()
 const theme = ref(localStorage.getItem('theme') || 'auto')
 const baseCurrency = ref(localStorage.getItem('base_currency') || 'USD')
@@ -161,9 +291,23 @@ const coingeckoKey = ref('')
 const savingKey = ref(false)
 const push = usePush()
 const testLoading = ref(false)
-const shoutrrrLoading = ref(false)
 const demoLoading = ref(false)
 const clearLoading = ref(false)
+
+const vapidEmail = ref('')
+const vapidLoading = ref(false)
+const vapidDeleteLoading = ref(false)
+
+const shoutrrrUrl = ref('')
+const shoutrrrProvider = ref('')
+const shoutrrrLoading = ref(false)
+const shoutrrrTestLoading = ref(false)
+
+const vapidSubjectEmail = computed(() => auth.user?.vapid_subject?.replace(/^mailto:/i, '') || '')
+const shoutrrrPlaceholder = computed(() => {
+  const p = SHOUTRRR_PROVIDERS.find(p => p.key === shoutrrrProvider.value)
+  return p?.placeholder || 'telegram://bot-token@telegram?chats=@channel-1'
+})
 
 const showDropdown = ref(false)
 const search = ref('')
@@ -194,6 +338,14 @@ onMounted(async () => {
     await auth.fetchMe()
     if (auth.user?.coingecko_api_key) coingeckoKey.value = auth.user.coingecko_api_key
     if (auth.user?.base_currency) baseCurrency.value = auth.user.base_currency
+  }
+
+  if (auth.user?.vapid_subject) {
+    vapidEmail.value = auth.user.vapid_subject.replace(/^mailto:/i, '')
+  }
+  if (auth.user?.shoutrrr_url) {
+    shoutrrrUrl.value = auth.user.shoutrrr_url
+    shoutrrrProvider.value = detectProvider(auth.user.shoutrrr_url)
   }
 })
 
@@ -286,6 +438,65 @@ async function saveCoingeckoKey() {
   }
 }
 
+async function generateVapidKeys() {
+  const email = vapidEmail.value.trim()
+  if (!email) return
+  const confirmed = await window.$confirm({
+    title: auth.user?.vapid_public_key ? t('settings.vapid_regenerate') : t('settings.vapid_generate'),
+    message: t('settings.vapid_generate_confirm'),
+    confirmText: auth.user?.vapid_public_key ? t('settings.vapid_regenerate') : t('settings.vapid_generate'),
+    cancelText: t('common.cancel')
+  })
+  if (!confirmed) return
+  vapidLoading.value = true
+  try {
+    const data = await settingsStore.generateVapidKeys(email)
+    auth.user.vapid_public_key = data.publicKey
+    auth.user.vapid_subject = data.subject
+    vapidEmail.value = data.subject.replace(/^mailto:/i, '')
+    if (push.subscription.value) {
+      await push.unsubscribe()
+    } else {
+      push.getSubscription()
+    }
+    window.$toast?.success(t('settings.vapid_generated_success'))
+  } catch (e) {
+    console.error('Failed to generate VAPID keys', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    vapidLoading.value = false
+  }
+}
+
+async function deleteVapidKeys() {
+  const confirmed = await window.$confirm({
+    title: t('settings.vapid_delete'),
+    message: t('settings.vapid_delete_confirm'),
+    confirmText: t('settings.vapid_delete'),
+    cancelText: t('common.cancel'),
+    danger: true
+  })
+  if (!confirmed) return
+  vapidDeleteLoading.value = true
+  try {
+    await settingsStore.deleteVapidKeys()
+    auth.user.vapid_public_key = null
+    auth.user.vapid_subject = null
+    vapidEmail.value = ''
+    if (push.subscription.value) {
+      await push.unsubscribe()
+    } else {
+      push.getSubscription()
+    }
+    window.$toast?.success(t('settings.vapid_deleted_success'))
+  } catch (e) {
+    console.error('Failed to delete VAPID keys', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    vapidDeleteLoading.value = false
+  }
+}
+
 async function sendTestPush() {
   testLoading.value = true
   try {
@@ -299,8 +510,48 @@ async function sendTestPush() {
   }
 }
 
-async function sendTestShoutrrr() {
+async function saveShoutrrrUrl() {
+  const url = shoutrrrUrl.value.trim()
+  if (!url) return
   shoutrrrLoading.value = true
+  try {
+    await settingsStore.saveShoutrrrUrl(url)
+    auth.user.shoutrrr_url = url
+    window.$toast?.success(t('settings.shoutrrr_saved_success'))
+  } catch (e) {
+    console.error('Failed to save Shoutrrr URL', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    shoutrrrLoading.value = false
+  }
+}
+
+async function disableShoutrrr() {
+  const confirmed = await window.$confirm({
+    title: t('settings.shoutrrr_disable'),
+    message: t('settings.shoutrrr_disable_confirm'),
+    confirmText: t('settings.shoutrrr_disable'),
+    cancelText: t('common.cancel'),
+    danger: true
+  })
+  if (!confirmed) return
+  shoutrrrLoading.value = true
+  try {
+    await settingsStore.saveShoutrrrUrl(null)
+    auth.user.shoutrrr_url = null
+    shoutrrrUrl.value = ''
+    shoutrrrProvider.value = ''
+    window.$toast?.success(t('settings.shoutrrr_disabled_success'))
+  } catch (e) {
+    console.error('Failed to disable Shoutrrr', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    shoutrrrLoading.value = false
+  }
+}
+
+async function sendTestShoutrrr() {
+  shoutrrrTestLoading.value = true
   try {
     await api('/send-test-shoutrrr', { method: 'POST' })
     window.$toast?.success(t('notifications.test_shoutrrr_sent'))
@@ -308,7 +559,7 @@ async function sendTestShoutrrr() {
     console.error('Test shoutrrr failed', e)
     window.$toast?.error(e.message || t('notifications.test_shoutrrr_failed'))
   } finally {
-    shoutrrrLoading.value = false
+    shoutrrrTestLoading.value = false
   }
 }
 
