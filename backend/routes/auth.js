@@ -260,7 +260,7 @@ async function authRoutes(fastify, opts) {
     return { success: true }
   })
 
-  fastify.post('/auth/change-password', {
+  fastify.post('/users/change-password', {
     schema: {
       body: {
         type: 'object',
@@ -300,7 +300,7 @@ async function authRoutes(fastify, opts) {
     return { success: true }
   })
 
-  fastify.get('/auth/sessions', async (request, reply) => {
+  fastify.get('/users/sessions', async (request, reply) => {
     const userId = request.user.userId
     const currentRefresh = request.cookies?.refreshToken
     const currentHash = currentRefresh ? hashToken(currentRefresh) : null
@@ -321,7 +321,7 @@ async function authRoutes(fastify, opts) {
     }
   })
 
-  fastify.delete('/auth/sessions/:id', async (request, reply) => {
+  fastify.delete('/users/sessions/:id', async (request, reply) => {
     const userId = request.user.userId
     const { id } = request.params
     const currentRefresh = request.cookies?.refreshToken
@@ -342,7 +342,7 @@ async function authRoutes(fastify, opts) {
     return { success: true }
   })
 
-  fastify.post('/auth/logout-all', async (request, reply) => {
+  fastify.post('/users/logout-all', async (request, reply) => {
     const userId = request.user.userId
     const currentRefresh = request.cookies?.refreshToken
     if (currentRefresh) {

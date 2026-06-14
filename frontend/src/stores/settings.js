@@ -28,22 +28,22 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function changePassword(current_password, new_password) {
-    return api('/auth/change-password', {
+    return api('/users/change-password', {
       method: 'POST',
       body: JSON.stringify({ current_password, new_password })
     })
   }
 
   async function fetchSessions() {
-    return api('/auth/sessions')
+    return api('/users/sessions')
   }
 
   async function terminateSession(sessionId) {
-    return api(`/auth/sessions/${sessionId}`, { method: 'DELETE' })
+    return api(`/users/sessions/${sessionId}`, { method: 'DELETE' })
   }
 
   async function logoutAllSessions() {
-    return api('/auth/logout-all', { method: 'POST' })
+    return api('/users/logout-all', { method: 'POST' })
   }
 
   return {
