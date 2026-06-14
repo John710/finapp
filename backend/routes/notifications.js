@@ -2,16 +2,76 @@ import webpush from 'web-push'
 import { t, getUserLang } from '../services/i18n.js'
 
 export default async function (fastify, opts) {
-  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY
-  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
-  const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@localhost'
-
-  if (vapidPublicKey && vapidPrivateKey) {
-    webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
-  }
-
   fastify.get('/vapid-public-key', async (request, reply) => {
-    return { publicKey: vapidPublicKey || null }
+    const userId = request.user?.userId
+    if (!userId) return { publicKey: null }
+    const { rows } = await fastify.db.query(
+      'SELECT vapid_public_key FROM users WHERE id = $1',
+      [userId]
+    )
+    return { publicKey: rows[0]?.vapid_public_key || null }
+  })
+
+  fastify.post('/admin/generate-vapid-keys', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['subject'],
+        properties: {
+          subject: { type: 'string', format: 'email' }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const userId = request.user.userId
+    const { subject } = request.body
+    const keys = webpush.generateVAPIDKeys()
+    const mailtoSubject = `mailto:${subject}`
+
+    const client = await fastify.db.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(
+        `UPDATE users
+         SET vapid_public_key = $1,
+             vapid_private_key = $2,
+             vapid_subject = $3
+         WHERE id = $4`,
+        [keys.publicKey, keys.privateKey, mailtoSubject, userId]
+      )
+      await client.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId])
+      await client.query('COMMIT')
+      return { publicKey: keys.publicKey, subject: mailtoSubject }
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  })
+
+  fastify.post('/admin/delete-vapid-keys', async (request, reply) => {
+    const userId = request.user.userId
+    const client = await fastify.db.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(
+        `UPDATE users
+         SET vapid_public_key = NULL,
+             vapid_private_key = NULL,
+             vapid_subject = NULL
+         WHERE id = $1`,
+        [userId]
+      )
+      await client.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId])
+      await client.query('COMMIT')
+      return { success: true }
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
   })
 
   fastify.post('/subscribe', {
@@ -149,11 +209,15 @@ export default async function (fastify, opts) {
   })
 
   fastify.post('/send-test', async (request, reply) => {
-    if (!vapidPublicKey || !vapidPrivateKey) {
+    const userId = request.user.userId
+    const { rows } = await fastify.db.query(
+      'SELECT vapid_public_key, vapid_private_key FROM users WHERE id = $1',
+      [userId]
+    )
+    if (!rows[0]?.vapid_public_key || !rows[0]?.vapid_private_key) {
       reply.code(503)
       return { error: 'Push notifications not configured' }
     }
-    const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const payload = JSON.stringify({
       title: t('notifications.push_test', {}, lang),
@@ -179,13 +243,18 @@ export default async function (fastify, opts) {
   })
 
   fastify.post('/send-test-shoutrrr', async (request, reply) => {
-    if (!fastify.sendShoutrrr) {
+    const userId = request.user.userId
+    const { rows } = await fastify.db.query(
+      'SELECT shoutrrr_url FROM users WHERE id = $1',
+      [userId]
+    )
+    const shoutrrrUrl = rows[0]?.shoutrrr_url
+    if (!shoutrrrUrl || !fastify.sendShoutrrr) {
       reply.code(503)
       return { error: 'Shoutrrr not configured' }
     }
-    const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
-    await fastify.sendShoutrrr({
+    await fastify.sendShoutrrr(shoutrrrUrl, {
       title: `FinApp: ${t('notifications.shoutrrr_test', {}, lang)}`,
       message: t('notifications.shoutrrr_test_body', {}, lang)
     })
@@ -194,11 +263,17 @@ export default async function (fastify, opts) {
 }
 
 export async function sendPushToAll(fastify, userId, payload) {
-  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
-    return { sent: 0, failed: 0 }
-  }
   const client = await fastify.db.connect()
   try {
+    const { rows: userRows } = await client.query(
+      'SELECT vapid_public_key, vapid_private_key, vapid_subject FROM users WHERE id = $1',
+      [userId]
+    )
+    const user = userRows[0]
+    if (!user?.vapid_public_key || !user?.vapid_private_key) {
+      return { sent: 0, failed: 0 }
+    }
+
     const { rows } = await client.query(
       'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1',
       [userId]
@@ -208,7 +283,14 @@ export async function sendPushToAll(fastify, userId, payload) {
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          payload
+          payload,
+          {
+            vapidDetails: {
+              subject: user.vapid_subject || 'mailto:admin@localhost',
+              publicKey: user.vapid_public_key,
+              privateKey: user.vapid_private_key
+            }
+          }
         )
         sent++
       } catch (err) {

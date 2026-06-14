@@ -31,8 +31,15 @@ export async function notify(fastify, userId, { type, title, message, data = {},
 
   try {
     if (channels.includes('shoutrrr') && fastify.sendShoutrrr) {
-      await fastify.sendShoutrrr({ title: `FinApp: ${title}`, message })
-      result.shoutrrr = true
+      const { rows } = await fastify.db.query(
+        'SELECT shoutrrr_url FROM users WHERE id = $1',
+        [userId]
+      )
+      const shoutrrrUrl = rows[0]?.shoutrrr_url
+      if (shoutrrrUrl) {
+        await fastify.sendShoutrrr(shoutrrrUrl, { title: `FinApp: ${title}`, message })
+        result.shoutrrr = true
+      }
     }
   } catch (err) {
     fastify.log.warn(err, 'Shoutrrr notification failed')

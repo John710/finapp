@@ -5,13 +5,11 @@ import { promisify } from 'node:util'
 const execFileAsync = promisify(execFile)
 
 async function shoutrrrPlugin(fastify, opts) {
-  const url = process.env.SHOUTRRR_URL
-  if (!url) {
-    fastify.log.info('Shoutrrr not configured')
-    return
-  }
+  async function sendShoutrrr(url, { title, message }) {
+    if (!url) {
+      throw new Error('Shoutrrr URL is required')
+    }
 
-  async function sendShoutrrr({ title, message }) {
     const urls = url.split(',').map(u => u.trim()).filter(Boolean)
     const errors = []
 

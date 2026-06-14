@@ -152,7 +152,16 @@ async function authRoutes(fastify, opts) {
     reply.setCookie(REFRESH_TOKEN_NAME, refreshToken, getCookieOptions(request, 30 * 24 * 60 * 60 * 1000))
 
     return {
-      user: { id: user.id, login: user.login, language: user.language, base_currency: user.base_currency, coingecko_api_key: user.coingecko_api_key }
+      user: {
+        id: user.id,
+        login: user.login,
+        language: user.language,
+        base_currency: user.base_currency,
+        coingecko_api_key: user.coingecko_api_key,
+        shoutrrr_url: user.shoutrrr_url,
+        vapid_public_key: user.vapid_public_key,
+        vapid_subject: user.vapid_subject
+      }
     }
   })
 
@@ -198,7 +207,18 @@ async function authRoutes(fastify, opts) {
       reply.setCookie(ACCESS_TOKEN_NAME, newAccessToken, getCookieOptions(request, 15 * 60 * 1000))
       reply.setCookie(REFRESH_TOKEN_NAME, newRefreshToken, getCookieOptions(request, 30 * 24 * 60 * 60 * 1000))
 
-      return { user: { id: user.id, login: user.login, language: user.language, base_currency: user.base_currency, coingecko_api_key: user.coingecko_api_key } }
+      return {
+        user: {
+          id: user.id,
+          login: user.login,
+          language: user.language,
+          base_currency: user.base_currency,
+          coingecko_api_key: user.coingecko_api_key,
+          shoutrrr_url: user.shoutrrr_url,
+          vapid_public_key: user.vapid_public_key,
+          vapid_subject: user.vapid_subject
+        }
+      }
     } catch (err) {
       reply.code(401)
       return { error: 'Invalid refresh token' }
@@ -206,13 +226,14 @@ async function authRoutes(fastify, opts) {
   })
 
   fastify.patch('/users/settings', async (request, reply) => {
-    const { language, base_currency, coingecko_api_key } = request.body
+    const { language, base_currency, coingecko_api_key, shoutrrr_url } = request.body
     const fields = []
     const values = []
     let idx = 1
     if (language !== undefined) { fields.push(`language = $${idx++}`); values.push(language) }
     if (base_currency !== undefined) { fields.push(`base_currency = $${idx++}`); values.push(base_currency) }
     if (coingecko_api_key !== undefined) { fields.push(`coingecko_api_key = $${idx++}`); values.push(coingecko_api_key) }
+    if (shoutrrr_url !== undefined) { fields.push(`shoutrrr_url = $${idx++}`); values.push((shoutrrr_url || '').trim() || null) }
     if (fields.length === 0) return { success: false, error: 'No fields to update' }
     values.push(request.user.userId)
     await fastify.db.query(`UPDATE users SET ${fields.join(', ')} WHERE id = $${idx}`, values)
@@ -220,7 +241,12 @@ async function authRoutes(fastify, opts) {
   })
 
   fastify.get('/users/me', async (request, reply) => {
-    const result = await fastify.db.query('SELECT id, login, language, base_currency, coingecko_api_key FROM users WHERE id = $1', [request.user.userId])
+    const result = await fastify.db.query(
+      `SELECT id, login, language, base_currency, coingecko_api_key,
+              shoutrrr_url, vapid_public_key, vapid_subject
+       FROM users WHERE id = $1`,
+      [request.user.userId]
+    )
     if (result.rows.length === 0) {
       reply.code(404)
       return { error: 'User not found' }
