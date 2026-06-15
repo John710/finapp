@@ -1,7 +1,5 @@
 <template>
-  <div v-if="modelValue" class="fixed inset-0 z-[60] flex items-center justify-center p-4" @click.self="close">
-    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="close"></div>
-    <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 relative z-10 p-6">
+  <BaseModal :modelValue="modelValue" @update:modelValue="$emit('update:modelValue', $event)" widthClass="max-w-md" zClass="z-[60]">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-bold">{{ $t('help.title') }}</h2>
         <button @click="close" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
@@ -22,13 +20,13 @@
       <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 text-center">
         <button @click="close" class="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-700">{{ $t('common.close') }}</button>
       </div>
-    </div>
-  </div>
+  </BaseModal>
 </template>
 
 <script setup>
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import BaseModal from '@/components/BaseModal.vue'
 
 const props = defineProps({ modelValue: Boolean })
 const emit = defineEmits(['update:modelValue'])

@@ -10,7 +10,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import {
@@ -29,6 +29,8 @@ import {
   TransformComponent
 } from 'echarts/components'
 import VChart from 'vue-echarts'
+import { useDarkMode } from '@/composables/useDarkMode.js'
+import 'echarts/theme/dark.js'
 
 use([
   CanvasRenderer,
@@ -57,27 +59,45 @@ const props = defineProps({
 })
 
 const chartRef = ref(null)
-const isDark = ref(document.documentElement.classList.contains('dark'))
+const { isDark } = useDarkMode()
 
-// Сливаем пользовательские опции с базовыми (прозрачный фон)
-const chartOption = computed(() => ({
-  backgroundColor: 'transparent',
-  ...props.option
-}))
+const themeTextColor = computed(() => (isDark.value ? '#e2e8f0' : '#1e293b'))
 
-let themeObserver = null
-onMounted(() => {
-  themeObserver = new MutationObserver(() => {
-    isDark.value = document.documentElement.classList.contains('dark')
+function applyLabelDefaults(series) {
+  if (!isDark.value || !Array.isArray(series)) return series
+  return series.map((s) => {
+    if (!s || typeof s !== 'object') return s
+    const label = s.label ? { ...s.label } : {}
+    if (label.color === undefined) label.color = themeTextColor.value
+    if (label.textBorderColor === undefined) label.textBorderColor = 'transparent'
+
+    const emphasis = s.emphasis ? { ...s.emphasis } : {}
+    if (emphasis.label) {
+      const empLabel = { ...emphasis.label }
+      if (empLabel.color === undefined) empLabel.color = themeTextColor.value
+      if (empLabel.textBorderColor === undefined) empLabel.textBorderColor = 'transparent'
+      emphasis.label = empLabel
+    }
+
+    return { ...s, label, emphasis }
   })
-  themeObserver.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ['class']
-  })
-})
+}
 
-onUnmounted(() => {
-  themeObserver?.disconnect()
+// Merge user options with theme-aware defaults.
+// In dark mode we force labels to a light color; in light mode we keep ECharts defaults.
+const chartOption = computed(() => {
+  const { textStyle, series, ...rest } = props.option
+  const option = {
+    backgroundColor: 'transparent',
+    ...rest,
+    series: applyLabelDefaults(series)
+  }
+  if (isDark.value) {
+    option.textStyle = { color: themeTextColor.value, ...textStyle }
+  } else if (textStyle) {
+    option.textStyle = textStyle
+  }
+  return option
 })
 </script>
 

@@ -23,7 +23,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRatesStore } from '../stores/rates'
 import Icon from './Icon.vue'
 
@@ -85,7 +85,11 @@ function onDocClick(e) {
   }
 }
 
-if (typeof document !== 'undefined') {
+onMounted(() => {
   document.addEventListener('click', onDocClick)
-}
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
+})
 </script>

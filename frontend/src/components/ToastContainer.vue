@@ -1,5 +1,5 @@
 <template>
-  <div class="fixed bottom-4 right-4 z-[70] space-y-2">
+  <div role="status" aria-live="polite" aria-atomic="true" class="fixed bottom-4 right-4 z-[70] space-y-2">
     <TransitionGroup name="toast">
       <div v-for="toast in toasts" :key="toast.id"
         class="flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium max-w-sm"

@@ -1,7 +1,7 @@
 <template>
   <HugeiconsIcon
-    v-if="iconData"
-    :icon="iconData"
+    v-if="loadedIcon"
+    :icon="loadedIcon"
     :size="size"
     :color="color"
     :stroke-width="strokeWidth"
@@ -9,9 +9,10 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { shallowRef, watch } from 'vue'
 import { HugeiconsIcon } from '@hugeicons/vue'
-import { uiIcons, categoryIcons } from '@/utils/icons'
+import { uiIconImports, categoryIconImports } from '@/utils/icons'
+import { logger } from '@/utils/logger.js'
 
 const props = defineProps({
   name: { type: String, required: true },
@@ -21,8 +22,24 @@ const props = defineProps({
   set: { type: String, default: 'ui' } // 'ui' or 'category'
 })
 
-const iconData = computed(() => {
-  const map = props.set === 'category' ? categoryIcons : uiIcons
-  return map[props.name] || null
-})
+const loadedIcon = shallowRef(null)
+
+async function loadIcon() {
+  const map = props.set === 'category' ? categoryIconImports : uiIconImports
+  const loader = map[props.name]
+  if (!loader) {
+    loadedIcon.value = null
+    return
+  }
+  try {
+    const mod = await loader()
+    loadedIcon.value = mod.default || mod
+  } catch (e) {
+    logger.warn(`Failed to load icon "${props.name}":`, e)
+    loadedIcon.value = null
+  }
+}
+
+loadIcon()
+watch(() => [props.name, props.set], loadIcon)
 </script>

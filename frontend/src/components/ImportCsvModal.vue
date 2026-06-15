@@ -1,7 +1,6 @@
 <template>
-  <div v-if="modelValue" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="close"></div>
-    <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl p-6 relative z-10 max-h-[90vh] overflow-y-auto">
+  <BaseModal :modelValue="modelValue" @update:modelValue="$emit('update:modelValue', $event)" widthClass="max-w-2xl" zClass="z-50">
+    <div class="max-h-[90vh] overflow-y-auto">
       <h2 class="text-xl font-bold mb-4">{{ $t('import.title') }}</h2>
 
       <!-- Profile selector -->
@@ -74,17 +73,18 @@
         <button type="button" @click="close" class="flex-1 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
         <button @click="previewFile" :disabled="!file" class="px-4 py-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50">{{ $t('import.preview_btn') }}</button>
         <button @click="importFile" :disabled="!file || importing" class="flex-1 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-medium">
-          {{ importing ? $t('common.loading') + '...' : $t('import.import_btn') }}
+          {{ importing ? $t('common.loading') : $t('import.import_btn') }}
         </button>
       </div>
     </div>
-  </div>
+  </BaseModal>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/utils/api.js'
+import BaseModal from '@/components/BaseModal.vue'
 
 const { t } = useI18n()
 
@@ -102,15 +102,15 @@ const mapping = ref({ date: null, amount: null, type: null, category: null, acco
 const result = ref(null)
 const importing = ref(false)
 
-const mappingLabels = {
-  date: 'Дата',
-  amount: 'Сумма',
-  type: 'Тип',
-  category: 'Категория',
-  account: 'Счёт',
-  note: 'Примечание',
-  currency: 'Валюта'
-}
+const mappingLabels = computed(() => ({
+  date: t('import.fields.date'),
+  amount: t('import.fields.amount'),
+  type: t('import.fields.type'),
+  category: t('import.fields.category'),
+  account: t('import.fields.account'),
+  note: t('import.fields.note'),
+  currency: t('import.fields.currency')
+}))
 
 watch(() => props.modelValue, async (val) => {
   if (val) {
