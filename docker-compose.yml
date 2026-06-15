@@ -1,27 +1,55 @@
 services:
+  db:
+    image: postgres:17-alpine
+    container_name: finapp-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-finapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finapp}
+      POSTGRES_DB: ${POSTGRES_DB:-finapp}
+    volumes:
+      - finapp_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finapp} -d ${POSTGRES_DB:-finapp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   finapp:
     container_name: finapp
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: ghcr.io/john710/finapp:latest
+    depends_on:
+      db:
+        condition: service_healthy
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
     ports:
-      - "${PORT:-6253}:6253"
+      - "${PORT:-6253}:${PORT:-6253}"
     environment:
-      PUID: $PUID
-      PGID: $PGID
-      DATABASE_URL: $FIN_DATABASE_URL
-      JWT_SECRET: $FIN_JWT_SECRET
-      PORT: $FIN_PORT
-      JWT_ACCESS_TTL: $FIN_JWT_ACCESS_TTL
-      JWT_REFRESH_TTL: $FIN_JWT_REFRESH_TTL
-      ALLOWED_ORIGINS: $FIN_ALLOWED_ORIGINS
-      TZ: $TZ
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      DATABASE_URL: postgres://${POSTGRES_USER:-finapp}:${POSTGRES_PASSWORD:-finapp}@db:5432/${POSTGRES_DB:-finapp}
+      JWT_SECRET: ${JWT_SECRET}
+      PORT: ${PORT:-6253}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      TZ: ${TZ:-UTC}
+      DEFAULT_LANG: ${DEFAULT_LANG:-en}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       DATABASE_SSL: ${DATABASE_SSL:-false}
       DATABASE_SSL_REJECT_UNAUTHORIZED: ${DATABASE_SSL_REJECT_UNAUTHORIZED:-true}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:${PORT:-6253}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
+
+volumes:
+  finapp_db_data:

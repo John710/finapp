@@ -1,5 +1,13 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# FinApp multi-stage Dockerfile
+# ─────────────────────────────────────────────────────────────────────────────
+
+ARG NODE_VERSION=22.16.0
+ARG ALPINE_VERSION=3.22
+ARG NODE_IMAGE=node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:41e4389f3d988d2ed55392df4db1420ad048ae53324a8e2b7c6d19508288107e
+
 # ─── Stage 1: Backend dependencies (built on native build platform) ────
-FROM --platform=$BUILDPLATFORM node:22-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS backend-builder
 WORKDIR /app
 
 COPY backend/package*.json ./
@@ -8,28 +16,23 @@ RUN npm ci --omit=dev
 COPY backend/ ./
 
 # ─── Stage 2: Frontend (built on native build platform) ────────────────
-FROM --platform=$BUILDPLATFORM node:22.16.0-alpine3.22 AS frontend-builder
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend-builder
 WORKDIR /app/frontend
-
-# Аргумент для инвалидации кэша
-ARG CACHE_BUST=0
 
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
-RUN chmod +x node_modules/.bin/vite && npm run build
+RUN npm run build
 
 # ─── Stage 3: Runtime (target platform) ────────────────────────────────
-FROM node:22-alpine
+FROM ${NODE_IMAGE}
+
 WORKDIR /app
 
-# Аргумент для инвалидации кэша
-ARG CACHE_BUST=0
-
-RUN apk add --no-cache su-exec tzdata
+RUN apk add --no-cache su-exec tzdata curl
 
 ARG SHOUTRRR_VERSION=0.8.0
-RUN apk add --no-cache wget \
+RUN apk add --no-cache --virtual .build-deps wget \
     && ARCH=$(uname -m) \
     && case "$ARCH" in \
          x86_64)  SHOUTRRR_ARCH=amd64  ;; \
@@ -39,19 +42,22 @@ RUN apk add --no-cache wget \
        esac \
     && wget -qO /tmp/shoutrrr.tar.gz \
          "https://github.com/containrrr/shoutrrr/releases/download/v${SHOUTRRR_VERSION}/shoutrrr_linux_${SHOUTRRR_ARCH}.tar.gz" \
+    && wget -qO /tmp/shoutrrr_checksums.txt \
+         "https://github.com/containrrr/shoutrrr/releases/download/v${SHOUTRRR_VERSION}/shoutrrr_${SHOUTRRR_VERSION}_checksums.txt" \
+    && EXPECTED=$(grep -E "shoutrrr_linux_${SHOUTRRR_ARCH}\.tar\.gz$" /tmp/shoutrrr_checksums.txt | awk '{print $1}') \
+    && ACTUAL=$(sha256sum /tmp/shoutrrr.tar.gz | awk '{print $1}') \
+    && if [ -z "$EXPECTED" ] || [ "$EXPECTED" != "$ACTUAL" ]; then echo "Shoutrrr checksum mismatch" && exit 1; fi \
     && tar -xzf /tmp/shoutrrr.tar.gz -C /usr/local/bin shoutrrr \
-    && rm /tmp/shoutrrr.tar.gz \
+    && rm /tmp/shoutrrr.tar.gz /tmp/shoutrrr_checksums.txt \
     && chmod +x /usr/local/bin/shoutrrr \
     && shoutrrr --version \
-    && apk del wget  # ← удаляем wget в том же слое
+    && apk del .build-deps
 
 COPY --from=backend-builder /app ./
 COPY --from=frontend-builder /app/frontend/dist ./public
 
 COPY docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
-
-RUN apk add --no-cache curl
 
 ENV NODE_ENV=production
 EXPOSE 6253

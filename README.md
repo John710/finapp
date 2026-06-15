@@ -91,9 +91,10 @@ cp .env.example .env
  
 Edit `.env` — at minimum set:
 ```env
-DATABASE_URL=postgres://finapp:yourpassword@postgres:5432/finapp
 JWT_SECRET=your_random_secret_here
 ```
+
+The database connection string is built automatically from `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`. If you use an external Postgres server, set `DATABASE_URL` in `docker-compose.yml` or pass it as an environment variable.
  
 ### 3. Start
 ```bash
@@ -113,16 +114,21 @@ The application does **not** enforce HTTPS or send HSTS headers itself. For prod
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | Server port | `6253` |
-| `DATABASE_URL` | PostgreSQL connection string | — |
+| `POSTGRES_USER` | PostgreSQL user (db service) | `finapp` |
+| `POSTGRES_PASSWORD` | PostgreSQL password (db service) | `finapp` |
+| `POSTGRES_DB` | PostgreSQL database (db service) | `finapp` |
 | `JWT_SECRET` | JWT signing secret | — |
 | `JWT_ACCESS_TTL` | Access token lifetime | `15m` |
 | `JWT_REFRESH_TTL` | Refresh token lifetime | `30d` |
 | `TZ` | Timezone | `UTC` |
 | `ALLOWED_ORIGINS` | Allowed CORS origins (comma-separated) | — |
+| `TRUSTED_PROXIES` | Trusted reverse proxies (comma-separated) | — |
 | `DATABASE_SSL` | Enable SSL/TLS for PostgreSQL connection | `false` |
 | `DATABASE_SSL_REJECT_UNAUTHORIZED` | Reject unauthorized SSL certificates | `true` |
-| `PUID` | Docker container user ID | `1000` |
+| `PUID` | Docker container user ID | `1000` (reuses base image `node` user) |
 | `PGID` | Docker container group ID | `1000` |
+| `DEFAULT_LANG` | Default language for new users (`ru` or `en`) | `en` |
+| `ENCRYPTION_KEY` | 64-char hex key for sensitive user data | — |
  
 ---
  

@@ -21,3 +21,6 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log
+
+# Planning / local-only docs
+AUDIT_FIX_PLAN.md

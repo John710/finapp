@@ -91,9 +91,10 @@ cp .env.example .env
  
 Отредактируйте `.env` — минимально нужно задать:
 ```env
-DATABASE_URL=postgres://finapp:yourpassword@postgres:5432/finapp
 JWT_SECRET=ваш_случайный_секрет
 ```
+
+Строка подключения к базе собирается автоматически из `POSTGRES_USER`, `POSTGRES_PASSWORD` и `POSTGRES_DB`. Если вы используете внешний Postgres, укажите `DATABASE_URL` в `docker-compose.yml` или передайте её через переменную окружения.
  
 ### 3. Запустить
 ```bash
@@ -113,16 +114,21 @@ docker compose up -d
 | Переменная | Описание | По умолчанию |
 |------------|----------|--------------|
 | `PORT` | Порт сервера | `6253` |
-| `DATABASE_URL` | Строка подключения к PostgreSQL | — |
+| `POSTGRES_USER` | Пользователь PostgreSQL (сервис db) | `finapp` |
+| `POSTGRES_PASSWORD` | Пароль PostgreSQL (сервис db) | `finapp` |
+| `POSTGRES_DB` | База PostgreSQL (сервис db) | `finapp` |
 | `JWT_SECRET` | Секрет для подписи JWT | — |
 | `JWT_ACCESS_TTL` | Время жизни access токена | `15m` |
 | `JWT_REFRESH_TTL` | Время жизни refresh токена | `30d` |
 | `TZ` | Часовой пояс | `UTC` |
 | `ALLOWED_ORIGINS` | Разрешённые CORS источники (через запятую) | — |
+| `TRUSTED_PROXIES` | Доверенные reverse proxies (через запятую) | — |
 | `DATABASE_SSL` | Включить SSL/TLS для подключения к PostgreSQL | `false` |
 | `DATABASE_SSL_REJECT_UNAUTHORIZED` | Отклонять самоподписанные SSL-сертификаты | `true` |
-| `PUID` | ID пользователя для Docker контейнера | `1000` |
+| `PUID` | ID пользователя для Docker контейнера | `1000` (используется `node` из базового образа) |
 | `PGID` | ID группы для Docker контейнера | `1000` |
+| `DEFAULT_LANG` | Язык по умолчанию для новых пользователей (`ru` или `en`) | `en` |
+| `ENCRYPTION_KEY` | 64-символьный hex-ключ для шифрования чувствительных данных | — |
  
 ---
  
