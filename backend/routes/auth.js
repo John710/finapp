@@ -87,23 +87,23 @@ async function authRoutes(fastify, opts) {
   }, async (request, reply) => {
     const { login, password } = request.body
     const lang = getReqLang(request)
-    fastify.log.info(`Login attempt for user: ${login}`)
+    fastify.log.info({ login, ip: request.ip }, 'Login attempt')
     const result = await fastify.db.query('SELECT * FROM users WHERE login = $1', [login])
     if (result.rows.length === 0) {
-      fastify.log.warn(`Login failed: user not found: ${login}`)
+      fastify.log.warn({ login, ip: request.ip, reason: 'user_not_found' }, 'Login failed')
       reply.code(401)
       return { error: t('auth.invalid_credentials', {}, lang) }
     }
 
     const user = result.rows[0]
     if (!user.password_hash) {
-      fastify.log.error(`Login failed: user ${login} has no password_hash`)
+      fastify.log.warn({ login, userId: user.id, ip: request.ip, reason: 'no_password_hash' }, 'Login failed')
       reply.code(401)
-      return { error: 'Invalid credentials' }
+      return { error: t('auth.invalid_credentials', {}, lang) }
     }
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) {
-      fastify.log.warn(`Login failed: invalid password for user: ${login}`)
+      fastify.log.warn({ login, userId: user.id, ip: request.ip, reason: 'invalid_password' }, 'Login failed')
       try {
         const lang = await getUserLang(fastify.db, user.id)
         const dup = await checkDuplicateNotification(fastify, { userId: user.id, type: 'login_failed', entityId: login, hours: 1 })
@@ -123,7 +123,7 @@ async function authRoutes(fastify, opts) {
       reply.code(401)
       return { error: t('auth.invalid_credentials', {}, lang) }
     }
-    fastify.log.info(`Login successful for user: ${login}`)
+    fastify.log.info({ userId: user.id, login, ip: request.ip }, 'Login successful')
 
     const accessToken = fastify.signAccessToken({ userId: user.id, login: user.login })
     const refreshToken = fastify.signRefreshToken({ userId: user.id })
@@ -156,6 +156,7 @@ async function authRoutes(fastify, opts) {
     const lang = getReqLang(request)
     const refreshToken = request.cookies?.refreshToken
     if (!refreshToken) {
+      fastify.log.warn({ ip: request.ip, reason: 'missing_refresh_token' }, 'Refresh failed')
       reply.code(401)
       return { error: t('auth.no_refresh_token', {}, lang) }
     }
@@ -169,17 +170,20 @@ async function authRoutes(fastify, opts) {
       )
       if (tokenRes.rows.length === 0) {
         await fastify.db.query('DELETE FROM refresh_tokens WHERE user_id = $1', [payload.userId])
+        fastify.log.warn({ userId: payload.userId, ip: request.ip, reason: 'invalid_refresh_token' }, 'Refresh failed')
         reply.code(401)
         return { error: t('auth.invalid_refresh_token', {}, lang) }
       }
 
       const result = await fastify.db.query('SELECT * FROM users WHERE id = $1', [payload.userId])
       if (result.rows.length === 0) {
+        fastify.log.warn({ userId: payload.userId, ip: request.ip, reason: 'user_not_found' }, 'Refresh failed')
         reply.code(401)
         return { error: t('auth.user_not_found', {}, lang) }
       }
 
       const user = result.rows[0]
+      fastify.log.info({ userId: user.id, ip: request.ip }, 'Token refreshed')
 
       // Rotate refresh token atomically
       const newAccessToken = fastify.signAccessToken({ userId: user.id, login: user.login })
@@ -317,11 +321,13 @@ async function authRoutes(fastify, opts) {
     }
     const valid = await bcrypt.compare(current_password, rows[0].password_hash)
     if (!valid) {
+      fastify.log.warn({ userId, ip: request.ip, reason: 'invalid_current_password' }, 'Password change failed')
       reply.code(401)
       return { error: t('auth.invalid_current_password', {}, lang) }
     }
     const newHash = await bcrypt.hash(new_password, 12)
     await fastify.db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, userId])
+    fastify.log.info({ userId, ip: request.ip }, 'Password changed')
 
     // Require a browser session to keep current session
     const currentRefresh = request.cookies?.refreshToken
@@ -440,6 +446,7 @@ async function authRoutes(fastify, opts) {
   })
 
   fastify.post('/users/logout', async (request, reply) => {
+    const userId = request.user.userId
     const refreshToken = request.cookies?.refreshToken
     if (refreshToken) {
       const tokenHash = hashToken(refreshToken)
@@ -447,6 +454,7 @@ async function authRoutes(fastify, opts) {
     }
     reply.clearCookie(ACCESS_TOKEN_NAME, getCookieOptions(request, 0))
     reply.clearCookie(REFRESH_TOKEN_NAME, getCookieOptions(request, 0))
+    fastify.log.info({ userId, ip: request.ip }, 'Logout successful')
     return { success: true }
   })
 }

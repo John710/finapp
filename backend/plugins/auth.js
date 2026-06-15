@@ -56,6 +56,12 @@ async function authPlugin(fastify, opts) {
 
     try {
       request.user = fastify.verifyToken(token)
+      const logData = { userId: request.user.userId, ip: request.ip, method: request.method, url: request.url }
+      if (request.method === 'GET') {
+        fastify.log.debug(logData, 'Authenticated request')
+      } else {
+        fastify.log.info(logData, 'Authenticated request')
+      }
     } catch (err) {
       return reply.code(401).send({ error: 'Invalid token' })
     }

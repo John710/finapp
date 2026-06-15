@@ -638,14 +638,11 @@ async function generateVapidKeys() {
   if (!confirmed) return
   vapidLoading.value = true
   try {
-    await settingsStore.generateVapidKeys(email)
+    const result = await settingsStore.generateVapidKeys(email)
+    push.serverConfigured.value = !!result.publicKey
     await auth.fetchMe()
     vapidEmail.value = (auth.user?.vapid_subject || '').replace(/^mailto:/i, '')
-    if (push.subscription.value) {
-      await push.unsubscribe()
-    } else {
-      push.getSubscription()
-    }
+    await push.checkServerConfigured()
     window.$toast?.success(t('settings.vapid_generated_success'))
   } catch (e) {
     logger.error('Failed to generate VAPID keys', e)
@@ -667,13 +664,10 @@ async function deleteVapidKeys() {
   vapidDeleteLoading.value = true
   try {
     await settingsStore.deleteVapidKeys()
+    push.serverConfigured.value = false
     await auth.fetchMe()
     vapidEmail.value = ''
-    if (push.subscription.value) {
-      await push.unsubscribe()
-    } else {
-      push.getSubscription()
-    }
+    await push.checkServerConfigured()
     window.$toast?.success(t('settings.vapid_deleted_success'))
   } catch (e) {
     logger.error('Failed to delete VAPID keys', e)

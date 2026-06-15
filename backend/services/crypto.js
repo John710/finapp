@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 
 const ALGO = 'aes-256-gcm'
 
-function getKey() {
+export function validateEncryptionKey() {
   const key = process.env.ENCRYPTION_KEY
   if (!key) {
     throw new Error('ENCRYPTION_KEY is not set')
@@ -10,7 +10,11 @@ function getKey() {
   if (key.length !== 64 || !/^[0-9a-fA-F]+$/.test(key)) {
     throw new Error('ENCRYPTION_KEY must be 64 hex characters (32 bytes)')
   }
-  return Buffer.from(key, 'hex')
+}
+
+function getKey() {
+  validateEncryptionKey()
+  return Buffer.from(process.env.ENCRYPTION_KEY, 'hex')
 }
 
 export function encrypt(text) {

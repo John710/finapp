@@ -449,17 +449,16 @@ const savingsRateChartOption = computed(() => {
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
-      formatter: (params) => {
-        const p = params[0]
-        return `${p.marker} ${p.name}: ${savingsRate ? formatFull(savingsRate.savings, baseCurrency.value, baseCurrency.value, ratesStore.rates) : '0'} (${rate.toFixed(1)}%)`
+      formatter: () => {
+        return `${savingsRate ? formatFull(savingsRate.savings, baseCurrency.value, baseCurrency.value, ratesStore.rates) : '0'} (${rate.toFixed(1)}%)`
       }
     },
     grid: {
-      left: 0,
+      left: 10,
       right: 10,
       bottom: 5,
       top: 5,
-      containLabel: true
+      containLabel: false
     },
     xAxis: {
       type: 'value',
@@ -477,13 +476,8 @@ const savingsRateChartOption = computed(() => {
     },
     yAxis: {
       type: 'category',
-      data: data.map(d => d.name),
-      axisLabel: {
-        color: isDark.value ? '#f1f5f9' : '#1e293b',
-        fontSize: 14,
-        fontWeight: 500,
-        margin: 10
-      },
+      data: [''],
+      axisLabel: { show: false },
       axisLine: { show: false },
       axisTick: { show: false }
     },

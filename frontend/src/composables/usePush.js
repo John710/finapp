@@ -13,20 +13,31 @@ const serverConfigured = ref(false)
 export function usePush() {
   const { t } = useI18n()
 
-  async function getSubscription() {
-    if (!isSupported) {
-      logger.log('[push] getSubscription skipped: not supported')
-      return null
-    }
+  async function checkServerConfigured() {
     try {
       logger.log('[push] Fetching VAPID public key...')
       const data = await api('/vapid-public-key')
       logger.log('[push] VAPID public key received:', !!data.publicKey)
       serverConfigured.value = !!data.publicKey
-      if (!serverConfigured.value) {
-        logger.warn('[push] Server VAPID public key is null — push not configured')
-        return null
-      }
+      return data.publicKey || null
+    } catch (err) {
+      logger.error('[push] checkServerConfigured failed:', err)
+      serverConfigured.value = false
+      return null
+    }
+  }
+
+  async function getSubscription() {
+    if (!isSupported) {
+      logger.log('[push] getSubscription skipped: not supported')
+      return null
+    }
+    const publicKey = await checkServerConfigured()
+    if (!publicKey) {
+      logger.warn('[push] Server VAPID public key is null — push not configured')
+      return null
+    }
+    try {
       logger.log('[push] Waiting for service worker...')
       const reg = await navigator.serviceWorker.ready
       logger.log('[push] SW ready, scope:', reg.scope)
@@ -35,14 +46,33 @@ export function usePush() {
       return subscription.value
     } catch (err) {
       logger.error('[push] getSubscription failed:', err)
-      serverConfigured.value = false
       return null
     }
+  }
+
+  async function requestNotificationPermission() {
+    if (Notification.permission === 'denied') {
+      window.$toast?.showToast(t('notifications.push_denied'), 'error')
+      return 'denied'
+    }
+    if (Notification.permission !== 'granted') {
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') {
+        window.$toast?.showToast(t('notifications.push_not_granted'), 'error')
+        return permission
+      }
+    }
+    return 'granted'
   }
 
   async function subscribe() {
     if (!isSupported) {
       window.$toast?.showToast(t('notifications.push_require_https'), 'error')
+      return
+    }
+    const permission = await requestNotificationPermission()
+    if (permission !== 'granted') {
+      logger.warn('[push] Cannot subscribe: notification permission not granted')
       return
     }
     loading.value = true
@@ -94,7 +124,7 @@ export function usePush() {
     }
   }
 
-  return { isSupported, serverConfigured, subscription, loading, getSubscription, subscribe, unsubscribe }
+  return { isSupported, serverConfigured, subscription, loading, getSubscription, subscribe, unsubscribe, checkServerConfigured }
 }
 
 function urlBase64ToUint8Array(base64String) {
