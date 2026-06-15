@@ -237,8 +237,13 @@ export default async function (fastify, opts) {
       tag: 'test',
       data: { url: '/' }
     })
-    const result = await fastify.sendPushToAll(userId, payload)
-    return { sent: result.sent, failed: result.failed }
+    try {
+      const result = await fastify.sendPushToAll(userId, payload)
+      return { sent: result.sent, failed: result.failed }
+    } catch (err) {
+      fastify.log.error({ err, userId }, 'send-test failed')
+      throw err
+    }
   })
 
   fastify.post('/send-test-bell', {
@@ -301,6 +306,7 @@ export async function sendPushToAll(fastify, userId, payload) {
     )
     const user = userRows[0]
     if (!user?.vapid_public_key || !user?.vapid_private_key) {
+      fastify.log.warn({ userId }, 'sendPushToAll skipped: VAPID keys not configured')
       return { sent: 0, failed: 0 }
     }
 
@@ -309,9 +315,10 @@ export async function sendPushToAll(fastify, userId, payload) {
       'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1',
       [userId]
     )
+    fastify.log.info({ userId, subscriptions: rows.length }, 'Sending push notifications')
     let sent = 0, failed = 0
     const PUSH_TIMEOUT = parseInt(process.env.PUSH_SEND_TIMEOUT || '10000', 10)
-    await Promise.all(rows.map(sub => fastify.pushLimit(async () => {
+    for (const sub of rows) {
       try {
         await Promise.race([
           webpush.sendNotification(
@@ -329,12 +336,17 @@ export async function sendPushToAll(fastify, userId, payload) {
         ])
         sent++
       } catch (err) {
+        fastify.log.warn({ endpoint: sub.endpoint, statusCode: err.statusCode, message: err.message }, 'Push send failed')
         if (err.statusCode === 410 || err.statusCode === 404) {
-          await client.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint])
+          try {
+            await fastify.db.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint])
+          } catch (delErr) {
+            fastify.log.error({ err: delErr }, 'Failed to delete stale push subscription')
+          }
         }
         failed++
       }
-    })))
+    }
     return { sent, failed }
   } finally {
     client.release()
