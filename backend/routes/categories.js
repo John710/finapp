@@ -1,3 +1,5 @@
+import { sanitizeSvg } from '../services/sanitizeSvg.js'
+
 async function categoryRoutes(fastify, opts) {
   // List
   fastify.get('/categories', async (request, reply) => {

@@ -48,7 +48,18 @@ async function importRoutes(fastify, opts) {
       return { error: 'No file uploaded' }
     }
 
-    const options = JSON.parse(request.body?.options?.value || '{}')
+    const rawOptions = request.body?.options?.value || '{}'
+    let options = {}
+    try {
+      options = JSON.parse(rawOptions)
+    } catch (err) {
+      reply.code(400)
+      return { error: 'Invalid options JSON' }
+    }
+    if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+      reply.code(400)
+      return { error: 'Options must be an object' }
+    }
     const profileKey = options.profile || 'default'
     const profile = PROFILES[profileKey] || PROFILES.default
     const mapping = options.mapping || profile.mapping

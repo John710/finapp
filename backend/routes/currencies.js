@@ -1,5 +1,5 @@
-import cron from 'node-cron'
 import fiatCurrencies from '../data/fiatCurrencies.json' with { type: 'json' }
+import { decrypt } from '../services/crypto.js'
 
 let cryptoListCache = null
 let cryptoListCacheTime = 0
@@ -134,7 +134,7 @@ async function updateExchangeRates(fastify, userId) {
 
     try {
       const userRes = await fastify.db.query('SELECT coingecko_api_key FROM users WHERE id = $1', [userId])
-      const apiKey = userRes.rows[0]?.coingecko_api_key || process.env.COINGECKO_API_KEY
+      const apiKey = decrypt(userRes.rows[0]?.coingecko_api_key) || process.env.COINGECKO_API_KEY
 
       // Fetch crypto symbols actually used by any account, fallback to top list
       const accountRes = await fastify.db.query("SELECT DISTINCT UPPER(currency) as currency FROM accounts WHERE type = 'crypto'")
@@ -214,7 +214,7 @@ async function currencyRoutes(fastify, opts) {
       if (request.user?.userId) {
         try {
           const userRes = await fastify.db.query('SELECT coingecko_api_key FROM users WHERE id = $1', [request.user.userId])
-          apiKey = userRes.rows[0]?.coingecko_api_key || apiKey
+          apiKey = decrypt(userRes.rows[0]?.coingecko_api_key) || apiKey
         } catch (dbErr) {
           fastify.log.warn('Failed to fetch user API key:', dbErr.message)
         }
@@ -304,7 +304,7 @@ async function currencyRoutes(fastify, opts) {
   })
 
   // Auto-update exchange rates once per day at 04:00 (Fawazahmed0 updates daily)
-  cron.schedule('0 4 * * *', async () => {
+  fastify.schedule('0 4 * * *', async () => {
     fastify.log.info('Auto-updating exchange rates (daily)')
     try {
       const userRes = await fastify.db.query('SELECT id FROM users ORDER BY id LIMIT 1')
