@@ -1,5 +1,4 @@
 import 'dotenv/config'
-import { execSync } from 'node:child_process'
 import Fastify from 'fastify'
 import helmet from '@fastify/helmet'
 import cors from '@fastify/cors'
@@ -14,6 +13,7 @@ import cronPlugin from './plugins/cron.js'
 import shoutrrrPlugin from './plugins/shoutrrr.js'
 import healthRoutes from './routes/health.js'
 import authRoutes from './routes/auth.js'
+import configRoutes from './routes/config.js'
 import accountRoutes from './routes/accounts.js'
 import categoryRoutes from './routes/categories.js'
 import transactionRoutes from './routes/transactions.js'
@@ -36,12 +36,16 @@ const PORT = parseInt(process.env.PORT || '6253', 10)
 const NODE_ENV = process.env.NODE_ENV || 'development'
 const isProduction = NODE_ENV === 'production'
 
+const trustedProxies = process.env.TRUSTED_PROXIES
+  ? process.env.TRUSTED_PROXIES.split(',').map(s => s.trim())
+  : false
+
 async function start() {
   const app = Fastify({
     logger: {
       level: isProduction ? 'warn' : 'info'
     },
-    trustProxy: true
+    trustProxy: trustedProxies
   })
 
   // Static files (production build) — register BEFORE rate-limit so assets are not throttled
@@ -65,12 +69,12 @@ async function start() {
       useDefaults: false,
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
         scriptSrcAttr: ["'none'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:', 'https:'],
         connectSrc: ["'self'", 'https://api.coingecko.com', 'https://cdn.jsdelivr.net', 'https://api.github.com'],
-        fontSrc: ["'self'"],
+        fontSrc: ["'self'", 'https:'],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
         baseUri: ["'self'"],
@@ -121,6 +125,11 @@ async function start() {
   // Auth (JWT decorators)
   await app.register(authPlugin)
 
+  // Decorators used by cron/handlers must be available before they are registered
+  app.decorate('notify', async (userId, payload) => notify(app, userId, payload))
+  app.decorate('sendPushToAll', async (userId, payload) => sendPushToAll(app, userId, payload))
+  app.decorate('createNotification', async (payload) => createNotification(app, payload))
+
   // Cron (recurring transactions)
   await app.register(cronPlugin)
 
@@ -132,6 +141,7 @@ async function start() {
 
   // API routes
   await app.register(healthRoutes, { prefix: '/api/v1' })
+  await app.register(configRoutes, { prefix: '/api/v1' })
   await app.register(authRoutes, { prefix: '/api/v1' })
   await app.register(accountRoutes, { prefix: '/api/v1' })
   await app.register(categoryRoutes, { prefix: '/api/v1' })
@@ -147,22 +157,13 @@ async function start() {
   await app.register(notificationRoutes, { prefix: '/api/v1' })
   await app.register(demodataRoutes, { prefix: '/api/v1' })
 
-  app.decorate('notify', async (userId, payload) => notify(app, userId, payload))
-  app.decorate('sendPushToAll', async (userId, payload) => sendPushToAll(app, userId, payload))
-  app.decorate('createNotification', async (payload) => createNotification(app, payload))
-
-  // SPA fallback — must be registered after API routes
-  app.get('/*', async (req, reply) => {
+  // SPA fallback and API 404
+  app.setNotFoundHandler(async (request, reply) => {
+    if (request.url.startsWith('/api/')) {
+      return reply.code(404).send({ error: 'Not found' })
+    }
     return reply.sendFile('index.html', staticPath)
   })
-
-  // Run migrations
-  try {
-    execSync('node node_modules/node-pg-migrate/bin/node-pg-migrate.js up', { cwd: __dirname, stdio: 'inherit' })
-  } catch (err) {
-    app.log.error('Migration failed:', err)
-    process.exit(1)
-  }
 
   try {
     await app.listen({ port: PORT, host: '0.0.0.0' })

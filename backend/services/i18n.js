@@ -28,7 +28,7 @@ function fallbackForKey(key) {
   return last.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
-export function t(key, params = {}, lang = 'ru') {
+export function t(key, params = {}, lang = 'en') {
   const locale = loadLocale(lang)
   const keys = key.split('.')
   let value = locale
@@ -43,10 +43,17 @@ export function t(key, params = {}, lang = 'ru') {
 export async function getUserLang(db, userId) {
   try {
     const { rows } = await db.query('SELECT language FROM users WHERE id = $1', [userId])
-    return rows[0]?.language || process.env.DEFAULT_LANG || 'ru'
+    return rows[0]?.language || process.env.DEFAULT_LANG || 'en'
   } catch {
-    return process.env.DEFAULT_LANG || 'ru'
+    return process.env.DEFAULT_LANG || 'en'
   }
+}
+
+export function getReqLang(request) {
+  return request.body?.language
+    || request.headers['accept-language']?.split(',')[0]?.slice(0, 2)
+    || process.env.DEFAULT_LANG
+    || 'en'
 }
 
 export function getSupportedLocales() {

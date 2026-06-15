@@ -10,7 +10,10 @@ async function dbPlugin(fastify, opts) {
 
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl
+    ssl,
+    max: 20,
+    connectionTimeoutMillis: 10000,
+    query_timeout: 30000
   })
 
   fastify.decorate('db', pool)
