@@ -1,4 +1,7 @@
+import i18n from '@/i18n'
+
 const API_URL = '/api/v1'
+const t = i18n.global.t
 
 const COINGECKO_TOAST_KEY = 'coingecko_rate_limit_toast'
 const COINGECKO_TOAST_COOLDOWN = 5 * 60 * 1000 // 5 minutes
@@ -9,7 +12,7 @@ function showCoingeckoRateLimitToast() {
   if (now - lastShown < COINGECKO_TOAST_COOLDOWN) return
   localStorage.setItem(COINGECKO_TOAST_KEY, String(now))
   window.$toast?.warning?.(
-    'CoinGecko недоступен (лимит запросов). Добавьте свой API ключ в Настройки → CoinGecko API Key для стабильной работы.',
+    t('settings.coingecko_rate_limited'),
     { duration: 8000 }
   )
 }
@@ -47,6 +50,10 @@ export async function api(path, options = {}) {
       headers,
       credentials: 'include'
     })
+    if (res.status === 401) {
+      window.location.href = '/login'
+      throw new Error('Session expired')
+    }
   }
 
   if (res.headers.get('x-coingecko-rate-limited')) {
