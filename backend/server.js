@@ -30,6 +30,10 @@ import demodataRoutes from './routes/demodata.js'
 import { sendPushToAll, createNotification } from './routes/notifications.js'
 import { notify } from './services/notify.js'
 import multipart from '@fastify/multipart'
+import { validateEncryptionKey } from './services/crypto.js'
+
+// Fail fast if encryption key is missing or invalid
+validateEncryptionKey()
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = parseInt(process.env.PORT || '6253', 10)

@@ -6,6 +6,8 @@ import { api } from '@/utils/api.js'
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const checked = ref(false)
+  const setupChecked = ref(false)
+  const setupRequired = ref(false)
 
   const isAuthenticated = computed(() => !!user.value)
 
@@ -44,17 +46,31 @@ export const useAuthStore = defineStore('auth', () => {
     return data
   }
 
+  async function checkSetup() {
+    if (setupChecked.value) return setupRequired.value
+    try {
+      const res = await fetch('/api/v1/auth/setup-required')
+      if (res.ok) {
+        const data = await res.json()
+        setupRequired.value = data.required
+      }
+    } catch (e) {
+      // ignore
+    } finally {
+      setupChecked.value = true
+    }
+    return setupRequired.value
+  }
+
   async function updateSettings(settings) {
     await api('/users/settings', {
       method: 'PATCH',
       body: JSON.stringify(settings)
     })
-    if (user.value) {
-      Object.assign(user.value, settings)
-      if (settings.base_currency) {
-        const ratesStore = useRatesStore()
-        ratesStore.setBaseCurrency(settings.base_currency)
-      }
+    await fetchMe()
+    if (user.value && settings.base_currency) {
+      const ratesStore = useRatesStore()
+      ratesStore.setBaseCurrency(settings.base_currency)
     }
     return true
   }
@@ -73,5 +89,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, checked, isAuthenticated, login, checkAuth, fetchMe, logout, updateSettings, updateLanguage }
+  return { user, checked, setupChecked, setupRequired, isAuthenticated, login, checkAuth, fetchMe, logout, updateSettings, updateLanguage, checkSetup }
 })

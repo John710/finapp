@@ -50,9 +50,29 @@ export function usePush() {
     }
   }
 
+  async function requestNotificationPermission() {
+    if (Notification.permission === 'denied') {
+      window.$toast?.showToast(t('notifications.push_denied'), 'error')
+      return 'denied'
+    }
+    if (Notification.permission !== 'granted') {
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') {
+        window.$toast?.showToast(t('notifications.push_not_granted'), 'error')
+        return permission
+      }
+    }
+    return 'granted'
+  }
+
   async function subscribe() {
     if (!isSupported) {
       window.$toast?.showToast(t('notifications.push_require_https'), 'error')
+      return
+    }
+    const permission = await requestNotificationPermission()
+    if (permission !== 'granted') {
+      logger.warn('[push] Cannot subscribe: notification permission not granted')
       return
     }
     loading.value = true
