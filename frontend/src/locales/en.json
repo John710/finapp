@@ -14,14 +14,26 @@
   },
   "auth": {
     "login": "Sign In",
+    "login_subtitle": "Welcome back",
+    "register": "Create Account",
+    "register_subtitle": "Create your account to get started",
     "setup": "Initial Setup",
     "setup_subtitle": "Create administrator account",
     "username": "Username",
     "password": "Password",
+    "confirm_password": "Confirm password",
+    "language": "Language",
     "submit": "Sign In",
     "create": "Create",
+    "create_account": "Create account",
     "logout": "Log Out",
-    "invalid_credentials": "Invalid login or password"
+    "invalid_credentials": "Invalid login or password",
+    "password_mismatch": "Passwords do not match",
+    "account_created": "Account created. Please sign in.",
+    "no_account": "Don't have an account?",
+    "already_have_account": "Already have an account?",
+    "go_to_register": "Create one",
+    "go_to_login": "Sign in"
   },
   "dashboard": {
     "total_balance": "Total balance",
@@ -134,7 +146,16 @@
     "created": "Created",
     "skipped": "Skipped",
     "errors": "Errors",
-    "completed": "Import completed"
+    "completed": "Import completed",
+    "fields": {
+      "date": "Date",
+      "amount": "Amount",
+      "type": "Type",
+      "category": "Category",
+      "account": "Account",
+      "note": "Note",
+      "currency": "Currency"
+    }
   },
   "reports": {
     "title": "Reports",
@@ -281,6 +302,7 @@
     "coingecko_test": "Test key",
     "coingecko_test_success": "CoinGecko key is valid",
     "coingecko_test_failed": "Failed to verify CoinGecko key",
+    "coingecko_rate_limited": "CoinGecko is unavailable (rate limit). Add your API key in Settings → CoinGecko API Key for stable operation.",
     "load_demo": "Load demo data",
     "load_demo_desc": "Load sample accounts, transactions, budgets, etc.",
     "load": "Load",
@@ -300,6 +322,7 @@
     "add": "Add",
     "search": "Search",
     "loading": "Loading...",
+    "days": "days",
     "all": "All",
     "empty": "Nothing found",
     "close": "Close",
@@ -325,6 +348,8 @@
     "push_require_https": "Push notifications require HTTPS or localhost",
     "push_enable_failed": "Failed to enable push notifications",
     "push_disable_failed": "Failed to disable push notifications",
+    "push_denied": "Push notifications were denied by the browser",
+    "push_not_granted": "Permission for push notifications was not granted",
     "test_push_sent": "Test Push sent",
     "test_push_failed": "Failed to send Push test",
     "test_bell_sent": "Bell test sent",

@@ -3,14 +3,14 @@ import { api } from '@/utils/api.js'
 
 export const useSettingsStore = defineStore('settings', () => {
   async function generateVapidKeys(subject) {
-    return api('/admin/generate-vapid-keys', {
+    return api('/vapid/generate', {
       method: 'POST',
       body: JSON.stringify({ subject })
     })
   }
 
   async function deleteVapidKeys() {
-    return api('/admin/delete-vapid-keys', { method: 'POST' })
+    return api('/vapid/delete', { method: 'POST' })
   }
 
   async function saveShoutrrrUrl(url) {

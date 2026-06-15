@@ -75,7 +75,7 @@ export const useRatesStore = defineStore('rates', () => {
       rates.value = ratesRes
       fiatCurrencies.value = fiatRes
     } catch (e) {
-      console.error('Failed to load rates', e)
+      logger.error('Failed to load rates', e)
     } finally {
       loading.value = false
     }

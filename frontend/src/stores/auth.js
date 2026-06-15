@@ -66,7 +66,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout() {
     try {
-      await api('/auth/logout', { method: 'POST' })
+      await api('/users/logout', { method: 'POST' })
     } finally {
       user.value = null
       window.location.href = '/login'

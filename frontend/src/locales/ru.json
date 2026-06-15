@@ -14,14 +14,26 @@
   },
   "auth": {
     "login": "Вход",
+    "login_subtitle": "С возвращением",
+    "register": "Создать аккаунт",
+    "register_subtitle": "Создайте аккаунт, чтобы начать",
     "setup": "Первоначальная настройка",
     "setup_subtitle": "Создайте учётную запись администратора",
     "username": "Логин",
     "password": "Пароль",
+    "confirm_password": "Подтвердите пароль",
+    "language": "Язык",
     "submit": "Войти",
     "create": "Создать",
+    "create_account": "Создать аккаунт",
     "logout": "Выйти",
-    "invalid_credentials": "Неверный логин или пароль"
+    "invalid_credentials": "Неверный логин или пароль",
+    "password_mismatch": "Пароли не совпадают",
+    "account_created": "Аккаунт создан. Войдите, пожалуйста.",
+    "no_account": "Нет аккаунта?",
+    "already_have_account": "Уже есть аккаунт?",
+    "go_to_register": "Создать",
+    "go_to_login": "Войти"
   },
   "dashboard": {
     "total_balance": "Общий баланс",
@@ -134,7 +146,16 @@
     "created": "Создано",
     "skipped": "Пропущено",
     "errors": "Ошибки",
-    "completed": "Импорт завершён"
+    "completed": "Импорт завершён",
+    "fields": {
+      "date": "Дата",
+      "amount": "Сумма",
+      "type": "Тип",
+      "category": "Категория",
+      "account": "Счёт",
+      "note": "Примечание",
+      "currency": "Валюта"
+    }
   },
   "reports": {
     "title": "Отчёты",
@@ -281,6 +302,7 @@
     "coingecko_test": "Проверить ключ",
     "coingecko_test_success": "Ключ CoinGecko работает",
     "coingecko_test_failed": "Не удалось проверить ключ CoinGecko",
+    "coingecko_rate_limited": "CoinGecko недоступен (лимит запросов). Добавьте свой API-ключ в Настройки → CoinGecko API Key для стабильной работы.",
     "load_demo": "Загрузить демо-данные",
     "load_demo_desc": "Загрузить примеры счетов, транзакций, бюджетов и т.д.",
     "load": "Загрузить",
@@ -300,6 +322,7 @@
     "add": "Добавить",
     "search": "Поиск",
     "loading": "Загрузка...",
+    "days": "дней",
     "all": "Все",
     "empty": "Ничего не найдено",
     "close": "Закрыть",
@@ -325,6 +348,8 @@
     "push_require_https": "Push-уведомления требуют HTTPS или localhost",
     "push_enable_failed": "Не удалось включить push-уведомления",
     "push_disable_failed": "Не удалось отключить push-уведомления",
+    "push_denied": "Push-уведомления запрещены в браузере",
+    "push_not_granted": "Разрешение на push-уведомления не получено",
     "test_push_sent": "Тест Push отправлен",
     "test_push_failed": "Не удалось отправить тест Push",
     "test_bell_sent": "Тест колокольчика отправлен",
