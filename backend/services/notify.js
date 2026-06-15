@@ -35,9 +35,9 @@ export async function notify(fastify, userId, { type, title, message, data = {},
         'SELECT shoutrrr_url FROM users WHERE id = $1',
         [userId]
       )
-      const shoutrrrUrl = rows[0]?.shoutrrr_url
-      if (shoutrrrUrl) {
-        await fastify.sendShoutrrr(shoutrrrUrl, { title: `FinApp: ${title}`, message })
+      const encryptedShoutrrrUrl = rows[0]?.shoutrrr_url
+      if (encryptedShoutrrrUrl) {
+        await fastify.sendShoutrrr(encryptedShoutrrrUrl, { title: `FinApp: ${title}`, message })
         result.shoutrrr = true
       }
     }

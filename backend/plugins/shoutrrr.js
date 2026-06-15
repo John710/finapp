@@ -1,11 +1,13 @@
 import fp from 'fastify-plugin'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { decrypt } from '../services/crypto.js'
 
 const execFileAsync = promisify(execFile)
 
 async function shoutrrrPlugin(fastify, opts) {
-  async function sendShoutrrr(url, { title, message }) {
+  async function sendShoutrrr(encryptedUrl, { title, message }) {
+    const url = decrypt(encryptedUrl)
     if (!url) {
       throw new Error('Shoutrrr URL is required')
     }
@@ -38,7 +40,7 @@ async function shoutrrrPlugin(fastify, opts) {
         if (title) {
           args.push('--title', title)
         }
-        await execFileAsync('shoutrrr', args)
+        await execFileAsync('shoutrrr', args, { timeout: 30000 })
       } catch (err) {
         fastify.log.warn({ err, url: u }, 'Shoutrrr CLI failed')
         errors.push(`Shoutrrr (${u}): ${err.stderr || err.message || 'unknown error'}`)

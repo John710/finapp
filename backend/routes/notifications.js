@@ -1,8 +1,11 @@
 import webpush from 'web-push'
+import pLimit from 'p-limit'
 import { t, getUserLang } from '../services/i18n.js'
+import { encrypt, decrypt, isEncrypted } from '../services/crypto.js'
 
 export default async function (fastify, opts) {
-  fastify.get('/vapid-public-key', async (request, reply) => {
+  fastify.decorate('pushLimit', pLimit(5))
+  fastify.get('/vapid-public-key', { config: { public: true } }, async (request, reply) => {
     const userId = request.user?.userId
     if (!userId) return { publicKey: null }
     const { rows } = await fastify.db.query(
@@ -12,7 +15,7 @@ export default async function (fastify, opts) {
     return { publicKey: rows[0]?.vapid_public_key || null }
   })
 
-  fastify.post('/admin/generate-vapid-keys', {
+  fastify.post('/vapid/generate', {
     schema: {
       body: {
         type: 'object',
@@ -37,7 +40,7 @@ export default async function (fastify, opts) {
              vapid_private_key = $2,
              vapid_subject = $3
          WHERE id = $4`,
-        [keys.publicKey, keys.privateKey, mailtoSubject, userId]
+        [keys.publicKey, encrypt(keys.privateKey), mailtoSubject, userId]
       )
       await client.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId])
       await client.query('COMMIT')
@@ -50,7 +53,7 @@ export default async function (fastify, opts) {
     }
   })
 
-  fastify.post('/admin/delete-vapid-keys', async (request, reply) => {
+  fastify.post('/vapid/delete', async (request, reply) => {
     const userId = request.user.userId
     const client = await fastify.db.connect()
     try {
@@ -100,7 +103,7 @@ export default async function (fastify, opts) {
     }
   }, async (request, reply) => {
     const { subscription } = request.body
-    const userId = request.user?.userId
+    const userId = request.user.userId
     const client = await fastify.db.connect()
     try {
       await client.query(
@@ -127,7 +130,7 @@ export default async function (fastify, opts) {
     }
   }, async (request, reply) => {
     const { endpoint } = request.body
-    const userId = request.user?.userId
+    const userId = request.user.userId
     const client = await fastify.db.connect()
     try {
       await client.query('DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id = $2', [endpoint, userId])
@@ -208,7 +211,16 @@ export default async function (fastify, opts) {
     }
   })
 
-  fastify.post('/send-test', async (request, reply) => {
+  fastify.post('/send-test', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          message: { type: 'string', maxLength: 200 }
+        }
+      }
+    }
+  }, async (request, reply) => {
     const userId = request.user.userId
     const { rows } = await fastify.db.query(
       'SELECT vapid_public_key, vapid_private_key FROM users WHERE id = $1',
@@ -229,7 +241,16 @@ export default async function (fastify, opts) {
     return { sent: result.sent, failed: result.failed }
   })
 
-  fastify.post('/send-test-bell', async (request, reply) => {
+  fastify.post('/send-test-bell', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          message: { type: 'string', maxLength: 200 }
+        }
+      }
+    }
+  }, async (request, reply) => {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     await createNotification(fastify, {
@@ -242,19 +263,28 @@ export default async function (fastify, opts) {
     return { success: true }
   })
 
-  fastify.post('/send-test-shoutrrr', async (request, reply) => {
+  fastify.post('/send-test-shoutrrr', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          message: { type: 'string', maxLength: 200 }
+        }
+      }
+    }
+  }, async (request, reply) => {
     const userId = request.user.userId
     const { rows } = await fastify.db.query(
       'SELECT shoutrrr_url FROM users WHERE id = $1',
       [userId]
     )
-    const shoutrrrUrl = rows[0]?.shoutrrr_url
-    if (!shoutrrrUrl || !fastify.sendShoutrrr) {
+    const encryptedShoutrrrUrl = rows[0]?.shoutrrr_url
+    if (!encryptedShoutrrrUrl || !fastify.sendShoutrrr) {
       reply.code(503)
       return { error: 'Shoutrrr not configured' }
     }
     const lang = await getUserLang(fastify.db, userId)
-    await fastify.sendShoutrrr(shoutrrrUrl, {
+    await fastify.sendShoutrrr(encryptedShoutrrrUrl, {
       title: `FinApp: ${t('notifications.shoutrrr_test', {}, lang)}`,
       message: t('notifications.shoutrrr_test_body', {}, lang)
     })
@@ -274,24 +304,29 @@ export async function sendPushToAll(fastify, userId, payload) {
       return { sent: 0, failed: 0 }
     }
 
+    const privateKey = decrypt(user.vapid_private_key)
     const { rows } = await client.query(
       'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1',
       [userId]
     )
     let sent = 0, failed = 0
-    await Promise.all(rows.map(async (sub) => {
+    const PUSH_TIMEOUT = parseInt(process.env.PUSH_SEND_TIMEOUT || '10000', 10)
+    await Promise.all(rows.map(sub => fastify.pushLimit(async () => {
       try {
-        await webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          payload,
-          {
-            vapidDetails: {
-              subject: user.vapid_subject || 'mailto:admin@localhost',
-              publicKey: user.vapid_public_key,
-              privateKey: user.vapid_private_key
+        await Promise.race([
+          webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload,
+            {
+              vapidDetails: {
+                subject: user.vapid_subject || 'mailto:admin@localhost',
+                publicKey: user.vapid_public_key,
+                privateKey
+              }
             }
-          }
-        )
+          ),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Push send timeout')), PUSH_TIMEOUT))
+        ])
         sent++
       } catch (err) {
         if (err.statusCode === 410 || err.statusCode === 404) {
@@ -299,7 +334,7 @@ export async function sendPushToAll(fastify, userId, payload) {
         }
         failed++
       }
-    }))
+    })))
     return { sent, failed }
   } finally {
     client.release()
