@@ -35,7 +35,7 @@
       <router-link to="/recurring" class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow">
         <p class="text-xs text-slate-500 dark:text-slate-400 mb-1">{{ $t('dashboard.upcoming_recurring') }}</p>
         <p class="text-lg font-bold text-primary-600">{{ upcomingRecurring.length }} — {{ formatCurrency(upcomingRecurringTotal) }}</p>
-        <p class="text-xs text-slate-400 mt-1">≤ 5 {{ $t('recurring.frequencies.daily') === 'Ежедневно' ? 'дней' : 'days' }}</p>
+        <p class="text-xs text-slate-400 mt-1">≤ 5 {{ $t('common.days') }}</p>
       </router-link>
     </div>
 
@@ -115,7 +115,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAccountsStore } from '../stores/accounts'
 import { useTransactionsStore } from '../stores/transactions'
@@ -125,7 +125,9 @@ import { useDebtsStore } from '../stores/debts'
 import { useRecurringStore } from '../stores/recurring'
 import { formatFull } from '@/utils/currency'
 import { getUserLocale } from '@/utils/locale'
-import BaseChart from '@/components/BaseChart.vue'
+import { formatCurrency as formatCurrencyValue, formatDate as formatDateValue } from '@/utils/format'
+import { useDarkMode } from '@/composables/useDarkMode.js'
+const BaseChart = defineAsyncComponent(() => import('@/components/BaseChart.vue'))
 
 const { t } = useI18n()
 
@@ -137,18 +139,9 @@ const debtsStore = useDebtsStore()
 const recurringStore = useRecurringStore()
 const baseCurrency = computed(() => ratesStore.baseCurrency)
 
-const isDark = ref(document.documentElement.classList.contains('dark'))
-let themeObserver = null
+const { isDark } = useDarkMode()
 
 onMounted(async () => {
-  themeObserver = new MutationObserver(() => {
-    isDark.value = document.documentElement.classList.contains('dark')
-  })
-  themeObserver.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ['class']
-  })
-
   accountsStore.fetchAccounts()
   transactionsStore.fetchTransactions({ limit: 5 })
   ratesStore.fetchRates()
@@ -167,10 +160,6 @@ onMounted(async () => {
   reportsStore.fetchByCategory({ from, to, type: 'expense' })
   reportsStore.fetchNetWorth({ months: 12 })
   reportsStore.fetchSavingsRate({ from, to })
-})
-
-onBeforeUnmount(() => {
-  themeObserver?.disconnect()
 })
 
 const totalBalance = computed(() => {
@@ -368,6 +357,29 @@ const categoryChartOption = computed(() => {
 })
 
 const netWorthChartOption = computed(() => {
+  const values = reportsStore.netWorth.map(n => parseFloat(n.balance))
+  const min = values.length ? Math.min(...values) : 0
+  const max = values.length ? Math.max(...values) : 0
+
+  // Build a vertical gradient: green above zero, red below zero.
+  const colorStops = []
+  if (max > 0) {
+    colorStops.push({ offset: 0, color: 'rgba(16, 185, 129, 0.35)' })
+  }
+  if (min < 0 && max > 0) {
+    const zeroOffset = max / (max - min)
+    colorStops.push({ offset: zeroOffset, color: 'rgba(16, 185, 129, 0.35)' })
+    colorStops.push({ offset: zeroOffset, color: 'rgba(244, 63, 94, 0.35)' })
+  }
+  if (min < 0) {
+    colorStops.push({ offset: 1, color: 'rgba(244, 63, 94, 0.35)' })
+  }
+
+  let lineColor = '#0f766e'
+  if (min >= 0) lineColor = '#10b981'
+  else if (max <= 0) lineColor = '#f43f5e'
+  else lineColor = '#64748b'
+
   return {
     tooltip: {
       trigger: 'axis',
@@ -398,7 +410,7 @@ const netWorthChartOption = computed(() => {
         smooth: true,
         symbol: 'circle',
         symbolSize: 6,
-        data: reportsStore.netWorth.map(n => n.balance),
+        data: values,
         areaStyle: {
           color: {
             type: 'linear',
@@ -406,18 +418,15 @@ const netWorthChartOption = computed(() => {
             y: 0,
             x2: 0,
             y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(15, 118, 110, 0.3)' },
-              { offset: 1, color: 'rgba(15, 118, 110, 0.05)' }
-            ]
+            colorStops
           }
         },
         lineStyle: {
-          color: '#0f766e',
+          color: lineColor,
           width: 2
         },
         itemStyle: {
-          color: '#0f766e'
+          color: lineColor
         }
       }
     ]
@@ -518,7 +527,7 @@ const savingsRateChartOption = computed(() => {
 
 
 function formatCurrency(value) {
-  return new Intl.NumberFormat(getUserLocale(), { style: 'currency', currency: baseCurrency.value }).format(value || 0)
+  return formatCurrencyValue(value || 0, baseCurrency.value)
 }
 
 function formatNote(note) {
@@ -531,6 +540,6 @@ function formatNote(note) {
 }
 
 function formatDate(date) {
-  return new Date(date).toLocaleDateString(getUserLocale())
+  return formatDateValue(date)
 }
 </script>

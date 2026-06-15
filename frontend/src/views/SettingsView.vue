@@ -74,10 +74,10 @@
         <div class="flex gap-2">
           <input v-model="coingeckoKey" type="text" placeholder="CG-..." class="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
           <button v-if="isCoingeckoDirty" @click="saveCoingeckoKey" :disabled="savingKey || !coingeckoKey.trim()" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
-            {{ savingKey ? '...' : $t('common.save') }}
+            {{ savingKey ? $t('common.loading') : $t('common.save') }}
           </button>
           <button v-else-if="auth.user?.coingecko_api_key" @click="testCoingeckoKey" :disabled="coingeckoTestLoading" class="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
-            {{ coingeckoTestLoading ? '...' : $t('settings.coingecko_test') }}
+            {{ coingeckoTestLoading ? $t('common.loading') : $t('settings.coingecko_test') }}
           </button>
         </div>
       </div>
@@ -120,7 +120,7 @@
               :disabled="shoutrrrLoading || shoutrrrTestLoading || !shoutrrrUrl.trim() || !!shoutrrrUrlError"
               class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
             >
-              {{ shoutrrrLoading ? '...' : $t('settings.shoutrrr_save') }}
+              {{ shoutrrrLoading ? $t('common.loading') : $t('settings.shoutrrr_save') }}
             </button>
             <template v-else>
               <button
@@ -128,14 +128,14 @@
                 :disabled="shoutrrrLoading || shoutrrrTestLoading"
                 class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
               >
-                {{ shoutrrrTestLoading ? '...' : $t('settings.shoutrrr_test') }}
+                {{ shoutrrrTestLoading ? $t('common.loading') : $t('settings.shoutrrr_test') }}
               </button>
               <button
                 @click="disableShoutrrr"
                 :disabled="shoutrrrLoading || shoutrrrTestLoading"
                 class="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50"
               >
-                {{ shoutrrrLoading ? '...' : $t('settings.shoutrrr_disable') }}
+                {{ shoutrrrLoading ? $t('common.loading') : $t('settings.shoutrrr_disable') }}
               </button>
             </template>
             <a
@@ -190,7 +190,7 @@
               :disabled="vapidLoading || vapidDeleteLoading || !vapidEmail"
               class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
             >
-              {{ vapidLoading ? '...' : (auth.user?.vapid_public_key ? $t('settings.vapid_regenerate') : $t('settings.vapid_generate')) }}
+              {{ vapidLoading ? $t('common.loading') : (auth.user?.vapid_public_key ? $t('settings.vapid_regenerate') : $t('settings.vapid_generate')) }}
             </button>
             <button
               v-if="auth.user?.vapid_public_key"
@@ -198,7 +198,7 @@
               :disabled="vapidLoading || vapidDeleteLoading"
               class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
             >
-              {{ vapidDeleteLoading ? '...' : $t('settings.vapid_delete') }}
+              {{ vapidDeleteLoading ? $t('common.loading') : $t('settings.vapid_delete') }}
             </button>
           </div>
         </div>
@@ -217,14 +217,14 @@
             :disabled="testLoading"
             class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
           >
-            {{ testLoading ? '...' : $t('settings.push_test') }}
+            {{ testLoading ? $t('common.loading') : $t('settings.push_test') }}
           </button>
           <button
             @click="push.unsubscribe()"
             :disabled="push.loading.value"
             class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
           >
-            {{ push.loading.value ? '...' : $t('settings.push_unsubscribe') }}
+            {{ push.loading.value ? $t('common.loading') : $t('settings.push_unsubscribe') }}
           </button>
         </div>
         <div v-else-if="!push.serverConfigured.value" class="text-sm text-amber-600 dark:text-amber-400">{{ $t('settings.push_not_configured') }}</div>
@@ -234,7 +234,7 @@
           :disabled="push.loading.value"
           class="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
         >
-          {{ push.loading.value ? '...' : $t('settings.push_subscribe') }}
+          {{ push.loading.value ? $t('common.loading') : $t('settings.push_subscribe') }}
         </button>
       </div>
     </section>
@@ -253,19 +253,19 @@
         </div>
         <div class="space-y-3 max-w-md">
           <div class="relative">
-            <input v-model="currentPassword" :type="showPasswords.current ? 'text' : 'password'" :placeholder="$t('settings.password_current')" class="w-full px-3 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+            <input v-model="currentPassword" autocomplete="current-password" :type="showPasswords.current ? 'text' : 'password'" :placeholder="$t('settings.password_current')" class="w-full px-3 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
             <button type="button" @click="showPasswords.current = !showPasswords.current" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.current ? $t('settings.password_hide') : $t('settings.password_show')">
               <Icon :name="showPasswords.current ? 'eyeOff' : 'eye'" size="18" />
             </button>
           </div>
           <div class="relative">
-            <input v-model="newPassword" :type="showPasswords.new ? 'text' : 'password'" :placeholder="$t('settings.password_new')" class="w-full px-3 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+            <input v-model="newPassword" autocomplete="new-password" :type="showPasswords.new ? 'text' : 'password'" :placeholder="$t('settings.password_new')" class="w-full px-3 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
             <button type="button" @click="showPasswords.new = !showPasswords.new" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.new ? $t('settings.password_hide') : $t('settings.password_show')">
               <Icon :name="showPasswords.new ? 'eyeOff' : 'eye'" size="18" />
             </button>
           </div>
           <div class="relative">
-            <input v-model="confirmPassword" :type="showPasswords.confirm ? 'text' : 'password'" :placeholder="$t('settings.password_confirm')" class="w-full px-3 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+            <input v-model="confirmPassword" autocomplete="new-password" :type="showPasswords.confirm ? 'text' : 'password'" :placeholder="$t('settings.password_confirm')" class="w-full px-3 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
             <button type="button" @click="showPasswords.confirm = !showPasswords.confirm" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.confirm ? $t('settings.password_hide') : $t('settings.password_show')">
               <Icon :name="showPasswords.confirm ? 'eyeOff' : 'eye'" size="18" />
             </button>
@@ -275,7 +275,7 @@
             :disabled="passwordLoading || !currentPassword || !newPassword || newPassword !== confirmPassword || newPassword.length < 6"
             class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
           >
-            {{ passwordLoading ? '...' : $t('settings.password_change') }}
+            {{ passwordLoading ? $t('common.loading') : $t('settings.password_change') }}
           </button>
         </div>
       </div>
@@ -293,7 +293,7 @@
             :disabled="sessionsLoading"
             class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
           >
-            {{ sessionsLoading ? '...' : $t('settings.sessions_terminate_all') }}
+            {{ sessionsLoading ? $t('common.loading') : $t('settings.sessions_terminate_all') }}
           </button>
         </div>
         <div v-if="sessions.length === 0" class="text-sm text-slate-500">{{ $t('settings.sessions_empty') }}</div>
@@ -333,7 +333,7 @@
             :disabled="demoLoading"
             class="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
           >
-            {{ demoLoading ? '...' : $t('settings.load') }}
+            {{ demoLoading ? $t('common.loading') : $t('settings.load') }}
           </button>
         </div>
       </div>
@@ -348,7 +348,7 @@
             :disabled="clearLoading"
             class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
           >
-            {{ clearLoading ? '...' : $t('settings.clear') }}
+            {{ clearLoading ? $t('common.loading') : $t('settings.clear') }}
           </button>
         </div>
       </div>
@@ -360,7 +360,10 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePush } from '@/composables/usePush.js'
+import { useTheme } from '@/composables/useTheme.js'
 import { api } from '@/utils/api.js'
+import { formatDateTime as formatDateTimeValue } from '@/utils/format.js'
+import { logger } from '@/utils/logger.js'
 import { useAuthStore } from '../stores/auth'
 import { useRatesStore } from '../stores/rates'
 import { useSettingsStore } from '../stores/settings'
@@ -411,6 +414,7 @@ const { locale, t } = useI18n()
 const auth = useAuthStore()
 const settingsStore = useSettingsStore()
 const ratesStore = useRatesStore()
+const { setTheme } = useTheme()
 const theme = ref(localStorage.getItem('theme') || 'auto')
 const baseCurrency = ref(localStorage.getItem('base_currency') || 'USD')
 const coingeckoKey = ref('')
@@ -518,7 +522,7 @@ onBeforeUnmount(() => {
 
 function formatDateTime(value) {
   if (!value) return '-'
-  return new Date(value).toLocaleString(locale.value)
+  return formatDateTimeValue(value, locale.value)
 }
 
 async function loadSessions() {
@@ -527,7 +531,7 @@ async function loadSessions() {
     const data = await settingsStore.fetchSessions()
     sessions.value = data.sessions || []
   } catch (e) {
-    console.error('Failed to load sessions', e)
+    logger.error('Failed to load sessions', e)
   } finally {
     sessionsLoading.value = false
   }
@@ -559,19 +563,7 @@ function onKeydown(e) {
 }
 
 function changeTheme() {
-  localStorage.setItem('theme', theme.value)
-  const root = document.documentElement
-  if (theme.value === 'dark') {
-    root.classList.add('dark')
-  } else if (theme.value === 'light') {
-    root.classList.remove('dark')
-  } else {
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      root.classList.add('dark')
-    } else {
-      root.classList.remove('dark')
-    }
-  }
+  setTheme(theme.value)
   window.$toast?.success(t('common.saved'))
 }
 
@@ -582,7 +574,7 @@ async function changeLang() {
       await auth.updateLanguage(locale.value)
       window.$toast?.success(t('common.saved'))
     } catch (e) {
-      console.error('Failed to sync language', e)
+      logger.error('Failed to sync language', e)
       window.$toast?.error(t('common.error'))
     }
   } else {
@@ -597,7 +589,7 @@ async function changeBaseCurrency() {
       await auth.updateSettings({ base_currency: baseCurrency.value })
       window.$toast?.success(t('common.saved'))
     } catch (e) {
-      console.error('Failed to sync base currency', e)
+      logger.error('Failed to sync base currency', e)
       window.$toast?.error(t('common.error'))
     }
   } else {
@@ -612,7 +604,7 @@ async function saveCoingeckoKey() {
     await auth.updateSettings({ coingecko_api_key: key || null })
     window.$toast?.success(t('common.saved'))
   } catch (e) {
-    console.error('Failed to save API key', e)
+    logger.error('Failed to save API key', e)
     window.$toast?.error(t('common.error'))
   } finally {
     savingKey.value = false
@@ -627,7 +619,7 @@ async function testCoingeckoKey() {
     await settingsStore.testCoingeckoKey(key)
     window.$toast?.success(t('settings.coingecko_test_success'))
   } catch (e) {
-    console.error('CoinGecko key test failed', e)
+    logger.error('CoinGecko key test failed', e)
     window.$toast?.error(e.message || t('settings.coingecko_test_failed'))
   } finally {
     coingeckoTestLoading.value = false
@@ -646,10 +638,9 @@ async function generateVapidKeys() {
   if (!confirmed) return
   vapidLoading.value = true
   try {
-    const data = await settingsStore.generateVapidKeys(email)
-    auth.user.vapid_public_key = data.publicKey
-    auth.user.vapid_subject = data.subject
-    vapidEmail.value = data.subject.replace(/^mailto:/i, '')
+    await settingsStore.generateVapidKeys(email)
+    await auth.fetchMe()
+    vapidEmail.value = (auth.user?.vapid_subject || '').replace(/^mailto:/i, '')
     if (push.subscription.value) {
       await push.unsubscribe()
     } else {
@@ -657,7 +648,7 @@ async function generateVapidKeys() {
     }
     window.$toast?.success(t('settings.vapid_generated_success'))
   } catch (e) {
-    console.error('Failed to generate VAPID keys', e)
+    logger.error('Failed to generate VAPID keys', e)
     window.$toast?.error(e.message || t('common.error'))
   } finally {
     vapidLoading.value = false
@@ -676,8 +667,7 @@ async function deleteVapidKeys() {
   vapidDeleteLoading.value = true
   try {
     await settingsStore.deleteVapidKeys()
-    auth.user.vapid_public_key = null
-    auth.user.vapid_subject = null
+    await auth.fetchMe()
     vapidEmail.value = ''
     if (push.subscription.value) {
       await push.unsubscribe()
@@ -686,7 +676,7 @@ async function deleteVapidKeys() {
     }
     window.$toast?.success(t('settings.vapid_deleted_success'))
   } catch (e) {
-    console.error('Failed to delete VAPID keys', e)
+    logger.error('Failed to delete VAPID keys', e)
     window.$toast?.error(e.message || t('common.error'))
   } finally {
     vapidDeleteLoading.value = false
@@ -696,10 +686,10 @@ async function deleteVapidKeys() {
 async function sendTestPush() {
   testLoading.value = true
   try {
-    const data = await api('/send-test', { method: 'POST' })
+    const data = await api('/send-test', { method: 'POST', body: JSON.stringify({}) })
     window.$toast?.success(`${t('notifications.test_push_sent')}: ${data.sent} / ${data.failed}`)
   } catch (e) {
-    console.error('Test push failed', e)
+    logger.error('Test push failed', e)
     window.$toast?.error(e.message || t('notifications.test_push_failed'))
   } finally {
     testLoading.value = false
@@ -715,10 +705,10 @@ async function saveShoutrrrUrl() {
   shoutrrrLoading.value = true
   try {
     await settingsStore.saveShoutrrrUrl(url)
-    auth.user.shoutrrr_url = url
+    await auth.fetchMe()
     window.$toast?.success(t('settings.shoutrrr_saved_success'))
   } catch (e) {
-    console.error('Failed to save Shoutrrr URL', e)
+    logger.error('Failed to save Shoutrrr URL', e)
     window.$toast?.error(e.message || t('common.error'))
   } finally {
     shoutrrrLoading.value = false
@@ -737,12 +727,12 @@ async function disableShoutrrr() {
   shoutrrrLoading.value = true
   try {
     await settingsStore.saveShoutrrrUrl(null)
-    auth.user.shoutrrr_url = null
+    await auth.fetchMe()
     shoutrrrUrl.value = ''
     shoutrrrProvider.value = ''
     window.$toast?.success(t('settings.shoutrrr_disabled_success'))
   } catch (e) {
-    console.error('Failed to disable Shoutrrr', e)
+    logger.error('Failed to disable Shoutrrr', e)
     window.$toast?.error(e.message || t('common.error'))
   } finally {
     shoutrrrLoading.value = false
@@ -752,10 +742,10 @@ async function disableShoutrrr() {
 async function sendTestShoutrrr() {
   shoutrrrTestLoading.value = true
   try {
-    await api('/send-test-shoutrrr', { method: 'POST' })
+    await api('/send-test-shoutrrr', { method: 'POST', body: JSON.stringify({}) })
     window.$toast?.success(t('notifications.test_shoutrrr_sent'))
   } catch (e) {
-    console.error('Test shoutrrr failed', e)
+    logger.error('Test shoutrrr failed', e)
     window.$toast?.error(e.message || t('notifications.test_shoutrrr_failed'))
   } finally {
     shoutrrrTestLoading.value = false
@@ -781,7 +771,7 @@ async function changePassword() {
     await loadSessions()
     window.$toast?.success(t('settings.password_changed'))
   } catch (e) {
-    console.error('Failed to change password', e)
+    logger.error('Failed to change password', e)
     window.$toast?.error(e.message || t('common.error'))
   } finally {
     passwordLoading.value = false
@@ -795,7 +785,7 @@ async function terminateSession(sessionId) {
     await loadSessions()
     window.$toast?.success(t('settings.sessions_terminated'))
   } catch (e) {
-    console.error('Failed to terminate session', e)
+    logger.error('Failed to terminate session', e)
     window.$toast?.error(e.message || t('common.error'))
   } finally {
     sessionsLoading.value = false
@@ -809,7 +799,7 @@ async function logoutAllOtherSessions() {
     await loadSessions()
     window.$toast?.success(t('settings.sessions_terminated'))
   } catch (e) {
-    console.error('Failed to logout all sessions', e)
+    logger.error('Failed to logout all sessions', e)
     window.$toast?.error(e.message || t('common.error'))
   } finally {
     sessionsLoading.value = false
@@ -830,7 +820,7 @@ async function loadDemoData() {
     window.$toast?.success(t('settings.load_demo_success'))
     setTimeout(() => window.location.reload(), 1500)
   } catch (e) {
-    console.error('Load demo data failed', e)
+    logger.error('Load demo data failed', e)
     window.$toast?.error(e.message || t('common.error'))
   } finally {
     demoLoading.value = false
@@ -852,7 +842,7 @@ async function clearDatabase() {
     window.$toast?.success(t('settings.clear_db_success'))
     setTimeout(() => window.location.reload(), 1500)
   } catch (e) {
-    console.error('Clear database failed', e)
+    logger.error('Clear database failed', e)
     window.$toast?.error(e.message || t('common.error'))
   } finally {
     clearLoading.value = false

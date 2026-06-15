@@ -38,8 +38,7 @@
     </div>
 
     <!-- Modal -->
-    <div v-if="showModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" @click.self="showModal = false">
-      <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl w-full max-w-sm p-6">
+    <BaseModal v-model="showModal" widthClass="max-w-sm">
         <h3 class="text-lg font-semibold mb-4">{{ editingTag ? $t('tags.edit') : $t('tags.add') }}</h3>
         <div class="space-y-4">
           <div>
@@ -59,14 +58,14 @@
             {{ saving ? $t('common.loading') : $t('common.save') }}
           </button>
         </div>
-      </div>
-    </div>
+      </BaseModal>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import BaseModal from '@/components/BaseModal.vue'
 import { useRouter } from 'vue-router'
 import { useTagsStore } from '../stores/tags'
 import { useUndo } from '@/composables/useUndo'
@@ -74,7 +73,7 @@ import { useHotkeys } from '@/composables/useHotkeys'
 
 const { t } = useI18n()
 const router = useRouter()
-const undo = useUndo()
+const undo = useUndo('tags')
 const tagsStore = useTagsStore()
 
 useHotkeys({

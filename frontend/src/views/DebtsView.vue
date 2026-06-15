@@ -42,9 +42,7 @@
     </div>
 
     <!-- Add/Edit Modal -->
-    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeModal"></div>
-      <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 relative z-10">
+    <BaseModal v-model="showModal" widthClass="max-w-md">
         <h2 class="text-xl font-bold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
         <form @submit.prevent="saveDebt" class="space-y-4">
           <div>
@@ -96,13 +94,10 @@
             <button type="submit" class="flex-1 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>
-      </div>
-    </div>
+      </BaseModal>
 
     <!-- Payment Modal -->
-    <div v-if="showPaymentModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closePaymentModal"></div>
-      <div class="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-6 relative z-10">
+    <BaseModal v-model="showPaymentModal" widthClass="max-w-sm">
         <h2 class="text-xl font-bold mb-4">{{ $t('debts.pay') }}</h2>
         <form @submit.prevent="savePayment" class="space-y-4">
           <div class="grid grid-cols-2 gap-4">
@@ -134,13 +129,10 @@
             <button type="submit" class="flex-1 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>
-      </div>
-    </div>
+      </BaseModal>
 
     <!-- History Modal -->
-    <div v-if="showHistoryModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeHistoryModal"></div>
-      <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 relative z-10 max-h-[80vh] overflow-y-auto">
+    <BaseModal v-model="showHistoryModal" widthClass="max-w-md" contentClass="max-h-[80vh] overflow-y-auto">
         <h2 class="text-xl font-bold mb-4">{{ $t('debts.history') }}</h2>
         <div v-if="!historyDebt && historyPayments.length === 0" class="text-center text-sm text-slate-500 py-8">{{ $t('debts.no_history') }}</div>
         <div v-else class="relative pl-4 border-l-2 border-slate-200 dark:border-slate-700 space-y-6">
@@ -165,8 +157,7 @@
         <div class="mt-6 flex justify-end">
           <button @click="closeHistoryModal" class="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.close') }}</button>
         </div>
-      </div>
-    </div>
+      </BaseModal>
 
     <QuickAccountModal v-model="showQuickAccount" @created="onQuickAccountCreated" />
   </div>
@@ -180,12 +171,13 @@ import { useRatesStore } from '../stores/rates'
 import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
-import { getUserLocale } from '@/utils/locale'
+import { formatDate } from '@/utils/format'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
+import BaseModal from '@/components/BaseModal.vue'
 import CurrencySelect from '../components/CurrencySelect.vue'
 
 const { t } = useI18n()
-const undo = useUndo()
+const undo = useUndo('debts')
 useHotkeys({
   'ctrl+enter': () => { if (showModal.value) saveDebt() },
   'esc': () => { if (showModal.value) closeModal() }
@@ -212,10 +204,6 @@ onMounted(() => {
 
 function formatConverted(value, currency) {
   return ratesStore.formatConverted(value, currency || baseCurrency.value)
-}
-
-function formatDate(date) {
-  return new Date(date).toLocaleDateString(getUserLocale())
 }
 
 function openModal() {

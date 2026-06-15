@@ -273,7 +273,9 @@
   </template>
 
   <script setup>
-  import { ref, computed, onMounted, onBeforeUnmount, reactive } from 'vue'
+import { logger } from '@/utils/logger.js'
+  import { ref, computed, defineAsyncComponent, onMounted, reactive } from 'vue'
+  import { useDarkMode } from '@/composables/useDarkMode.js'
   import { useI18n } from 'vue-i18n'
   import { useReportsStore } from '../stores/reports'
   import { useAccountsStore } from '../stores/accounts'
@@ -283,7 +285,8 @@
   import { useRatesStore } from '../stores/rates'
   import { formatFull } from '@/utils/currency'
   import { getUserLocale } from '@/utils/locale'
-  import BaseChart from '@/components/BaseChart.vue'
+  import { formatCurrency as formatCurrencyValue } from '@/utils/format'
+  const BaseChart = defineAsyncComponent(() => import('@/components/BaseChart.vue'))
 
   const { t } = useI18n()
 
@@ -297,22 +300,7 @@
   const categoryType = ref('expense')
   const baseCurrency = computed(() => ratesStore.baseCurrency)
 
-  const isDark = ref(document.documentElement.classList.contains('dark'))
-  let themeObserver = null
-
-  onMounted(() => {
-    themeObserver = new MutationObserver(() => {
-      isDark.value = document.documentElement.classList.contains('dark')
-    })
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    })
-  })
-
-  onBeforeUnmount(() => {
-    themeObserver?.disconnect()
-  })
+  const { isDark } = useDarkMode()
 
   const periodOptions = computed(() => [
     { value: 'today', label: t('reports.today') },
@@ -550,7 +538,7 @@ const sankeyData = computed(() => {
   const nodeValues = {}
   const cashFlowName = t('reports.cash_flow')
 
-  // Загружаем данные по доходам
+  // Build income nodes
   const incomeCategories = reportsStore.byCategoryAll.filter(c => c.type === 'income' && parseFloat(c.total) > 0)
   incomeCategories.forEach(cat => {
     if (!nodeNames.has(cat.name)) {
@@ -563,7 +551,7 @@ const sankeyData = computed(() => {
       nodeNames.add(cat.name)
       nodeValues[cat.name] = value
     }
-    // Связываем доходы с Cash Flow
+    // Link income categories to Cash Flow
     links.push({
       source: cat.name,
       target: cashFlowName,
@@ -575,7 +563,7 @@ const sankeyData = computed(() => {
     })
   })
 
-  // Добавляем центральный узел Cash Flow
+  // Add central Cash Flow node
   if (!nodeNames.has(cashFlowName)) {
     const totalIncome = incomeCategories.reduce((sum, c) => sum + parseFloat(c.total), 0)
     nodes.push({
@@ -587,7 +575,7 @@ const sankeyData = computed(() => {
     nodeValues[cashFlowName] = totalIncome
   }
 
-  // Загружаем данные по расходам
+  // Build expense nodes
   const expenseCategories = reportsStore.byCategoryAll.filter(c => c.type === 'expense' && parseFloat(c.total) > 0)
   expenseCategories.forEach(cat => {
     if (!nodeNames.has(cat.name)) {
@@ -600,7 +588,7 @@ const sankeyData = computed(() => {
       nodeNames.add(cat.name)
       nodeValues[cat.name] = value
     }
-    // Связываем Cash Flow с расходами
+    // Link Cash Flow to expense categories
     links.push({
       source: cashFlowName,
       target: cat.name,
@@ -689,11 +677,11 @@ const sankeyChartOption = computed(() => {
       await Promise.all([
         reportsStore.fetchSummary({ from: filters.from, to: filters.to }),
         reportsStore.fetchByCategory({ from: filters.from, to: filters.to, type: categoryType.value }),
-        reportsStore.fetchByCategoryAll({ from: filters.from, to: filters.to }), // Загружаем все категории для Sankey
+        reportsStore.fetchByCategoryAll({ from: filters.from, to: filters.to }), // Load all categories for the Sankey chart
         reportsStore.fetchTrend({ from: filters.from, to: filters.to })
       ])
     } catch (e) {
-      console.error(e)
+      logger.error(e)
       window.$toast?.showToast(e.message || 'Request failed', 'error')
     } finally {
       loading.value = false
@@ -707,7 +695,7 @@ const sankeyChartOption = computed(() => {
   }
 
   function formatCurrency(value) {
-    return new Intl.NumberFormat(getUserLocale(), { style: 'currency', currency: baseCurrency.value }).format(value || 0)
+    return formatCurrencyValue(value || 0, baseCurrency.value)
   }
 
   function exportData() {

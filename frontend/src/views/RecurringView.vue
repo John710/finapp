@@ -41,9 +41,7 @@
     </div>
 
     <!-- Modal -->
-    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeModal"></div>
-      <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 relative z-10">
+    <BaseModal v-model="showModal" widthClass="max-w-md">
         <h2 class="text-xl font-bold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
         <form @submit.prevent="saveRule" class="space-y-4">
           <div>
@@ -108,8 +106,7 @@
             <button type="submit" class="flex-1 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>
-      </div>
-    </div>
+      </BaseModal>
 
     <QuickAccountModal v-model="showQuickAccount" @created="onQuickAccountCreated" />
     <QuickCategoryModal v-model="showQuickCategory" :default-type="form.type" @created="onQuickCategoryCreated" />
@@ -125,13 +122,14 @@ import { useRatesStore } from '../stores/rates'
 import { useI18n } from 'vue-i18n'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { useUndo } from '@/composables/useUndo'
-import { getUserLocale } from '@/utils/locale'
+import { formatDate as formatDateValue } from '@/utils/format'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import QuickCategoryModal from '../components/QuickCategoryModal.vue'
 import CurrencySelect from '../components/CurrencySelect.vue'
+import BaseModal from '@/components/BaseModal.vue'
 
 const { t } = useI18n()
-const undo = useUndo()
+const undo = useUndo('recurring')
 useHotkeys({
   'ctrl+enter': () => { if (showModal.value) saveRule() },
   'esc': () => { if (showModal.value) closeModal() }
@@ -162,7 +160,7 @@ function formatConverted(value, currency) {
 }
 
 function formatDate(date) {
-  return new Date(date).toLocaleDateString(getUserLocale())
+  return formatDateValue(date)
 }
 
 function openModal() {

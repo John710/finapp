@@ -44,9 +44,7 @@
     </div>
 
     <!-- Modal -->
-    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeModal"></div>
-      <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 relative z-10">
+    <BaseModal v-model="showModal" widthClass="max-w-md">
         <h2 class="text-xl font-bold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
         <form @submit.prevent="saveBudget" class="space-y-4">
           <div>
@@ -83,8 +81,7 @@
             <button type="submit" class="flex-1 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>
-      </div>
-    </div>
+      </BaseModal>
 
     <QuickCategoryModal v-model="showQuickCategory" default-type="expense" @created="onQuickCategoryCreated" />
   </div>
@@ -100,9 +97,10 @@ import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
 import QuickCategoryModal from '../components/QuickCategoryModal.vue'
 import CurrencySelect from '../components/CurrencySelect.vue'
+import BaseModal from '@/components/BaseModal.vue'
 
 const { t } = useI18n()
-const undo = useUndo()
+const undo = useUndo('budgets')
 useHotkeys({
   'ctrl+enter': () => { if (showModal.value) saveBudget() },
   'esc': () => { if (showModal.value) closeModal() }

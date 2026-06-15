@@ -116,9 +116,7 @@
     </div>
 
     <!-- Modal -->
-    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeModal"></div>
-      <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 relative z-10">
+    <BaseModal v-model="showModal" widthClass="max-w-md">
         <h2 class="text-xl font-bold mb-4">{{ $t('common.add') }}</h2>
         <form @submit.prevent="saveTransaction" class="space-y-4">
           <div>
@@ -205,8 +203,7 @@
             <button type="submit" class="flex-1 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>
-      </div>
-    </div>
+      </BaseModal>
 
     <ImportCsvModal v-model="showImportModal" @imported="transactionsStore.fetchTransactions()" />
     <QuickAccountModal v-model="showQuickAccount" @created="onQuickAccountCreated" />
@@ -226,25 +223,26 @@ import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { formatFull } from '@/utils/currency'
-import { getUserLocale } from '@/utils/locale'
+import { formatDate as formatDateValue } from '@/utils/format'
 import { debounce } from '@/utils/debounce'
 import ImportCsvModal from '../components/ImportCsvModal.vue'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import QuickCategoryModal from '../components/QuickCategoryModal.vue'
 import Icon from '../components/Icon.vue'
+import BaseModal from '@/components/BaseModal.vue'
+import { presetColors } from '@/utils/colors'
 
 const { t } = useI18n()
 const route = useRoute()
 const ratesStore = useRatesStore()
 const baseCurrency = computed(() => ratesStore.baseCurrency)
-const undo = useUndo()
+const undo = useUndo('transactions')
 
 useHotkeys({
   'ctrl+enter': () => { if (showModal.value) saveTransaction() },
   'esc': () => { if (showModal.value) closeModal() }
 })
 
-const presetColors = ['#f43f5e', '#fb923c', '#fbbf24', '#34d399', '#22d3ee', '#60a5fa', '#818cf8', '#a78bfa', '#f472b6', '#94a3b8']
 
 const transactionsStore = useTransactionsStore()
 const accountsStore = useAccountsStore()
@@ -327,7 +325,7 @@ function formatNote(tx) {
 }
 
 function formatDate(date) {
-  return new Date(date).toLocaleDateString(getUserLocale())
+  return formatDateValue(date)
 }
 
 function formatAmount(tx) {

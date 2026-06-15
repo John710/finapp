@@ -24,7 +24,7 @@
             class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer"
             @click="editCategory(cat)">
             <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" :style="{ backgroundColor: cat.color + '20', color: cat.color }">
-              <span v-if="cat.icon_custom" v-html="sanitizeSvg(cat.icon_custom)"></span>
+              <SafeSvg v-if="cat.icon_custom" :svg="cat.icon_custom" class="w-5 h-5" />
               <Icon v-else-if="cat.icon" :name="cat.icon" set="category" class="w-5 h-5" />
               <Icon v-else name="tag" class="w-5 h-5" />
             </div>
@@ -38,9 +38,7 @@
     </div>
 
     <!-- Modal -->
-    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeModal"></div>
-      <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl p-6 relative z-10 max-h-[90vh] overflow-y-auto">
+    <BaseModal v-model="showModal" widthClass="max-w-lg" contentClass="max-h-[90vh] overflow-y-auto">
         <h2 class="text-xl font-bold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
         <form @submit.prevent="saveCategory" class="space-y-4">
           <div>
@@ -89,18 +87,19 @@
             <button type="submit" class="flex-1 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>
-      </div>
-    </div>
+      </BaseModal>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, reactive, computed } from 'vue'
 import { useCategoriesStore } from '../stores/categories'
-import { sanitizeSvg } from '../utils/sanitizeSvg.js'
+import SafeSvg from '../components/SafeSvg.vue'
 import { useI18n } from 'vue-i18n'
 import { useHotkeys } from '@/composables/useHotkeys'
-import { categoryIcons } from '@/utils/icons'
+import { categoryIconImports } from '@/utils/icons'
+import { presetColors } from '@/utils/colors'
+import BaseModal from '@/components/BaseModal.vue'
 
 const { t } = useI18n()
 useHotkeys({
@@ -113,8 +112,7 @@ const isEditing = ref(false)
 const fileInput = ref(null)
 const form = reactive({ name: '', type: 'expense', color: '#f43f5e', icon: 'tag', icon_custom: null, parent_id: null })
 
-const presetColors = ['#f43f5e', '#fb923c', '#fbbf24', '#34d399', '#22d3ee', '#60a5fa', '#818cf8', '#a78bfa', '#f472b6', '#94a3b8']
-const presetIcons = Object.keys(categoryIcons).slice(0, 49)
+const presetIcons = Object.keys(categoryIconImports).slice(0, 49)
 
 onMounted(() => categoriesStore.fetchCategories())
 
