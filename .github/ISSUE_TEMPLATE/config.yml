@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Project documentation
+    url: https://github.com/John710/finapp/blob/main/README.md
+    about: Please check the README before opening an issue.

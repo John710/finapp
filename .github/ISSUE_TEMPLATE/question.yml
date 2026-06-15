@@ -1,0 +1,50 @@
+name: ❓ Question
+description: Ask a question about FinApp
+title: "[QUESTION] "
+labels:
+  - question
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template if you need help understanding how something works. For bugs or feature requests, please use the dedicated templates.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What is your question?
+      description: Ask clearly and concisely.
+      placeholder: How do I configure push notifications without a CoinGecko API key?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the project does this relate to?
+      options:
+        - Backend
+        - Frontend
+        - DevOps / CI/CD
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What have you already tried? What is your environment?
+      placeholder: |
+        FinApp version: v1.2.3
+        Deployment: Docker Compose
+        Already checked: README, environment variables
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional information
+      description: Logs, screenshots, or anything else that helps understand the question.

@@ -1,0 +1,56 @@
+name: ✨ Feature Request
+description: Suggest an idea for FinApp
+title: "[FEATURE] "
+labels:
+  - enhancement
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! Please describe the problem and the proposed solution as clearly as possible.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem does this feature solve? What is inconvenient right now?
+      placeholder: I have to manually recalculate the account balance after each CSV import.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you like this to work?
+      placeholder: After importing a CSV, automatically recalculate the account balance and show the total change.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the project does this relate to?
+      options:
+        - Backend
+        - Frontend
+        - DevOps / CI/CD
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you consider?
+      placeholder: A manual "Recalculate balance" button could be added, but it does not fully solve the problem.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Screenshots, mockups, or links to similar solutions.

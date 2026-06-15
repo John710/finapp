@@ -1,0 +1,80 @@
+name: 🐞 Bug Report
+description: Report a bug in FinApp
+title: "[BUG] "
+labels:
+  - bug
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please search existing issues first to avoid duplicates.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is happening? What is the visible problem?
+      placeholder: When I click "Save", nothing happens...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+      placeholder: A success notification should appear.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal sequence of actions that triggers the bug.
+      placeholder: |
+        1. Open Settings
+        2. Enable notifications
+        3. Click Save
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Where does the issue occur?
+      options:
+        - Backend
+        - Frontend
+        - DevOps / CI/CD
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Version, browser/OS, and how you run the app (Docker, locally, etc.).
+      placeholder: |
+        FinApp: v1.2.3
+        Browser: Chrome 126 / Windows 11
+        Run: docker compose up
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Console errors, network responses, screenshots.
+      placeholder: Paste logs here...
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues and this bug has not been reported yet.
+          required: true
