@@ -3,8 +3,8 @@
     <!-- Sidebar (desktop) -->
     <aside class="fixed left-0 top-0 h-full w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 hidden lg:flex flex-col z-40">
       <div class="h-16 flex items-center px-6 border-b border-slate-200 dark:border-slate-800">
-        <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center mr-3">
-          <Icon name="money" class="w-5 h-5 text-white" />
+        <div class="w-8 h-8 rounded-lg mr-3 overflow-hidden flex-shrink-0">
+          <img src="/icon-192.png" alt="FinApp" class="w-full h-full object-cover" />
         </div>
         <span class="font-bold text-lg tracking-tight">FinApp</span>
       </div>
@@ -29,8 +29,8 @@
       <!-- Header -->
       <header class="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-8 sticky top-0 z-30">
         <div class="flex items-center lg:hidden">
-          <div class="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center mr-3">
-            <Icon name="money" class="w-5 h-5 text-white" />
+          <div class="w-8 h-8 rounded-lg mr-3 overflow-hidden flex-shrink-0">
+            <img src="/icon-192.png" alt="FinApp" class="w-full h-full object-cover" />
           </div>
           <span class="font-bold text-lg">FinApp</span>
         </div>
@@ -50,7 +50,7 @@
               </div>
               <div class="px-4 py-2 border-b border-slate-200 dark:border-slate-800">
                 <select v-model="notifStore.filterType" @change="notifStore.fetchNotifications()" class="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-2 py-1">
-                  <option value="">{{ $t('common.all') || 'Все' }}</option>
+                  <option value="">{{ $t('common.all') }}</option>
                   <option value="budget_exceeded">{{ $t('budgets.title') }} — {{ $t('budgets.exceeded') }}</option>
                   <option value="budget_warning">{{ $t('budgets.title') }} — {{ $t('budgets.warning') }}</option>
                   <option value="goal_reached">{{ $t('accounts.goals_title') }}</option>
@@ -162,6 +162,7 @@
 </template>
 
 <script setup>
+import { logger } from '@/utils/logger.js'
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -169,18 +170,20 @@ import { useAuthStore } from '../stores/auth'
 import { useNotificationsStore } from '../stores/notifications'
 import { useUndo } from '@/composables/useUndo'
 import { useToast } from '@/composables/useToast'
+import { useTheme } from '@/composables/useTheme'
+import { useClickOutside } from '@/composables/useClickOutside'
+import { formatNotifDate } from '@/utils/format'
 import CommandPalette from '@/components/CommandPalette.vue'
 import HelpModal from '@/components/HelpModal.vue'
 import ToastContainer from '@/components/ToastContainer.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import packageJson from '../../package.json'
-import { getUserLocale } from '@/utils/locale'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const notifStore = useNotificationsStore()
-const undo = useUndo()
+const undo = useUndo(route.name?.toLowerCase() || 'global')
 const { t } = useI18n()
 
 const currentVersion = packageJson.version
@@ -192,13 +195,18 @@ const showCommandPalette = ref(false)
 const showHelp = ref(false)
 const confirmModalRef = ref(null)
 
-const isDark = ref(document.documentElement.classList.contains('dark'))
+const { isDark, toggleTheme } = useTheme()
 const showNotifs = ref(false)
 const showGithubMenu = ref(false)
 const isHoveringIssue = ref(false)
 const isHoveringStar = ref(false)
 const notifDropdownRef = ref(null)
 const githubDropdownRef = ref(null)
+
+useClickOutside([notifDropdownRef, githubDropdownRef], () => {
+  showNotifs.value = false
+  showGithubMenu.value = false
+})
 
 // Global toast & confirm for views
 const toast = useToast()
@@ -209,8 +217,8 @@ if (typeof window !== 'undefined') {
 
 // Global hotkeys — use window listener for reliability across layouts
 function onGlobalKeydown(e) {
-  // Ctrl+Shift+K или Ctrl+Shift+л → Command palette
-  if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'k') || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'л')) {
+  // Ctrl+Shift+K → Command palette
+  if (e.ctrlKey && e.shiftKey && e.code === 'KeyK') {
     e.preventDefault()
     showCommandPalette.value = true
     return
@@ -236,20 +244,11 @@ function onGlobalKeydown(e) {
     }
     return
   }
-  // Ctrl+Shift+N или Ctrl+Shift+т → New transaction
-  if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'n') || (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'т')) {
+  // Ctrl+Shift+N → New transaction
+  if (e.ctrlKey && e.shiftKey && e.code === 'KeyN') {
     e.preventDefault()
     window.dispatchEvent(new CustomEvent('open-transaction-modal'))
     return
-  }
-}
-
-function onDocClick(e) {
-  if (showNotifs.value && notifDropdownRef.value && !notifDropdownRef.value.contains(e.target)) {
-    showNotifs.value = false
-  }
-  if (showGithubMenu.value && githubDropdownRef.value && !githubDropdownRef.value.contains(e.target)) {
-    showGithubMenu.value = false
   }
 }
 
@@ -267,7 +266,7 @@ async function checkForUpdates() {
       hasUpdate.value = isVersionGreater(tag, currentVersion)
     }
   } catch (e) {
-    console.error('Failed to check for updates:', e)
+    logger.error('Failed to check for updates:', e)
   } finally {
     checkingUpdates.value = false
   }
@@ -275,31 +274,43 @@ async function checkForUpdates() {
 
 let notifPollInterval = null
 
+function startNotifPoll() {
+  notifPollInterval = setInterval(() => {
+    notifStore.fetchUnreadCount()
+  }, 60000)
+}
+
+function onVisibilityChange() {
+  if (document.hidden) {
+    if (notifPollInterval) {
+      clearInterval(notifPollInterval)
+      notifPollInterval = null
+    }
+  } else {
+    notifStore.fetchUnreadCount()
+    if (!notifPollInterval) startNotifPoll()
+  }
+}
+
 onMounted(() => {
   window.addEventListener('keydown', onGlobalKeydown)
   notifStore.fetchUnreadCount()
   notifStore.fetchNotifications()
-  document.addEventListener('click', onDocClick)
   checkForUpdates()
-  notifPollInterval = setInterval(() => {
-    notifStore.fetchUnreadCount()
-  }, 60000)
+  startNotifPoll()
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onGlobalKeydown)
-  document.removeEventListener('click', onDocClick)
   if (notifPollInterval) clearInterval(notifPollInterval)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 
 function openNotif(n) {
   if (!n.is_read) notifStore.markRead(n.id)
   showNotifs.value = false
   if (n.data?.url) router.push(n.data.url)
-}
-
-function formatNotifDate(date) {
-  return new Date(date).toLocaleDateString(getUserLocale())
 }
 
 function isVersionGreater(latest, current) {
@@ -321,19 +332,6 @@ const pageTitle = computed(() => {
   if (!key) return ''
   return t(`nav.${key}`)
 })
-
-function toggleTheme() {
-  const root = document.documentElement
-  if (root.classList.contains('dark')) {
-    root.classList.remove('dark')
-    localStorage.setItem('theme', 'light')
-    isDark.value = false
-  } else {
-    root.classList.add('dark')
-    localStorage.setItem('theme', 'dark')
-    isDark.value = true
-  }
-}
 
 async function logout() {
   await auth.logout()
