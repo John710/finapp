@@ -26,6 +26,16 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    assetsDir: 'assets'
+    assetsDir: 'assets',
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (/\/(echarts|vue-echarts)\//.test(id) || id.includes('echarts')) {
+            return 'echarts'
+          }
+        }
+      }
+    }
   }
 })

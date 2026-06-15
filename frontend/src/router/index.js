@@ -4,8 +4,12 @@ import { useAuthStore } from '../stores/auth'
 const routes = [
   {
     path: '/setup',
-    name: 'Setup',
-    component: () => import('../views/SetupView.vue'),
+    redirect: '/register'
+  },
+  {
+    path: '/register',
+    name: 'Register',
+    component: () => import('../views/RegisterView.vue'),
     meta: { public: true }
   },
   {
@@ -39,32 +43,53 @@ const router = createRouter({
   routes
 })
 
+let setupChecked = false
+let setupRequired = false
+
+async function fetchSetupRequired() {
+  try {
+    const res = await fetch('/api/v1/auth/setup-required')
+    if (res.ok) {
+      const data = await res.json()
+      setupRequired = data.required
+      setupChecked = true
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
 router.beforeEach(async (to, from, next) => {
   const auth = useAuthStore()
   if (!auth.checked) {
     await auth.checkAuth()
   }
 
-  // Check if setup is required
-  if (to.path !== '/setup') {
-    try {
-      const res = await fetch('/api/v1/auth/setup-required')
-      if (res.ok) {
-        const data = await res.json()
-        if (data.required) {
-          next('/setup')
-          return
-        }
-      }
-    } catch (e) {
-      // ignore
-    }
+  // Authenticated users have no business on public auth pages.
+  if (auth.isAuthenticated && (to.path === '/login' || to.path === '/register')) {
+    next('/')
+    return
+  }
+
+  // Check setup state on the first guarded navigation and when accessing auth pages.
+  if (!setupChecked || to.path === '/login' || to.path === '/register') {
+    await fetchSetupRequired()
+  }
+
+  // If no user exists yet, force registration.
+  if (setupRequired && to.path !== '/register') {
+    next('/register')
+    return
+  }
+
+  // If setup is already done, registration page is not reachable.
+  if (!setupRequired && to.path === '/register') {
+    next('/login')
+    return
   }
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     next('/login')
-  } else if (to.path === '/login' && auth.isAuthenticated) {
-    next('/')
   } else {
     next()
   }
