@@ -7,7 +7,8 @@ export const up = (pgm) => {
     created_at: { type: 'timestamp', notNull: true, default: pgm.func('now()') }
   })
 
-  pgm.createIndex('refresh_tokens', 'token_hash')
+  pgm.createIndex('refresh_tokens', ['user_id', 'token_hash'], { unique: true })
+  pgm.createIndex('refresh_tokens', 'expires_at')
   pgm.createIndex('refresh_tokens', 'user_id')
 }
 
