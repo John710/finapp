@@ -638,7 +638,8 @@ async function generateVapidKeys() {
   if (!confirmed) return
   vapidLoading.value = true
   try {
-    await settingsStore.generateVapidKeys(email)
+    const result = await settingsStore.generateVapidKeys(email)
+    push.serverConfigured.value = !!result.publicKey
     await auth.fetchMe()
     vapidEmail.value = (auth.user?.vapid_subject || '').replace(/^mailto:/i, '')
     await push.checkServerConfigured()
@@ -663,6 +664,7 @@ async function deleteVapidKeys() {
   vapidDeleteLoading.value = true
   try {
     await settingsStore.deleteVapidKeys()
+    push.serverConfigured.value = false
     await auth.fetchMe()
     vapidEmail.value = ''
     await push.checkServerConfigured()

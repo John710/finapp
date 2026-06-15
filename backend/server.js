@@ -47,7 +47,7 @@ const trustedProxies = process.env.TRUSTED_PROXIES
 async function start() {
   const app = Fastify({
     logger: {
-      level: isProduction ? 'warn' : 'info'
+      level: process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug')
     },
     trustProxy: trustedProxies
   })
@@ -160,6 +160,15 @@ async function start() {
   await app.register(importRoutes, { prefix: '/api/v1' })
   await app.register(notificationRoutes, { prefix: '/api/v1' })
   await app.register(demodataRoutes, { prefix: '/api/v1' })
+
+  // Page access logging (skip API and static assets)
+  app.addHook('onRequest', async (request, reply) => {
+    const url = request.url
+    const isStatic = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json|map)(\?.*)?$/.test(url)
+    if (!url.startsWith('/api/') && !isStatic) {
+      app.log.info({ method: request.method, url, ip: request.ip }, 'Page request')
+    }
+  })
 
   // SPA fallback and API 404
   app.setNotFoundHandler(async (request, reply) => {
