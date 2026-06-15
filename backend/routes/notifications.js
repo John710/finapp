@@ -5,7 +5,7 @@ import { encrypt, decrypt, isEncrypted } from '../services/crypto.js'
 
 export default async function (fastify, opts) {
   fastify.decorate('pushLimit', pLimit(5))
-  fastify.get('/vapid-public-key', { config: { public: true } }, async (request, reply) => {
+  fastify.get('/vapid-public-key', async (request, reply) => {
     const userId = request.user?.userId
     if (!userId) return { publicKey: null }
     const { rows } = await fastify.db.query(

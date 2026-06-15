@@ -49,7 +49,8 @@ async function start() {
     logger: {
       level: process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug')
     },
-    trustProxy: trustedProxies
+    trustProxy: trustedProxies,
+    disableRequestLogging: true
   })
 
   // Static files (production build) — register BEFORE rate-limit so assets are not throttled
@@ -161,11 +162,11 @@ async function start() {
   await app.register(notificationRoutes, { prefix: '/api/v1' })
   await app.register(demodataRoutes, { prefix: '/api/v1' })
 
-  // Page access logging (skip API and static assets)
+  // Page access logging (skip API, static assets and healthcheck)
   app.addHook('onRequest', async (request, reply) => {
     const url = request.url
     const isStatic = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|json|map)(\?.*)?$/.test(url)
-    if (!url.startsWith('/api/') && !isStatic) {
+    if (url !== '/health' && !url.startsWith('/api/') && !isStatic) {
       app.log.info({ method: request.method, url, ip: request.ip }, 'Page request')
     }
   })
