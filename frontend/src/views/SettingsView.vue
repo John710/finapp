@@ -643,6 +643,13 @@ async function generateVapidKeys() {
     await auth.fetchMe()
     vapidEmail.value = (auth.user?.vapid_subject || '').replace(/^mailto:/i, '')
     await push.checkServerConfigured()
+    // Server deleted old subscriptions; browser subscription is tied to old keys
+    if (push.subscription.value) {
+      try {
+        await push.subscription.value.unsubscribe()
+      } catch {}
+      push.subscription.value = null
+    }
     window.$toast?.success(t('settings.vapid_generated_success'))
   } catch (e) {
     logger.error('Failed to generate VAPID keys', e)
@@ -668,6 +675,12 @@ async function deleteVapidKeys() {
     await auth.fetchMe()
     vapidEmail.value = ''
     await push.checkServerConfigured()
+    if (push.subscription.value) {
+      try {
+        await push.subscription.value.unsubscribe()
+      } catch {}
+      push.subscription.value = null
+    }
     window.$toast?.success(t('settings.vapid_deleted_success'))
   } catch (e) {
     logger.error('Failed to delete VAPID keys', e)
