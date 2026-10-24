@@ -162,7 +162,8 @@ async function authRoutes(fastify, opts) {
         shoutrrr_url: maskSecret(decrypt(user.shoutrrr_url)),
         shoutrrr_url_set: Boolean(user.shoutrrr_url),
         vapid_public_key: user.vapid_public_key,
-        vapid_subject: user.vapid_subject
+        vapid_subject: user.vapid_subject,
+        avatar_set: Boolean(user.avatar)
       }
     }
   })
@@ -268,7 +269,8 @@ async function authRoutes(fastify, opts) {
           language: { type: 'string', enum: ['ru', 'en'] },
           base_currency: { type: 'string', pattern: '^[A-Z]{3}$' },
           coingecko_api_key: { type: ['string', 'null'], maxLength: 255 },
-          shoutrrr_url: { type: ['string', 'null'], maxLength: 2048 }
+          shoutrrr_url: { type: ['string', 'null'], maxLength: 2048 },
+          avatar: { type: ['string', 'null'], maxLength: 700000 }
         }
       }
     }
@@ -276,12 +278,24 @@ async function authRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     try {
-      const { language, base_currency, coingecko_api_key, shoutrrr_url } = request.body
+      const { language, base_currency, coingecko_api_key, shoutrrr_url, avatar } = request.body
       const fields = []
       const values = []
       let idx = 1
       if (language !== undefined) { fields.push(`language = $${idx++}`); values.push(language) }
       if (base_currency !== undefined) { fields.push(`base_currency = $${idx++}`); values.push(base_currency) }
+      // The avatar is a raster-image data URL (or null to remove). SVG is
+      // rejected on purpose: stored SVG can execute script in some contexts.
+      if (avatar !== undefined) {
+        const valid = avatar === null
+          || (/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(avatar) && avatar.length <= 700000)
+        if (!valid) {
+          reply.code(400)
+          return { error: t('errors.avatar_invalid', {}, lang) }
+        }
+        fields.push(`avatar = $${idx++}`)
+        values.push(avatar)
+      }
       // Masked previews sent back by the client mean "keep the stored value"
       if (coingecko_api_key !== undefined && !isMaskedSecret(coingecko_api_key)) { fields.push(`coingecko_api_key = $${idx++}`); values.push(encrypt((coingecko_api_key || '').trim() || null)) }
       if (shoutrrr_url !== undefined && !isMaskedSecret(shoutrrr_url)) { fields.push(`shoutrrr_url = $${idx++}`); values.push(encrypt((shoutrrr_url || '').trim() || null)) }
@@ -304,7 +318,7 @@ async function authRoutes(fastify, opts) {
     const lang = await getUserLang(fastify.db, request.user.userId)
     const result = await fastify.db.query(
       `SELECT id, login, language, base_currency, coingecko_api_key,
-              shoutrrr_url, vapid_public_key, vapid_subject
+              shoutrrr_url, vapid_public_key, vapid_subject, avatar
        FROM users WHERE id = $1`,
       [request.user.userId]
     )
@@ -323,7 +337,8 @@ async function authRoutes(fastify, opts) {
       shoutrrr_url: maskSecret(decrypt(user.shoutrrr_url)),
       shoutrrr_url_set: Boolean(user.shoutrrr_url),
       vapid_public_key: user.vapid_public_key,
-      vapid_subject: user.vapid_subject
+      vapid_subject: user.vapid_subject,
+      avatar_set: Boolean(user.avatar)
     }
   })
 
@@ -400,6 +415,23 @@ async function authRoutes(fastify, opts) {
     fastify.log.info({ userId, ip: request.ip }, 'Password changed')
 
     return { success: true }
+  })
+
+  fastify.get('/users/me/avatar', async (request, reply) => {
+    const { rows } = await fastify.db.query('SELECT avatar FROM users WHERE id = $1', [request.user.userId])
+    const avatar = rows[0]?.avatar
+    const match = avatar ? avatar.match(/^data:(image\/[a-z+]+);base64,([A-Za-z0-9+/=]+)$/) : null
+    if (!match) {
+      reply.code(404)
+      return { error: t('errors.avatar_not_found', {}, await getUserLang(fastify.db, request.user.userId)) }
+    }
+    const etag = crypto.createHash('md5').update(avatar).digest('hex')
+    reply.header('ETag', `"${etag}"`)
+    // no-cache = always revalidate with the ETag: an avatar change is picked
+    // up immediately, unchanged avatars answer with a cheap 304
+    reply.header('Cache-Control', 'private, no-cache')
+    reply.header('Content-Type', match[1])
+    return Buffer.from(match[2], 'base64')
   })
 
   fastify.get('/users/sessions', async (request, reply) => {

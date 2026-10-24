@@ -52,7 +52,9 @@
     "duplicate": "A record with the same unique value already exists",
     "conflict": "The operation conflicts with existing data",
     "bad_request": "Invalid request data",
-    "internal": "Internal server error"
+    "internal": "Internal server error",
+    "avatar_invalid": "Avatar must be a PNG, JPEG, WebP or GIF image",
+    "avatar_not_found": "Avatar not found"
   },
   "notifications": {
     "recurring_created": "Recurring transaction created",
