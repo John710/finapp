@@ -142,7 +142,7 @@
                 <Icon :name="t.category_icon || 'money'" set="category" class="w-5 h-5" />
               </div>
               <div class="min-w-0">
-                <p class="font-semibold text-sm truncate">{{ formatNote(t.note) || t.category_name || '-' }}</p>
+                <p class="font-semibold text-sm truncate">{{ formatNote(t) || t.category_name || '-' }}</p>
                 <p class="text-xs text-slate-400 mt-0.5">{{ formatDate(t.date) }} • {{ t.account_name }}</p>
               </div>
             </div>
@@ -169,6 +169,8 @@ import { formatFull } from '@/utils/currency'
 import { getUserLocale } from '@/utils/locale'
 import { formatCurrency as formatCurrencyValue, formatDate as formatDateValue } from '@/utils/format'
 import { useDarkMode } from '@/composables/useDarkMode.js'
+import { useTransactionDisplay } from '@/composables/useTransactionDisplay'
+import { useChartOptions } from '@/composables/useChartOptions'
 const BaseChart = defineAsyncComponent(() => import('@/components/BaseChart.vue'))
 
 const { t } = useI18n()
@@ -182,6 +184,8 @@ const recurringStore = useRecurringStore()
 const baseCurrency = computed(() => ratesStore.baseCurrency)
 
 const { isDark } = useDarkMode()
+const { formatNote } = useTransactionDisplay(accountsStore)
+const { trendChartOption: buildTrendOption, categoryChartOption: buildCategoryOption } = useChartOptions({ isDark, baseCurrency, ratesStore })
 
 onMounted(async () => {
   accountsStore.fetchAccounts()
@@ -258,150 +262,9 @@ const upcomingRecurringTotal = computed(() => {
 
 const recentTransactions = computed(() => transactionsStore.transactions.slice(0, 5))
 
-const trendChartOption = computed(() => {
-  return {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' },
-      backgroundColor: isDark.value ? '#1e293b' : '#ffffff',
-      borderColor: isDark.value ? '#334155' : '#eceaf6',
-      textStyle: { color: isDark.value ? '#e2e8f0' : '#3f3d56' },
-      formatter: (params) => {
-        let result = params[0].axisValue + '<br/>'
-        params.forEach(p => {
-          result += `${p.marker} ${p.seriesName}: ${formatFull(p.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}<br/>`
-        })
-        return result
-      }
-    },
-    legend: { show: false },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      top: '10%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      data: reportsStore.trend.map(t => t.month),
-      axisLine: { lineStyle: { color: isDark.value ? '#334155' : '#eceaf6' } },
-      axisTick: { show: false }
-    },
-    yAxis: {
-      type: 'value',
-      splitLine: { lineStyle: { color: isDark.value ? 'rgba(148,163,184,0.12)' : '#f1f1f7' } }
-    },
-    series: [
-      {
-        name: t('reports.income'),
-        type: 'bar',
-        data: reportsStore.trend.map(t => t.income),
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: '#8b7fe8' },
-              { offset: 1, color: '#7c6fde' }
-            ]
-          },
-          borderRadius: [8, 8, 0, 0]
-        }
-      },
-      {
-        name: t('reports.expense'),
-        type: 'bar',
-        data: reportsStore.trend.map(t => t.expense),
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: '#c3cbef' },
-              { offset: 1, color: '#b8c1ea' }
-            ]
-          },
-          borderRadius: [8, 8, 0, 0]
-        }
-      },
-      {
-        name: t('transactions.types.transfer'),
-        type: 'bar',
-        data: reportsStore.trend.map(t => t.transfer || 0),
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: '#a5d4f6' },
-              { offset: 1, color: '#8fc3ee' }
-            ]
-          },
-          borderRadius: [8, 8, 0, 0]
-        }
-      }
-    ]
-  }
-})
+const trendChartOption = computed(() => buildTrendOption(reportsStore.trend))
 
-const categoryChartOption = computed(() => {
-  const items = reportsStore.byCategory.filter(c => parseFloat(c.total) > 0)
-  return {
-    tooltip: {
-      trigger: 'item',
-      backgroundColor: isDark.value ? '#1e293b' : '#ffffff',
-      borderColor: isDark.value ? '#334155' : '#eceaf6',
-      textStyle: { color: isDark.value ? '#e2e8f0' : '#3f3d56' },
-      formatter: (params) => {
-        return `${params.marker} ${params.name}: ${formatFull(params.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)} (${params.percent}%)`
-      }
-    },
-    legend: { show: false },
-    series: [
-      {
-        name: t('categories.title'),
-        type: 'pie',
-        radius: ['42%', '72%'],
-        center: ['50%', '50%'],
-        avoidLabelOverlap: true,
-        itemStyle: {
-          borderRadius: 8,
-          borderColor: isDark.value ? '#0f172a' : '#ffffff',
-          borderWidth: 3
-        },
-        label: {
-          show: true,
-          formatter: '{b}: {d}%',
-          fontSize: 11
-        },
-        emphasis: {
-          scale: true,
-          scaleSize: 10,
-          label: {
-            show: true,
-            fontSize: 14,
-            fontWeight: 'bold'
-          }
-        },
-        data: items.map(c => ({
-          value: parseFloat(c.total),
-          name: c.name,
-          itemStyle: { color: c.color || '#94a3b8' }
-        }))
-      }
-    ]
-  }
-})
+const categoryChartOption = computed(() => buildCategoryOption(reportsStore.byCategory.filter(c => parseFloat(c.total) > 0)))
 
 const netWorthChartOption = computed(() => {
   const values = reportsStore.netWorth.map(n => parseFloat(n.balance))
@@ -568,15 +431,6 @@ const savingsRateChartOption = computed(() => {
 
 function formatCurrency(value) {
   return formatCurrencyValue(value || 0, baseCurrency.value)
-}
-
-function formatNote(note) {
-  if (!note) return ''
-  return note
-    .replace(/^Debt created:\s*/, t('debts.tx_created') + ': ')
-    .replace(/^debt_created:\s*/, t('debts.tx_created') + ': ')
-    .replace(/^Debt payment:\s*/, t('debts.tx_payment') + ': ')
-    .replace(/^debt_payment:\s*/, t('debts.tx_payment') + ': ')
 }
 
 function formatDate(date) {

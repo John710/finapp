@@ -31,7 +31,7 @@
       </div>
 
       <!-- Summary cards -->
-      <div v-if="reportsStore.summary" class="grid grid-cols-4 gap-4 mb-6">
+      <div v-if="reportsStore.summary" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark text-center">
           <p class="text-xs text-slate-500 mb-1">{{ $t('reports.total_income') }}</p>
           <p class="font-display text-xl font-semibold text-primary-600">+{{ formatCurrency(reportsStore.summary.total_income) }}</p>
@@ -65,14 +65,14 @@
           <div class="flex items-center justify-between mb-4">
             <h3 class="font-semibold">{{ categoryType === 'income' ? $t('reports.income_by_category') : $t('reports.expenses_by_category') }}</h3>
             <div class="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-              <button v-for="t in ['expense', 'income']" :key="t" @click="categoryType = t; applyFilters()"
+              <button v-for="t in ['expense', 'income']" :key="t" @click="categoryType = t"
                 class="px-3 py-1 rounded-md text-xs font-medium transition-colors"
                 :class="categoryType === t ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-500'">
                 {{ $t('categories.types.' + t) }}
               </button>
             </div>
           </div>
-          <div v-if="reportsStore.byCategory.filter(c => parseFloat(c.total) > 0).length" class="relative h-64">
+          <div v-if="typedCategories.filter(c => parseFloat(c.total) > 0).length" class="relative h-64">
             <BaseChart :option="categoryChartOption" />
           </div>
           <p v-else class="text-slate-500 text-center py-12">{{ $t('dashboard.no_chart_data') }}</p>
@@ -102,7 +102,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-            <tr v-for="cat in reportsStore.byCategory" :key="cat.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+            <tr v-for="cat in typedCategories" :key="cat.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
               <td class="px-5 py-3">
                 <div class="flex items-center gap-2">
                   <div class="w-3 h-3 rounded-full" :style="{ backgroundColor: cat.color || '#94a3b8' }"></div>
@@ -275,7 +275,9 @@
   <script setup>
 import { logger } from '@/utils/logger.js'
   import { ref, computed, defineAsyncComponent, onMounted, reactive } from 'vue'
+  import { useRoute, useRouter } from 'vue-router'
   import { useDarkMode } from '@/composables/useDarkMode.js'
+  import { useChartOptions } from '@/composables/useChartOptions'
   import { useI18n } from 'vue-i18n'
   import { useReportsStore } from '../stores/reports'
   import { useAccountsStore } from '../stores/accounts'
@@ -289,6 +291,8 @@ import { logger } from '@/utils/logger.js'
   const BaseChart = defineAsyncComponent(() => import('@/components/BaseChart.vue'))
 
   const { t } = useI18n()
+  const route = useRoute()
+  const router = useRouter()
 
   const reportsStore = useReportsStore()
   const accountsStore = useAccountsStore()
@@ -301,6 +305,7 @@ import { logger } from '@/utils/logger.js'
   const baseCurrency = computed(() => ratesStore.baseCurrency)
 
   const { isDark } = useDarkMode()
+  const { trendChartOption: buildTrendOption, categoryChartOption: buildCategoryOption } = useChartOptions({ isDark, baseCurrency, ratesStore })
 
   const periodOptions = computed(() => [
     { value: 'today', label: t('reports.today') },
@@ -309,6 +314,11 @@ import { logger } from '@/utils/logger.js'
     { value: 'custom', label: t('reports.custom') }
   ])
   const selectedPeriod = ref('month')
+
+  // The pie chart and the table show only the selected type, but both come from
+  // a single unfiltered /reports/by-category request (the Sankey needs all
+  // types anyway) — the toggle below is a pure client-side filter.
+  const typedCategories = computed(() => reportsStore.byCategoryAll.filter(c => c.type === categoryType.value))
 
   function setPeriod(period) {
     selectedPeriod.value = period
@@ -336,7 +346,15 @@ import { logger } from '@/utils/logger.js'
   }
 
   onMounted(() => {
-    setPeriod('month')
+    // Restore the period from the URL (shareable, survives F5), default to this month
+    if (route.query.from || route.query.to) {
+      filters.from = route.query.from ? String(route.query.from) : ''
+      filters.to = route.query.to ? String(route.query.to) : ''
+      selectedPeriod.value = 'custom'
+      applyFilters()
+    } else {
+      setPeriod('month')
+    }
     accountsStore.fetchAccounts()
     budgetsStore.fetchBudgets()
     debtsStore.fetchDebts()
@@ -391,145 +409,9 @@ import { logger } from '@/utils/logger.js'
     })
   })
 
-const trendChartOption = computed(() => {
-  return {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' },
-      formatter: (params) => {
-        let result = params[0].axisValue + '<br/>'
-        params.forEach(p => {
-          result += `${p.marker} ${p.seriesName}: ${formatFull(p.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}<br/>`
-        })
-        return result
-      }
-    },
-    legend: { show: false },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      top: '10%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      data: reportsStore.trend.map(t => t.month)
-    },
-    yAxis: {
-      type: 'value'
-    },
-    series: [
-      {
-        name: t('reports.income'),
-        type: 'bar',
-        data: reportsStore.trend.map(t => t.income),
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: '#8b7fe8' },
-              { offset: 1, color: '#7c6fde' }
-            ]
-          },
-          borderRadius: [8, 8, 0, 0]
-        }
-      },
-      {
-        name: t('reports.expense'),
-        type: 'bar',
-        data: reportsStore.trend.map(t => t.expense),
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: '#c3cbef' },
-              { offset: 1, color: '#b8c1ea' }
-            ]
-          },
-          borderRadius: [8, 8, 0, 0]
-        }
-      },
-      {
-        name: t('transactions.types.transfer'),
-        type: 'bar',
-        data: reportsStore.trend.map(t => t.transfer || 0),
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: '#a5d4f6' },
-              { offset: 1, color: '#8fc3ee' }
-            ]
-          },
-          borderRadius: [8, 8, 0, 0]
-        }
-      }
-    ]
-  }
-})
+const trendChartOption = computed(() => buildTrendOption(reportsStore.trend))
 
-const categoryChartOption = computed(() => {
-  const items = reportsStore.byCategory.filter(c => parseFloat(c.total) > 0)
-  return {
-    tooltip: {
-      trigger: 'item',
-      formatter: (params) => {
-        return `${params.marker} ${params.name}: ${formatFull(params.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)} (${params.percent}%)`
-      }
-    },
-    legend: { show: false },
-    series: [
-      {
-        name: t('categories.title'),
-        type: 'pie',
-        radius: ['40%', '70%'],
-        center: ['50%', '50%'],
-        avoidLabelOverlap: true,
-        itemStyle: {
-          borderRadius: 6,
-          borderColor: 'transparent',
-          borderWidth: 0
-        },
-        label: {
-          show: true,
-          formatter: '{b}: {d}%',
-          fontSize: 11
-        },
-        emphasis: {
-          scale: true,
-          scaleSize: 10,
-          itemStyle: {
-            borderColor: '#fff',
-            borderWidth: 2
-          },
-          label: {
-            show: true,
-            fontSize: 14,
-            fontWeight: 'bold'
-          }
-        },
-        data: items.map(c => ({
-          value: parseFloat(c.total),
-          name: c.name || t('categories.uncategorized'),
-          itemStyle: { color: c.color || '#94a3b8' }
-        }))
-      }
-    ]
-  }
-})
+const categoryChartOption = computed(() => buildCategoryOption(typedCategories.value.filter(c => parseFloat(c.total) > 0)))
 
 const sankeyData = computed(() => {
   const nodes = []
@@ -676,20 +558,21 @@ const sankeyChartOption = computed(() => {
     try {
       await Promise.all([
         reportsStore.fetchSummary({ from: filters.from, to: filters.to }),
-        reportsStore.fetchByCategory({ from: filters.from, to: filters.to, type: categoryType.value }),
-        reportsStore.fetchByCategoryAll({ from: filters.from, to: filters.to }), // Load all categories for the Sankey chart
+        reportsStore.fetchByCategoryAll({ from: filters.from, to: filters.to }),
         reportsStore.fetchTrend({ from: filters.from, to: filters.to })
       ])
     } catch (e) {
       logger.error(e)
-      window.$toast?.error(e.message || 'Request failed')
+      window.$toast?.error(e.message || t('common.error'))
     } finally {
       loading.value = false
     }
+    // Keep the date range in the URL so the view is shareable and survives F5
+    router.replace({ query: { ...(filters.from ? { from: filters.from } : {}), ...(filters.to ? { to: filters.to } : {}) } })
   }
 
   function categoryPercent(total) {
-    const sum = reportsStore.byCategory.reduce((s, c) => s + parseFloat(c.total), 0)
+    const sum = typedCategories.value.reduce((s, c) => s + parseFloat(c.total), 0)
     if (sum === 0) return 0
     return Math.round((parseFloat(total) / sum) * 100)
   }

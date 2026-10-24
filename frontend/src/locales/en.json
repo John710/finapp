@@ -73,7 +73,8 @@
     "to_account": "To account",
     "types": {
       "transfer": "Transfer"
-    }
+    },
+    "invalid_amount": "Enter a valid amount"
   },
   "categories": {
     "title": "Categories",
@@ -159,7 +160,8 @@
       "account": "Account",
       "note": "Note",
       "currency": "Currency"
-    }
+    },
+    "failed": "Import failed"
   },
   "reports": {
     "title": "Reports",
@@ -340,7 +342,9 @@
     "undo": "Undo",
     "saved": "Saved",
     "created": "Created",
-    "error": "Error"
+    "error": "Error",
+    "prev": "Previous",
+    "next": "Next"
   },
   "notifications": {
     "title": "Notifications",
@@ -366,7 +370,8 @@
     "star": "Star on GitHub",
     "current_version": "Current version: {version}",
     "update_available": "New version available: {version}",
-    "checking_updates": "Checking for updates..."
+    "checking_updates": "Checking for updates...",
+    "title": "About the app"
   },
   "accounts": {
     "title": "Accounts",

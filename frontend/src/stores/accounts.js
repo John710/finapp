@@ -8,8 +8,11 @@ export const useAccountsStore = defineStore('accounts', () => {
 
   async function fetchAccounts() {
     loading.value = true
-    accounts.value = await api('/accounts')
-    loading.value = false
+    try {
+      accounts.value = await api('/accounts')
+    } finally {
+      loading.value = false
+    }
   }
 
   async function createAccount(data) {

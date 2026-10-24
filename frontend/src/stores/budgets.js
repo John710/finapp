@@ -8,8 +8,11 @@ export const useBudgetsStore = defineStore('budgets', () => {
 
   async function fetchBudgets() {
     loading.value = true
-    budgets.value = await api('/budgets')
-    loading.value = false
+    try {
+      budgets.value = await api('/budgets')
+    } finally {
+      loading.value = false
+    }
   }
 
   async function createBudget(data) {

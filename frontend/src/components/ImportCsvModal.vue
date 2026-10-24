@@ -153,8 +153,11 @@ async function previewFile() {
 async function importFile() {
   if (!file.value) return
   importing.value = true
-  await upload({ previewOnly: false })
-  importing.value = false
+  try {
+    await upload({ previewOnly: false })
+  } finally {
+    importing.value = false
+  }
   emit('imported')
 }
 
@@ -168,24 +171,19 @@ async function upload(opts) {
     previewOnly: opts.previewOnly
   }))
 
-  const res = await fetch('/api/v1/import/csv', {
-    method: 'POST',
-    body: formData,
-    credentials: 'include'
-  })
+  try {
+    // api() handles 401/refresh for the multipart upload too (raw fetch did not)
+    const data = await api('/import/csv', { method: 'POST', body: formData })
 
-  const data = await res.json()
-  if (!res.ok) {
-    window.$toast?.error(data.error || 'Import failed')
-    return
-  }
-
-  if (opts.previewOnly) {
-    preview.value = data.preview
-    headers.value = data.headers
-  } else {
-    result.value = data
-    window.$toast?.success(t('import.completed'))
+    if (opts.previewOnly) {
+      preview.value = data.preview
+      headers.value = data.headers
+    } else {
+      result.value = data
+      window.$toast?.success(t('import.completed'))
+    }
+  } catch (e) {
+    window.$toast?.error(e.message || t('import.failed'))
   }
 }
 </script>

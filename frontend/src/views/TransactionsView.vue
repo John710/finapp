@@ -40,8 +40,15 @@
       </button>
     </div>
 
-    <div v-if="transactionsStore.loading" class="text-center py-12">
-      <p class="text-slate-500">{{ $t('common.loading') }}</p>
+    <div v-if="transactionsStore.loading" class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark p-5 space-y-4">
+      <div v-for="i in 6" :key="i" class="flex items-center gap-4">
+        <BaseSkeleton height="2.5rem" width="2.5rem" />
+        <div class="flex-1 space-y-2">
+          <BaseSkeleton height="0.8rem" width="55%" />
+          <BaseSkeleton height="0.6rem" width="35%" />
+        </div>
+        <BaseSkeleton height="1rem" width="5rem" />
+      </div>
     </div>
 
     <div v-else-if="transactionsStore.transactions.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-card-dark text-center">
@@ -84,16 +91,32 @@
               </td>
               <td class="px-5 py-3 text-right font-medium" :class="amountClass(t.type)">{{ formatAmount(t) }}</td>
               <td class="px-5 py-3">
-                <!-- Incoming transfer legs are managed through their source transfer row -->
-                <button v-if="!(t.type === 'income' && t.transfer_to_account_id)" @click="deleteTransaction(t.id)" class="text-slate-400 hover:text-danger-500 transition-colors">
-                  <Icon name="delete" class="w-4 h-4" />
-                </button>
+                <div class="flex items-center gap-2">
+                  <!-- Incoming transfer legs are managed through their source transfer row -->
+                  <template v-if="!(t.type === 'income' && t.transfer_to_account_id)">
+                    <button @click="openEditModal(t)" class="text-slate-400 hover:text-primary-600 transition-colors" :aria-label="$t('common.edit')" :title="$t('common.edit')">
+                      <Icon name="edit" class="w-4 h-4" />
+                    </button>
+                    <button @click="deleteTransaction(t.id)" class="text-slate-400 hover:text-danger-500 transition-colors" :aria-label="$t('common.delete')" :title="$t('common.delete')">
+                      <Icon name="delete" class="w-4 h-4" />
+                    </button>
+                  </template>
+                </div>
               </td>
             </tr>
           </tbody>
         </table>
         <div class="px-5 py-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-sm text-slate-500">
           <span>{{ transactionsStore.total }} {{ $t('transactions.total') }}</span>
+          <div v-if="pageCount > 1" class="flex items-center gap-2">
+            <button @click="changePage(page - 1)" :disabled="page <= 1" class="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed" :aria-label="$t('common.prev')">
+              <Icon name="arrowLeft" class="w-4 h-4" />
+            </button>
+            <span class="tabular-nums">{{ page }} / {{ pageCount }}</span>
+            <button @click="changePage(page + 1)" :disabled="page >= pageCount" class="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed" :aria-label="$t('common.next')">
+              <Icon name="arrowRight" class="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -112,13 +135,30 @@
           </div>
           <p class="font-medium">{{ formatNote(t) || '-' }}</p>
           <p class="text-xs text-slate-500 mt-1">{{ formatDate(t.date) }} • {{ t.account_name }}</p>
+          <div v-if="!(t.type === 'income' && t.transfer_to_account_id)" class="flex gap-2 mt-3">
+            <button @click="openEditModal(t)" class="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300" :aria-label="$t('common.edit')">
+              {{ $t('common.edit') }}
+            </button>
+            <button @click="deleteTransaction(t.id)" class="px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300" :aria-label="$t('common.delete')">
+              {{ $t('common.delete') }}
+            </button>
+          </div>
+        </div>
+        <div v-if="pageCount > 1" class="flex items-center justify-center gap-3 py-2 text-sm text-slate-500">
+          <button @click="changePage(page - 1)" :disabled="page <= 1" class="px-3 py-1.5 rounded-full bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark disabled:opacity-40 disabled:cursor-not-allowed" :aria-label="$t('common.prev')">
+            <Icon name="arrowLeft" class="w-4 h-4" />
+          </button>
+          <span class="tabular-nums">{{ page }} / {{ pageCount }}</span>
+          <button @click="changePage(page + 1)" :disabled="page >= pageCount" class="px-3 py-1.5 rounded-full bg-white dark:bg-slate-900 shadow-card dark:shadow-card-dark disabled:opacity-40 disabled:cursor-not-allowed" :aria-label="$t('common.next')">
+            <Icon name="arrowRight" class="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>
 
     <!-- Modal -->
     <BaseModal v-model="showModal" widthClass="max-w-md">
-        <h2 class="font-display text-xl font-semibold mb-4">{{ $t('common.add') }}</h2>
+        <h2 class="font-display text-xl font-semibold mb-4">{{ editingId ? $t('common.edit') : $t('common.add') }}</h2>
         <form @submit.prevent="saveTransaction" class="space-y-4">
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('common.type') }}</label>
@@ -214,7 +254,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useTransactionsStore } from '../stores/transactions'
 import { useAccountsStore } from '../stores/accounts'
 import { useCategoriesStore } from '../stores/categories'
@@ -223,18 +263,22 @@ import { useRatesStore } from '../stores/rates'
 import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
+import { useTransactionDisplay } from '@/composables/useTransactionDisplay'
 import { formatFull } from '@/utils/currency'
-import { formatDate as formatDateValue } from '@/utils/format'
+import { formatDate as formatDateValue, parseAmount } from '@/utils/format'
 import { debounce } from '@/utils/debounce'
+import { logger } from '@/utils/logger.js'
 import ImportCsvModal from '../components/ImportCsvModal.vue'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import QuickCategoryModal from '../components/QuickCategoryModal.vue'
 import Icon from '../components/Icon.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import BaseSkeleton from '@/components/BaseSkeleton.vue'
 import { presetColors } from '@/utils/colors'
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 const ratesStore = useRatesStore()
 const baseCurrency = computed(() => ratesStore.baseCurrency)
 const undo = useUndo('transactions')
@@ -249,15 +293,23 @@ const transactionsStore = useTransactionsStore()
 const accountsStore = useAccountsStore()
 const categoriesStore = useCategoriesStore()
 const tagsStore = useTagsStore()
+const { formatNote, amountClass, categoryClass } = useTransactionDisplay(accountsStore)
 const showModal = ref(false)
 const showImportModal = ref(false)
 const showQuickAccount = ref(false)
 const showQuickCategory = ref(false)
 const quickAccountTarget = ref('account_id')
+const editingId = ref(null)
 const filters = reactive({ search: '', account_id: '', category_id: '', type: '', tag_id: '' })
 const form = reactive({ type: 'expense', amount: 0, account_id: null, category_id: null, date: new Date().toLocaleDateString('sv-SE'), note: '', transfer_to_account_id: null, tags: [] })
 const newTagName = ref('')
 const newTagColor = ref('#94a3b8')
+
+// Pagination + request cancellation
+const page = ref(1)
+const pageSize = 50
+const pageCount = computed(() => Math.max(1, Math.ceil(transactionsStore.total / pageSize)))
+let fetchController = null
 
 
 onMounted(() => {
@@ -265,15 +317,20 @@ onMounted(() => {
   categoriesStore.fetchCategories()
   tagsStore.fetchTags()
   ratesStore.fetchRates()
-  if (route.query.tag_id) {
-    filters.tag_id = String(route.query.tag_id)
+  // Restore filters (and page) from the URL so views are shareable and survive F5
+  for (const key of ['search', 'account_id', 'category_id', 'type', 'tag_id']) {
+    if (route.query[key] !== undefined) filters[key] = String(route.query[key])
   }
-  applyFilters()
+  const urlPage = parseInt(route.query.page, 10)
+  if (Number.isFinite(urlPage) && urlPage > 0) page.value = urlPage
+  applyFilters(false)
   window.addEventListener('open-transaction-modal', openModal)
 })
 
 onUnmounted(() => {
   window.removeEventListener('open-transaction-modal', openModal)
+  // Drop in-flight list requests — a slow response must not overwrite the next view's data
+  fetchController?.abort()
 })
 
 const filteredCategories = computed(() => {
@@ -284,17 +341,49 @@ const selectedAccount = computed(() => {
   return accountsStore.accounts.find(a => a.id === form.account_id)
 })
 
-function applyFilters() {
+function applyFilters(resetPage = true) {
+  if (resetPage) page.value = 1
+  fetchPage()
+  syncUrl()
+}
+
+function fetchPage() {
+  // Cancel the previous request: a slow earlier response must not overwrite
+  // the results of a newer filter/page change.
+  fetchController?.abort()
+  fetchController = new AbortController()
+
   const params = {}
   if (filters.search) params.search = filters.search
   if (filters.account_id) params.account_id = filters.account_id
   if (filters.category_id) params.category_id = filters.category_id
   if (filters.type) params.type = filters.type
   if (filters.tag_id) params.tag_id = filters.tag_id
-  transactionsStore.fetchTransactions(params)
+  params.limit = pageSize
+  params.offset = (page.value - 1) * pageSize
+
+  transactionsStore.fetchTransactions(params, fetchController.signal).catch(e => {
+    if (e?.name !== 'AbortError') logger.error('Failed to load transactions', e)
+  })
 }
 
-const debouncedApplyFilters = debounce(applyFilters, 300)
+function syncUrl() {
+  const query = {}
+  for (const key of ['search', 'account_id', 'category_id', 'type', 'tag_id']) {
+    if (filters[key]) query[key] = String(filters[key])
+  }
+  if (page.value > 1) query.page = String(page.value)
+  router.replace({ query })
+}
+
+function changePage(newPage) {
+  if (newPage < 1 || newPage > pageCount.value) return
+  page.value = newPage
+  fetchPage()
+  syncUrl()
+}
+
+const debouncedApplyFilters = debounce(() => applyFilters(), 300)
 
 function resetFilters() {
   filters.search = ''
@@ -303,29 +392,7 @@ function resetFilters() {
   filters.type = ''
   filters.tag_id = ''
   applyFilters()
-}
-
-function formatNote(tx) {
-  if (!tx) return ''
-  // Outgoing transfer
-  if (tx.type === 'transfer' && tx.transfer_to_account_id) {
-    const target = accountsStore.accounts.find(a => a.id === tx.transfer_to_account_id)
-    return target ? `${t('transactions.types.transfer')} → ${target.name}` : (tx.note || '')
-  }
-  // Incoming paired transfer (income side) — transfer_to_account_id holds source account
-  if (tx.type === 'income' && tx.transfer_to_account_id) {
-    const source = accountsStore.accounts.find(a => a.id === tx.transfer_to_account_id)
-    return source ? `${t('transactions.types.transfer')} ← ${source.name}` : (tx.note || '')
-  }
-  if (!tx.note) return ''
-  return tx.note
-    .replace(/^Debt created:\s*/, t('debts.tx_created') + ': ')
-    .replace(/^debt_created:\s*/, t('debts.tx_created') + ': ')
-    .replace(/^Debt payment:\s*/, t('debts.tx_payment') + ': ')
-    .replace(/^debt_payment:\s*/, t('debts.tx_payment') + ': ')
-}
-
-function formatDate(date) {
+}function formatDate(date) {
   return formatDateValue(date)
 }
 
@@ -335,20 +402,24 @@ function formatAmount(tx) {
   return `${sign}${full}`
 }
 
-function amountClass(type) {
-  if (type === 'income') return 'text-primary-600'
-  if (type === 'expense') return 'text-danger-500'
-  return 'text-slate-700 dark:text-slate-300'
-}
-
-function categoryClass(type) {
-  if (type === 'income') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-  if (type === 'expense') return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
-  return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-}
-
 function openModal() {
+  editingId.value = null
   Object.assign(form, { type: 'expense', amount: 0, account_id: accountsStore.accounts[0]?.id || null, category_id: null, date: new Date().toLocaleDateString('sv-SE'), note: '', transfer_to_account_id: null, tags: [] })
+  showModal.value = true
+}
+
+function openEditModal(tx) {
+  editingId.value = tx.id
+  Object.assign(form, {
+    type: tx.type,
+    amount: parseFloat(tx.amount),
+    account_id: tx.account_id,
+    category_id: tx.category_id,
+    date: String(tx.date).slice(0, 10),
+    note: tx.note || '',
+    transfer_to_account_id: tx.transfer_to_account_id,
+    tags: (tx.tags || []).map(tag => tag.id)
+  })
   showModal.value = true
 }
 
@@ -387,17 +458,27 @@ async function addTag() {
 }
 
 async function saveTransaction() {
-  await transactionsStore.createTransaction({ ...form })
-  window.$toast?.success(t('common.created'))
+  const payload = { ...form, amount: parseAmount(form.amount) }
+  if (Number.isNaN(payload.amount)) {
+    window.$toast?.error(t('transactions.invalid_amount'))
+    return
+  }
+  if (editingId.value) {
+    await transactionsStore.updateTransaction(editingId.value, payload)
+    window.$toast?.success(t('common.saved'))
+  } else {
+    await transactionsStore.createTransaction(payload)
+    window.$toast?.success(t('common.created'))
+  }
   closeModal()
-  applyFilters()
+  fetchPage()
 }
 
 async function deleteTransaction(id) {
   if (!(await window.$confirm({ message: t('common.confirm_delete') }))) return
   const tx = transactionsStore.transactions.find(x => x.id === id)
   await transactionsStore.deleteTransaction(id)
-  applyFilters()
+  fetchPage()
   if (tx) {
     undo.push({
       message: t('common.undo_delete'),

@@ -8,8 +8,11 @@ export const useRecurringStore = defineStore('recurring', () => {
 
   async function fetchRules() {
     loading.value = true
-    rules.value = await api('/recurring')
-    loading.value = false
+    try {
+      rules.value = await api('/recurring')
+    } finally {
+      loading.value = false
+    }
   }
 
   async function createRule(data) {

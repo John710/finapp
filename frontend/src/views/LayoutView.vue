@@ -50,7 +50,7 @@
           <div class="flex items-center gap-1.5 lg:gap-2">
             <!-- Notifications bell -->
             <div class="relative" ref="notifDropdownRef">
-              <button @click="showNotifs = !showNotifs" class="p-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors relative">
+              <button @click="showNotifs = !showNotifs" :aria-label="$t('notifications.title')" class="p-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors relative">
                 <Icon name="bell" class="w-5 h-5" />
                 <span v-if="notifStore.unreadCount > 0" class="absolute top-1.5 right-1.5 w-2 h-2 bg-danger-500 rounded-full ring-2 ring-white dark:ring-slate-800"></span>
               </button>
@@ -86,7 +86,7 @@
                       <p class="text-xs text-slate-500 truncate">{{ n.message }}</p>
                       <p class="text-xs text-slate-400 mt-1">{{ formatNotifDate(n.created_at) }}</p>
                     </div>
-                    <button @click.stop="notifStore.remove(n.id)" class="text-slate-400 hover:text-danger-500">
+                    <button @click.stop="notifStore.remove(n.id)" :aria-label="$t('common.delete')" class="text-slate-400 hover:text-danger-500">
                       <Icon name="cancel" class="w-4 h-4" />
                     </button>
                   </div>
@@ -95,7 +95,7 @@
             </div>
             <!-- GitHub Button -->
             <div class="relative" ref="githubDropdownRef">
-              <button @click="showGithubMenu = !showGithubMenu" class="p-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors relative">
+              <button @click="showGithubMenu = !showGithubMenu" :aria-label="$t('github.title')" class="p-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors relative">
                 <Icon name="github" class="w-5 h-5" />
                 <span v-if="hasUpdate" class="absolute top-1.5 right-1.5 w-2 h-2 bg-danger-500 rounded-full ring-2 ring-white dark:ring-slate-800"></span>
               </button>
@@ -132,7 +132,7 @@
                 </div>
               </div>
             </div>
-            <button @click="toggleTheme" class="p-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            <button @click="toggleTheme" :aria-label="$t('settings.theme')" class="p-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
               <Icon v-if="isDark" name="sun" class="w-5 h-5" />
               <Icon v-else name="moon" class="w-5 h-5" />
             </button>

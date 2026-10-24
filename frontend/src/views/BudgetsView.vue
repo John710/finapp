@@ -98,6 +98,7 @@ import { useHotkeys } from '@/composables/useHotkeys'
 import QuickCategoryModal from '../components/QuickCategoryModal.vue'
 import CurrencySelect from '../components/CurrencySelect.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import { parseAmount } from '@/utils/format'
 
 const { t } = useI18n()
 const undo = useUndo('budgets')
@@ -158,6 +159,7 @@ function onQuickCategoryCreated(category) {
 }
 
 async function saveBudget() {
+  form.amount = parseAmount(form.amount)
   if (isEditing.value) {
     await budgetsStore.updateBudget(form.id, { ...form })
   } else {

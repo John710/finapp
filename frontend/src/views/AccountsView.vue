@@ -8,8 +8,17 @@
       </button>
     </div>
 
-    <div v-if="accountsStore.loading" class="text-center py-12">
-      <p class="text-slate-500">{{ $t('common.loading') }}</p>
+    <div v-if="accountsStore.loading" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div v-for="i in 3" :key="i" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark space-y-4">
+        <div class="flex items-center gap-3">
+          <BaseSkeleton height="2.5rem" width="2.5rem" />
+          <div class="flex-1 space-y-2">
+            <BaseSkeleton height="0.9rem" width="60%" />
+            <BaseSkeleton height="0.7rem" width="40%" />
+          </div>
+        </div>
+        <BaseSkeleton height="1.5rem" width="45%" />
+      </div>
     </div>
 
     <div v-else-if="accountsStore.accounts.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-card-dark text-center">
@@ -246,9 +255,10 @@ import { useHotkeys } from '@/composables/useHotkeys'
 import { api } from '@/utils/api'
 import { getUserLocale } from '@/utils/locale'
 import { presetColors } from '@/utils/colors'
-import { formatCurrency as formatCurrencyValue } from '@/utils/format'
+import { formatCurrency as formatCurrencyValue, parseAmount } from '@/utils/format'
 import CurrencySelect from '../components/CurrencySelect.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import BaseSkeleton from '@/components/BaseSkeleton.vue'
 
 const { t } = useI18n()
 const ratesStore = useRatesStore()
@@ -385,6 +395,8 @@ function closeModal() {
 }
 
 async function saveAccount() {
+  form.balance = parseAmount(form.balance)
+  form.target_amount = parseAmount(form.target_amount)
   if (isEditing.value) {
     await accountsStore.updateAccount(form.id, { ...form })
   } else {

@@ -647,7 +647,9 @@ async function generateVapidKeys() {
     if (push.subscription.value) {
       try {
         await push.subscription.value.unsubscribe()
-      } catch {}
+      } catch {
+        // best-effort unsubscribe: ignore push errors
+      }
       push.subscription.value = null
     }
     window.$toast?.success(t('settings.vapid_generated_success'))
@@ -678,7 +680,9 @@ async function deleteVapidKeys() {
     if (push.subscription.value) {
       try {
         await push.subscription.value.unsubscribe()
-      } catch {}
+      } catch {
+        // best-effort unsubscribe: ignore push errors
+      }
       push.subscription.value = null
     }
     window.$toast?.success(t('settings.vapid_deleted_success'))

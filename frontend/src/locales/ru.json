@@ -73,7 +73,8 @@
     "to_account": "На счёт",
     "types": {
       "transfer": "Перевод"
-    }
+    },
+    "invalid_amount": "Введите корректную сумму"
   },
   "categories": {
     "title": "Категории",
@@ -159,7 +160,8 @@
       "account": "Счёт",
       "note": "Примечание",
       "currency": "Валюта"
-    }
+    },
+    "failed": "Импорт не удался"
   },
   "reports": {
     "title": "Отчёты",
@@ -340,7 +342,9 @@
     "undo": "Отменить",
     "saved": "Сохранено",
     "created": "Создано",
-    "error": "Ошибка"
+    "error": "Ошибка",
+    "prev": "Назад",
+    "next": "Вперёд"
   },
   "notifications": {
     "title": "Уведомления",
@@ -366,7 +370,8 @@
     "star": "Поставить звезду на GitHub",
     "current_version": "Текущая версия: {version}",
     "update_available": "Новая версия: {version}",
-    "checking_updates": "Проверка обновлений..."
+    "checking_updates": "Проверка обновлений...",
+    "title": "О приложении"
   },
   "accounts": {
     "title": "Счета",

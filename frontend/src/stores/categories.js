@@ -8,8 +8,11 @@ export const useCategoriesStore = defineStore('categories', () => {
 
   async function fetchCategories() {
     loading.value = true
-    categories.value = await api('/categories')
-    loading.value = false
+    try {
+      categories.value = await api('/categories')
+    } finally {
+      loading.value = false
+    }
   }
 
   async function createCategory(data) {

@@ -63,7 +63,8 @@ export const categoryIconImports = {
   bread: () => import('@hugeicons/core-free-icons/dist/esm/Bread01Icon'),
   cake: () => import('@hugeicons/core-free-icons/dist/esm/CakeIcon'),
   beer: () => import('@hugeicons/core-free-icons/dist/esm/BeerIcon'),
-  wine: () => import('@hugeicons/core-free-icons/dist/esm/BottleWineIcon'),
+  // BottleWineIcon was dropped from the free icon set in @hugeicons/core-free-icons 4.3
+  wine: () => import('@hugeicons/core-free-icons/dist/esm/DrinkIcon'),
   pizza: () => import('@hugeicons/core-free-icons/dist/esm/Pizza01Icon'),
   iceCream: () => import('@hugeicons/core-free-icons/dist/esm/Cupcake01Icon'),
   cookie: () => import('@hugeicons/core-free-icons/dist/esm/CookieIcon'),

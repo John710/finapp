@@ -79,6 +79,7 @@ import { useRatesStore } from '../stores/rates'
 import { formatFull } from '@/utils/currency'
 import { getUserLocale } from '@/utils/locale'
 import { formatDate as formatDateValue } from '@/utils/format'
+import { useTransactionDisplay } from '@/composables/useTransactionDisplay'
 
 const { t } = useI18n()
 
@@ -86,6 +87,7 @@ const route = useRoute()
 const accountsStore = useAccountsStore()
 const transactionsStore = useTransactionsStore()
 const ratesStore = useRatesStore()
+const { formatNote, amountClass, categoryClass } = useTransactionDisplay(accountsStore)
 const accountId = parseInt(route.params.id)
 
 const account = computed(() => accountsStore.accounts.find(a => a.id === accountId))
@@ -140,26 +142,6 @@ function formatCryptoBalance(value) {
   return new Intl.NumberFormat(getUserLocale(), { minimumFractionDigits: 0, maximumFractionDigits: 8 }).format(value)
 }
 
-function formatNote(tx) {
-  if (!tx) return ''
-  // Outgoing transfer (expense side)
-  if (tx.type === 'transfer' && tx.transfer_to_account_id) {
-    const target = accountsStore.accounts.find(a => a.id === tx.transfer_to_account_id)
-    return target ? `${t('transactions.types.transfer')} → ${target.name}` : (tx.note || '')
-  }
-  // Incoming paired transfer (income side) — transfer_to_account_id holds source account
-  if (tx.type === 'income' && tx.transfer_to_account_id) {
-    const source = accountsStore.accounts.find(a => a.id === tx.transfer_to_account_id)
-    return source ? `${t('transactions.types.transfer')} ← ${source.name}` : (tx.note || '')
-  }
-  if (!tx.note) return ''
-  return tx.note
-    .replace(/^Debt created:\s*/, t('debts.tx_created') + ': ')
-    .replace(/^debt_created:\s*/, t('debts.tx_created') + ': ')
-    .replace(/^Debt payment:\s*/, t('debts.tx_payment') + ': ')
-    .replace(/^debt_payment:\s*/, t('debts.tx_payment') + ': ')
-}
-
 function formatDate(date) {
   return formatDateValue(date)
 }
@@ -170,17 +152,5 @@ function formatAmount(tx) {
   const currency = tx.account_currency || account.value?.currency || 'USD'
   const full = formatFull(tx.amount, currency, baseCurrency.value, ratesStore.rates)
   return `${sign}${full}`
-}
-
-function amountClass(type) {
-  if (type === 'income') return 'text-primary-600'
-  if (type === 'expense') return 'text-danger-500'
-  return 'text-slate-700 dark:text-slate-300'
-}
-
-function categoryClass(type) {
-  if (type === 'income') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-  if (type === 'expense') return 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
-  return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
 }
 </script>

@@ -2,6 +2,9 @@ import { ref, readonly, computed } from 'vue'
 
 const STORAGE_KEY = 'theme'
 const theme = ref('auto')
+// Reactive mirror of the system preference: matchMedia.matches itself is not
+// reactive, so without this the isDark computed would go stale in 'auto' mode.
+const systemDark = ref(false)
 let mediaQuery = null
 let systemListener = null
 let initialized = false
@@ -40,6 +43,7 @@ export function applyTheme(value) {
 }
 
 function onSystemChange(e) {
+  systemDark.value = e.matches
   if (theme.value === 'auto') {
     if (typeof document === 'undefined') return
     document.documentElement.classList.toggle('dark', e.matches)
@@ -51,9 +55,12 @@ function initTheme() {
   initialized = true
   readSavedTheme()
   const mq = getMediaQuery()
-  if (mq && !systemListener) {
-    systemListener = onSystemChange
-    mq.addEventListener('change', systemListener)
+  if (mq) {
+    systemDark.value = mq.matches
+    if (!systemListener) {
+      systemListener = onSystemChange
+      mq.addEventListener('change', systemListener)
+    }
   }
   applyTheme(theme.value)
 }
@@ -61,8 +68,7 @@ function initTheme() {
 const isDark = computed(() => {
   if (theme.value === 'dark') return true
   if (theme.value === 'light') return false
-  const mq = getMediaQuery()
-  return mq ? mq.matches : false
+  return systemDark.value
 })
 
 export function useTheme() {

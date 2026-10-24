@@ -122,7 +122,7 @@ import { useRatesStore } from '../stores/rates'
 import { useI18n } from 'vue-i18n'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { useUndo } from '@/composables/useUndo'
-import { formatDate as formatDateValue } from '@/utils/format'
+import { formatDate as formatDateValue, parseAmount } from '@/utils/format'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import QuickCategoryModal from '../components/QuickCategoryModal.vue'
 import CurrencySelect from '../components/CurrencySelect.vue'
@@ -193,6 +193,7 @@ function onQuickCategoryCreated(category) {
 }
 
 async function saveRule() {
+  form.amount = parseAmount(form.amount)
   if (isEditing.value) {
     await recurringStore.updateRule(form.id, { ...form })
   } else {

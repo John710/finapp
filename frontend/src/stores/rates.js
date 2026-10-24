@@ -69,7 +69,13 @@ export const useRatesStore = defineStore('rates', () => {
     return `${origFormatted} ≈ ${baseFormatted}`
   }
 
-  async function fetchRates() {
+  // Rates change at most daily — a short TTL avoids refetching /currencies on
+  // every page navigation (the store is reloaded on each view mount).
+  const RATES_TTL = 60 * 1000
+  let lastFetchedAt = 0
+
+  async function fetchRates(force = false) {
+    if (!force && rates.value.length && Date.now() - lastFetchedAt < RATES_TTL) return
     loading.value = true
     try {
       const [ratesRes, fiatRes] = await Promise.all([
@@ -78,6 +84,7 @@ export const useRatesStore = defineStore('rates', () => {
       ])
       rates.value = ratesRes
       fiatCurrencies.value = fiatRes
+      lastFetchedAt = Date.now()
     } catch (e) {
       logger.error('Failed to load rates', e)
     } finally {

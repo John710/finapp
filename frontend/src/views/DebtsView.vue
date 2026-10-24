@@ -171,7 +171,7 @@ import { useRatesStore } from '../stores/rates'
 import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
-import { formatDate } from '@/utils/format'
+import { formatDate, parseAmount } from '@/utils/format'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import CurrencySelect from '../components/CurrencySelect.vue'
@@ -238,6 +238,7 @@ function onQuickAccountCreated(account) {
 }
 
 async function saveDebt() {
+  form.amount = parseAmount(form.amount)
   if (isEditing.value) {
     await debtsStore.updateDebt(form.id, { ...form })
   } else {
@@ -247,6 +248,7 @@ async function saveDebt() {
 }
 
 async function savePayment() {
+  paymentForm.amount = parseAmount(paymentForm.amount)
   await debtsStore.addPayment(currentDebtId.value, { ...paymentForm })
   closePaymentModal()
 }

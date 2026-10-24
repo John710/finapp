@@ -23,3 +23,13 @@ export function formatDateTime(value, locale) {
 export function formatNotifDate(date) {
   return formatDate(date)
 }
+
+// Money inputs: with a ru keyboard layout users type "12,50" — type=number
+// rejects the comma in some browser/locale combinations and v-model.number
+// then keeps the raw string. Normalize before sending to the API.
+export function parseAmount(value) {
+  if (typeof value === 'number') return value
+  if (value === null || value === undefined || value === '') return NaN
+  const normalized = String(value).replace(/\s/g, '').replace(',', '.')
+  return parseFloat(normalized)
+}

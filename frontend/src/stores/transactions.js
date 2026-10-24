@@ -7,13 +7,16 @@ export const useTransactionsStore = defineStore('transactions', () => {
   const total = ref(0)
   const loading = ref(false)
 
-  async function fetchTransactions(params = {}) {
+  async function fetchTransactions(params = {}, signal) {
     loading.value = true
-    const query = new URLSearchParams(params).toString()
-    const data = await api(`/transactions?${query}`)
-    transactions.value = data.items
-    total.value = data.total
-    loading.value = false
+    try {
+      const query = new URLSearchParams(params).toString()
+      const data = await api(`/transactions?${query}`, { signal })
+      transactions.value = data.items
+      total.value = data.total
+    } finally {
+      loading.value = false
+    }
   }
 
   async function createTransaction(data) {

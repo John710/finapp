@@ -8,8 +8,11 @@ export const useDebtsStore = defineStore('debts', () => {
 
   async function fetchDebts() {
     loading.value = true
-    debts.value = await api('/debts')
-    loading.value = false
+    try {
+      debts.value = await api('/debts')
+    } finally {
+      loading.value = false
+    }
   }
 
   async function createDebt(data) {
