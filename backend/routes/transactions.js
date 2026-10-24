@@ -91,7 +91,7 @@ async function transactionRoutes(fastify, opts) {
        ${whereClause}
        ORDER BY t.date DESC, t.parent_id NULLS FIRST, t.created_at DESC
        LIMIT $${idx++} OFFSET $${idx++}`,
-      [userId, ...params, limit, offset]
+      [...params, limit, offset]
     )
 
     const transactionIds = result.rows.map(r => r.id)
