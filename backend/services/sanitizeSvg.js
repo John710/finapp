@@ -1,6 +1,6 @@
-import createDOMPurify from 'isomorphic-dompurify'
-
-const DOMPurify = createDOMPurify()
+// isomorphic-dompurify v4 exports the configured DOMPurify instance directly
+// (the createDOMPurify factory was removed in v3 -> v4)
+import DOMPurify from 'isomorphic-dompurify'
 
 export function sanitizeSvg(input) {
   if (!input || typeof input !== 'string') return null
