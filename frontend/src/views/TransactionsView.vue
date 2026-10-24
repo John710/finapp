@@ -2,7 +2,7 @@
   <div>
     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('transactions.title') }}</h1>
-      <div v-if="!isViewer" class="flex gap-2 self-start">
+      <div class="flex gap-2 self-start">
         <button class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
           <Icon name="plus" class="w-4 h-4" />
           {{ $t('common.add') }}
@@ -95,11 +95,11 @@
               <td class="px-5 py-3 text-right font-medium" :class="amountClass(t.type)">{{ formatAmount(t) }}</td>
               <td class="px-5 py-3">
                 <div class="flex items-center gap-2">
-                  <button v-if="!t.parent_id && !isViewer" class="text-slate-400 hover:text-primary-600 transition-colors" :aria-label="$t('transactions.attachments')" :title="$t('transactions.attachments')" @click="openAttachments(t.id)">
+                  <button v-if="!t.parent_id" class="text-slate-400 hover:text-primary-600 transition-colors" :aria-label="$t('transactions.attachments')" :title="$t('transactions.attachments')" @click="openAttachments(t.id)">
                     <Icon name="upload" class="w-4 h-4" />
                   </button>
                   <!-- Incoming transfer legs are managed through their source transfer row -->
-                  <template v-if="!(t.type === 'income' && t.transfer_to_account_id) && !t.parent_id && !isViewer">
+                  <template v-if="!(t.type === 'income' && t.transfer_to_account_id) && !t.parent_id">
                     <button v-if="!t.is_split" class="text-slate-400 hover:text-primary-600 transition-colors" :aria-label="$t('common.edit')" :title="$t('common.edit')" @click="openEditModal(t)">
                       <Icon name="edit" class="w-4 h-4" />
                     </button>
@@ -289,13 +289,13 @@ v-for="color in presetColors" :key="color" type="button" class="w-6 h-6 rounded-
           <div v-for="att in attachments" :key="att.id" class="flex items-center justify-between gap-2 p-3 rounded-2xl bg-slate-100 dark:bg-slate-800">
             <a :href="`/api/v1/attachments/${att.id}`" target="_blank" rel="noopener" class="text-sm font-medium truncate flex-1 hover:underline">{{ att.filename }}</a>
             <span class="text-xs text-slate-400 whitespace-nowrap">{{ (att.size / 1024).toFixed(0) }} KB</span>
-            <button v-if="!isViewer" class="text-slate-400 hover:text-danger-500" :aria-label="$t('common.delete')" @click="deleteAttachment(att.id)">
+            <button class="text-slate-400 hover:text-danger-500" :aria-label="$t('common.delete')" @click="deleteAttachment(att.id)">
               <Icon name="cancel" class="w-4 h-4" />
             </button>
           </div>
           <p v-if="attachments.length === 0" class="text-sm text-slate-500">{{ $t('transactions.attachments_empty') }}</p>
         </template>
-        <div v-if="!isViewer" class="flex gap-2">
+        <div class="flex gap-2">
           <input ref="attachmentInput" type="file" class="hidden" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain" @change="uploadAttachment" />
           <button type="button" :disabled="attachmentUploading" class="flex-1 py-2 rounded-full bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium disabled:opacity-50" @click="attachmentInput?.click()">
             {{ attachmentUploading ? $t('common.loading') : $t('transactions.attachments_upload') }}
@@ -317,7 +317,6 @@ import { useAccountsStore } from '../stores/accounts'
 import { useCategoriesStore } from '../stores/categories'
 import { useTagsStore } from '../stores/tags'
 import { useRatesStore } from '../stores/rates'
-import { useAuthStore } from '../stores/auth'
 import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
@@ -352,9 +351,7 @@ const transactionsStore = useTransactionsStore()
 const accountsStore = useAccountsStore()
 const categoriesStore = useCategoriesStore()
 const tagsStore = useTagsStore()
-const authStore = useAuthStore()
 const { formatNote, amountClass, categoryClass } = useTransactionDisplay(accountsStore)
-const isViewer = computed(() => authStore.user?.role === 'viewer')
 const showModal = ref(false)
 const showImportModal = ref(false)
 const showQuickAccount = ref(false)

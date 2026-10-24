@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('recurring.title') }}</h1>
-      <button v-if="!isViewer" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
+      <button class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -36,6 +36,9 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
+          <button v-if="!rule.owner_login" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1" @click="openShare(rule)">
+            <Icon name="share" class="w-3 h-3" />{{ $t('sharing.title') }}
+          </button>
           <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click="editRule(rule)">{{ $t('common.edit') }}</button>
           <button class="w-11 h-6 rounded-full relative transition-colors" :class="rule.is_active ? 'bg-primary-600' : 'bg-slate-300 dark:bg-slate-700'" @click="toggleActive(rule)">
             <span class="absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all" :class="rule.is_active ? 'right-1' : 'left-1'"></span>
@@ -116,6 +119,7 @@ v-model="form.currency" required
         </form>
       </BaseModal>
 
+    <ShareModal v-model="shareState.show" entity-type="recurring" :entity-id="shareState.id" :entity-label="shareState.label" @saved="recurringStore.fetchRules()" />
     <QuickAccountModal v-model="showQuickAccount" @created="onQuickAccountCreated" />
     <QuickCategoryModal v-model="showQuickCategory" :default-type="form.type" @created="onQuickCategoryCreated" />
   </div>
@@ -137,6 +141,7 @@ import QuickCategoryModal from '../components/QuickCategoryModal.vue'
 import CurrencySelect from '../components/CurrencySelect.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import BaseSkeleton from '@/components/BaseSkeleton.vue'
+import ShareModal from '@/components/ShareModal.vue'
 
 const { t } = useI18n()
 const undo = useUndo('recurring')
@@ -145,11 +150,15 @@ useHotkeys({
   'esc': () => { if (showModal.value) closeModal() }
 })
 const recurringStore = useRecurringStore()
+const shareState = ref({ show: false, id: null, label: '' })
+
+function openShare(rule) {
+  shareState.value = { show: true, id: rule.id, label: rule.note || t('recurring.title') }
+}
 const accountsStore = useAccountsStore()
 const categoriesStore = useCategoriesStore()
 const ratesStore = useRatesStore()
 const authStore = useAuthStore()
-const isViewer = computed(() => authStore.user?.role === 'viewer')
 const baseCurrency = computed(() => ratesStore.baseCurrency)
 const showModal = ref(false)
 const showQuickAccount = ref(false)

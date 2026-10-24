@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import { loadRates, convertAmountDecimal } from '../services/currency.js'
+import { visibleAccountIds } from '../services/visibility.js'
 
 const dateRangeSchema = {
   type: 'object',
@@ -30,19 +31,19 @@ async function reportRoutes(fastify, opts) {
   // transaction rows into memory and summed them in JS.
   // Flow totals (summary/trend/net-worth) count parent+regular rows and skip
   // split children, which are bookkeeping rows with no balance effect.
-  async function fetchTotalsByTypeCurrency(userId, whereClause, params) {
+  async function fetchTotalsByTypeCurrency(userId, visible, whereClause, params) {
     const result = await fastify.db.query(`
       SELECT t.type, a.currency as account_currency, a.type as account_type,
              COALESCE(SUM(t.amount), 0) as sum, COUNT(*)::int as count
       FROM transactions t
-      JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-      WHERE t.user_id = $1 AND t.parent_id IS NULL AND ${whereClause}
+      JOIN accounts a ON a.id = t.account_id
+      WHERE t.account_id = ANY($2) AND t.parent_id IS NULL AND ${whereClause}
       GROUP BY t.type, a.currency, a.type
-    `, [userId, ...params])
+    `, [userId, visible, ...params])
     return result.rows
   }
 
-  async function fetchTotalsByCategory(userId, whereClause, params) {
+  async function fetchTotalsByCategory(userId, visible, whereClause, params) {
     // Category totals count split children (they carry the categories) and
     // skip split parents, whose category is NULL.
     const result = await fastify.db.query(`
@@ -50,28 +51,29 @@ async function reportRoutes(fastify, opts) {
              t.type, a.currency as account_currency,
              COALESCE(SUM(t.amount), 0) as sum, COUNT(*)::int as count
       FROM transactions t
-      JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-      LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = $1
-      WHERE t.user_id = $1 AND NOT t.is_split AND ${whereClause}
+      JOIN accounts a ON a.id = t.account_id
+      LEFT JOIN categories c ON c.id = t.category_id
+      WHERE t.account_id = ANY($2) AND NOT t.is_split AND ${whereClause}
       GROUP BY t.category_id, c.name, c.color, t.type, a.currency
-    `, [userId, ...params])
+    `, [userId, visible, ...params])
     return result.rows
   }
 
-  async function fetchTotalsByMonth(userId, whereClause, params) {
+  async function fetchTotalsByMonth(userId, visible, whereClause, params) {
     const result = await fastify.db.query(`
       SELECT to_char(t.date, 'YYYY-MM') as month, t.type, a.currency as account_currency,
              COALESCE(SUM(t.amount), 0) as sum
       FROM transactions t
-      JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-      WHERE t.user_id = $1 AND t.parent_id IS NULL AND ${whereClause}
+      JOIN accounts a ON a.id = t.account_id
+      WHERE t.account_id = ANY($2) AND t.parent_id IS NULL AND ${whereClause}
       GROUP BY 1, t.type, a.currency
-    `, [userId, ...params])
+    `, [userId, visible, ...params])
     return result.rows
   }
 
   fastify.get('/reports/summary', { schema: { querystring: dateRangeSchema } }, async (request, reply) => {
     const userId = request.user.userId
+    const visible = await visibleAccountIds(fastify.db, userId)
     const { from, to, account_id, base_currency = 'USD' } = request.query
     let where = []
     let params = []
@@ -82,7 +84,7 @@ async function reportRoutes(fastify, opts) {
     if (account_id) { where.push(`t.account_id = $${idx++}`); params.push(account_id) }
 
     const [groups, rates] = await Promise.all([
-      fetchTotalsByTypeCurrency(userId, where.length ? where.join(' AND ') : '1=1', params),
+      fetchTotalsByTypeCurrency(userId, visible, where.length ? where.join(' AND ') : '1=1', params),
       loadRates(fastify.db)
     ])
 
@@ -117,6 +119,7 @@ async function reportRoutes(fastify, opts) {
 
   fastify.get('/reports/by-category', { schema: { querystring: dateRangeSchema } }, async (request, reply) => {
     const userId = request.user.userId
+    const visible = await visibleAccountIds(fastify.db, userId)
     const { from, to, type, base_currency = 'USD' } = request.query
     let where = []
     let params = []
@@ -130,7 +133,7 @@ async function reportRoutes(fastify, opts) {
     if (to) { where.push(`t.date <= $${idx++}`); params.push(to) }
 
     const [groups, rates] = await Promise.all([
-      fetchTotalsByCategory(userId, where.length ? where.join(' AND ') : '1=1', params),
+      fetchTotalsByCategory(userId, visible, where.length ? where.join(' AND ') : '1=1', params),
       loadRates(fastify.db)
     ])
 
@@ -176,6 +179,7 @@ async function reportRoutes(fastify, opts) {
 
   fastify.get('/reports/trend', { schema: { querystring: dateRangeSchema } }, async (request, reply) => {
     const userId = request.user.userId
+    const visible = await visibleAccountIds(fastify.db, userId)
     const { from, to, base_currency = 'USD' } = request.query
     let where = []
     let params = []
@@ -185,7 +189,7 @@ async function reportRoutes(fastify, opts) {
     if (to) { where.push(`t.date <= $${idx++}`); params.push(to) }
 
     const [groups, rates] = await Promise.all([
-      fetchTotalsByMonth(userId, where.length ? where.join(' AND ') : '1=1', params),
+      fetchTotalsByMonth(userId, visible, where.length ? where.join(' AND ') : '1=1', params),
       loadRates(fastify.db)
     ])
 
@@ -230,6 +234,7 @@ async function reportRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const visible = await visibleAccountIds(fastify.db, userId)
     const { months: monthsInt = 12, base_currency = 'USD' } = request.query
 
     const rates = await loadRates(fastify.db)
@@ -239,8 +244,8 @@ async function reportRoutes(fastify, opts) {
     // Monthly values are reconstructed backwards from the signed transaction
     // flow, so months before the first transaction still show real balances.
     const accountsRes = await fastify.db.query(
-      'SELECT balance, currency FROM accounts WHERE user_id = $1',
-      [userId]
+      'SELECT balance, currency FROM accounts WHERE id = ANY($2)',
+      [userId, visible]
     )
     let currentTotal = new Decimal(0)
     for (const acc of accountsRes.rows) {
@@ -250,7 +255,7 @@ async function reportRoutes(fastify, opts) {
     // Signed monthly flow aggregated in SQL: income adds (the paired leg of a
     // transfer is an income row, so incoming transfers count too),
     // expense/transfer-out subtract.
-    const flowGroups = await fetchTotalsByMonth(userId, '1=1', [])
+    const flowGroups = await fetchTotalsByMonth(userId, visible, '1=1', [])
     const flowByMonth = new Map()
     for (const g of flowGroups) {
       const val = sumInBase(g.sum, g.account_currency, base_currency, rates)
@@ -292,6 +297,7 @@ async function reportRoutes(fastify, opts) {
 
   fastify.get('/reports/savings-rate', { schema: { querystring: dateRangeSchema } }, async (request, reply) => {
     const userId = request.user.userId
+    const visible = await visibleAccountIds(fastify.db, userId)
     const { from, to, base_currency = 'USD' } = request.query
     let where = []
     let params = []
@@ -301,7 +307,7 @@ async function reportRoutes(fastify, opts) {
     if (to) { where.push(`t.date <= $${idx++}`); params.push(to) }
 
     const [groups, rates] = await Promise.all([
-      fetchTotalsByTypeCurrency(userId, where.length ? where.join(' AND ') : '1=1', params),
+      fetchTotalsByTypeCurrency(userId, visible, where.length ? where.join(' AND ') : '1=1', params),
       loadRates(fastify.db)
     ])
 

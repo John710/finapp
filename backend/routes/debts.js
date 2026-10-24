@@ -1,6 +1,7 @@
 import { t, getUserLang } from '../services/i18n.js'
 import Decimal from 'decimal.js'
 import { loadRates, convertAmount, convertAmountDecimal } from '../services/currency.js'
+import { accountForWrite } from '../services/visibility.js'
 import { notify, checkDuplicateNotification } from '../services/notify.js'
 
 async function debtRoutes(fastify, opts) {
@@ -25,9 +26,9 @@ async function debtRoutes(fastify, opts) {
     return newRes.rows[0].id
   }
 
-  async function convertForAccount(client, amount, fromCurrency, accountId, rates, userId) {
+  async function convertForAccount(client, amount, fromCurrency, accountId, rates) {
     if (!accountId || !fromCurrency) return amount
-    const accRes = await client.query('SELECT currency FROM accounts WHERE id = $1 AND user_id = $2', [accountId, userId])
+    const accRes = await client.query('SELECT currency FROM accounts WHERE id = $1', [accountId])
     const toCurrency = accRes.rows[0]?.currency
     if (!toCurrency || fromCurrency === toCurrency) return amount
     const converted = convertAmount(amount, fromCurrency, toCurrency, rates)
@@ -43,10 +44,14 @@ async function debtRoutes(fastify, opts) {
     const userId = request.user.userId
     const [debtsResult, rates] = await Promise.all([
       fastify.db.query(`
-        SELECT d.*, a.name as account_name
+        SELECT d.*, a.name as account_name,
+               CASE WHEN d.user_id = $1 THEN NULL ELSE ou.login END AS owner_login
         FROM debts d
-        LEFT JOIN accounts a ON a.id = d.account_id AND a.user_id = $1
-        WHERE d.user_id = $1
+        LEFT JOIN accounts a ON a.id = d.account_id
+        JOIN users ou ON ou.id = d.user_id
+        LEFT JOIN entity_shares es ON es.entity_type = 'debt' AND es.entity_id = d.id
+          AND es.owner_id = d.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
+        WHERE d.user_id = $1 OR es.id IS NOT NULL
         ORDER BY d.due_date ASC NULLS LAST
       `, [userId]),
       loadRates(fastify.db)
@@ -121,13 +126,15 @@ async function debtRoutes(fastify, opts) {
       await client.query('BEGIN')
       const rates = await loadRates(client)
 
+      let accountOwner = null
       if (account_id) {
-        const accRes = await client.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
-        if (accRes.rows.length === 0) {
+        const acc = await accountForWrite(client, userId, account_id)
+        if (!acc) {
           await client.query('ROLLBACK')
           reply.code(404)
           return { error: t('errors.account_not_found', {}, lang) }
         }
+        accountOwner = acc.owner_id
       }
 
       const result = await client.query(
@@ -140,15 +147,15 @@ async function debtRoutes(fastify, opts) {
         const txType = type === 'borrow' ? 'income' : 'expense'
         const sign = txType === 'income' ? 1 : -1
         const categoryId = await getDebtCategoryId(client, txType, userId)
-        const txAmount = await convertForAccount(client, amount, debtCurrency, account_id, rates, userId)
+        const txAmount = await convertForAccount(client, amount, debtCurrency, account_id, rates)
 
         await client.query(
-          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6)',
-          [userId, account_id, categoryId, txAmount, txType, `debt_created:${name}`]
+          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, created_by) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6, $7)',
+          [accountOwner, account_id, categoryId, txAmount, txType, `debt_created:${name}`, userId]
         )
         await client.query(
           'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
-          [txAmount * sign, account_id, userId]
+          [txAmount * sign, account_id, accountOwner]
         )
       }
 
@@ -193,8 +200,8 @@ async function debtRoutes(fastify, opts) {
     const { id } = request.params
     const { name, counterparty, amount, currency, type, due_date, description, status, account_id } = request.body
     if (account_id) {
-      const accRes = await fastify.db.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
-      if (accRes.rows.length === 0) {
+      const acc = await accountForWrite(fastify.db, userId, account_id)
+      if (!acc) {
         reply.code(404)
         return { error: t('errors.account_not_found', {}, lang) }
       }
@@ -237,51 +244,63 @@ async function debtRoutes(fastify, opts) {
     const client = await fastify.db.connect()
     let debtFullyPaid = null
     let created = null
+    let debtOwner = null
     try {
       await client.query('BEGIN')
       const rates = await loadRates(client)
 
-      const debtRes = await client.query('SELECT amount, currency, type, name FROM debts WHERE id = $1 AND user_id = $2', [id, userId])
+      // Shared debts: a family member with edit permission can add payments
+      const debtRes = await client.query(
+        `SELECT d.id, d.amount, d.currency, d.type, d.name, d.user_id AS owner_id,
+                CASE WHEN d.user_id = $2 THEN 'edit' ELSE COALESCE((SELECT es.permission FROM entity_shares es
+                  WHERE es.entity_type = 'debt' AND es.entity_id = d.id AND es.owner_id = d.user_id
+                    AND (es.shared_with = $2 OR es.shared_with IS NULL) LIMIT 1), 'none') END AS access
+         FROM debts d WHERE d.id = $1`,
+        [id, userId]
+      )
       const debt = debtRes.rows[0]
-      if (!debt) {
+      if (!debt || debt.access === 'none' || debt.access === 'view') {
         await client.query('ROLLBACK')
         reply.code(404)
         return { error: t('errors.debt_not_found', {}, lang) }
       }
+      debtOwner = debt.owner_id
       const debtCurrency = debt.currency || 'USD'
       const paymentCurrency = currency || debtCurrency
 
+      let accountOwner = null
       if (account_id) {
-        const accRes = await client.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
-        if (accRes.rows.length === 0) {
+        const acc = await accountForWrite(client, userId, account_id)
+        if (!acc) {
           await client.query('ROLLBACK')
           reply.code(404)
           return { error: t('errors.account_not_found', {}, lang) }
         }
+        accountOwner = acc.owner_id
       }
 
       const result = await client.query(
-        'INSERT INTO debt_payments (user_id, debt_id, amount, currency, note, account_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-        [userId, id, amount, paymentCurrency, note, account_id]
+        'INSERT INTO debt_payments (user_id, debt_id, amount, currency, note, account_id, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+        [debtOwner, id, amount, paymentCurrency, note, account_id, userId]
       )
 
       if (account_id) {
         const txType = debt.type === 'borrow' ? 'expense' : 'income'
         const sign = txType === 'income' ? 1 : -1
         const categoryId = await getDebtCategoryId(client, txType, userId)
-        const txAmount = await convertForAccount(client, amount, paymentCurrency, account_id, rates, userId)
+        const txAmount = await convertForAccount(client, amount, paymentCurrency, account_id, rates)
 
         await client.query(
-          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6)',
-          [userId, account_id, categoryId, txAmount, txType, `debt_payment:${debt.name}`]
+          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, created_by) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6, $7)',
+          [accountOwner, account_id, categoryId, txAmount, txType, `debt_payment:${debt.name}`, userId]
         )
         await client.query(
           'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
-          [txAmount * sign, account_id, userId]
+          [txAmount * sign, account_id, accountOwner]
         )
       }
 
-      const paymentsRes = await client.query('SELECT amount, currency FROM debt_payments WHERE debt_id = $1 AND user_id = $2', [id, userId])
+      const paymentsRes = await client.query('SELECT amount, currency FROM debt_payments WHERE debt_id = $1', [id])
       let paid = new Decimal(0)
       for (const p of paymentsRes.rows) {
         const pCurrency = p.currency || debtCurrency
@@ -298,7 +317,7 @@ async function debtRoutes(fastify, opts) {
         }
       }
       if (paid.gte(new Decimal(debt.amount))) {
-        await client.query('UPDATE debts SET status = $1 WHERE id = $2 AND user_id = $3', ['paid', id, userId])
+        await client.query('UPDATE debts SET status = $1 WHERE id = $2', ['paid', id])
         debtFullyPaid = debt
       }
 
@@ -316,10 +335,10 @@ async function debtRoutes(fastify, opts) {
     // has committed — they must never hold the transaction or the pooled client.
     if (debtFullyPaid) {
       try {
-        const lang = await getUserLang(fastify.db, userId)
+        const lang = await getUserLang(fastify.db, debtOwner)
         const title = t('notifications.debt_paid', {}, lang)
         const message = t('notifications.debt_paid_body', { name: debtFullyPaid.name }, lang)
-        await notify(fastify, userId, {
+        await notify(fastify, debtOwner || userId, {
           type: 'debt_paid', title, message,
           data: { entity_id: id, url: '/debts' },
           channels: ['bell', 'push', 'shoutrrr']
@@ -343,9 +362,21 @@ async function debtRoutes(fastify, opts) {
   }, async (request, reply) => {
     const userId = request.user.userId
     const { id } = request.params
-    const result = await fastify.db.query(
-      'SELECT p.*, a.name as account_name FROM debt_payments p LEFT JOIN accounts a ON a.id = p.account_id AND a.user_id = $1 WHERE p.debt_id = $2 AND p.user_id = $1 ORDER BY p.created_at DESC',
+    const debtCheck = await fastify.db.query(
+      `SELECT d.user_id AS owner_id FROM debts d
+       LEFT JOIN entity_shares es ON es.entity_type = 'debt' AND es.entity_id = d.id
+         AND es.owner_id = d.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
+       WHERE d.id = $2 AND (d.user_id = $1 OR es.id IS NOT NULL)`,
       [userId, id]
+    )
+    if (debtCheck.rows.length === 0) {
+      const lang = await getUserLang(fastify.db, userId)
+      reply.code(404)
+      return { error: t('errors.debt_not_found', {}, lang) }
+    }
+    const result = await fastify.db.query(
+      'SELECT p.*, a.name as account_name FROM debt_payments p LEFT JOIN accounts a ON a.id = p.account_id WHERE p.debt_id = $1 ORDER BY p.created_at DESC',
+      [id]
     )
     return result.rows
   })
@@ -363,6 +394,7 @@ async function debtRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
+    await fastify.db.query("DELETE FROM entity_shares WHERE entity_type = 'debt' AND entity_id = $1", [id])
     const result = await fastify.db.query('DELETE FROM debts WHERE id = $1 AND user_id = $2', [id, userId])
     if (result.rowCount === 0) {
       reply.code(404)

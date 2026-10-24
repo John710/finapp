@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('tags.title') }}</h1>
-      <button v-if="!isViewer" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card text-white rounded-full text-sm font-medium transition-colors" @click="openModal()">
+      <button class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card text-white rounded-full text-sm font-medium transition-colors" @click="openModal()">
         {{ $t('tags.add') }}
       </button>
     </div>
@@ -77,7 +77,6 @@ const router = useRouter()
 const undo = useUndo('tags')
 const tagsStore = useTagsStore()
 const authStore = useAuthStore()
-const isViewer = computed(() => authStore.user?.role === 'viewer')
 
 useHotkeys({
   'ctrl+enter': () => { if (showModal.value) saveTag() },

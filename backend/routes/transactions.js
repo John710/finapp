@@ -1,21 +1,24 @@
 import { t, getUserLang } from '../services/i18n.js'
 import { loadRates, convertAmount } from '../services/currency.js'
 import { notify, checkDuplicateNotification } from '../services/notify.js'
+import { visibleAccountIds, accountForWrite, accountForRead, canModifyTransaction } from '../services/visibility.js'
 
 // The paired income leg of a transfer and the source transfer row reference
 // each other via transfer_pair_id (the leg is inserted first with a link to the
 // source, then the source row gets the leg's id). The created_at fallback only
 // covers rows created before this column existed.
+// Family sharing: each leg belongs to (user_id) the OWNER of its account;
+// created_by records who actually entered it.
 export async function findTransferLeg(client, transfer) {
   if (transfer.transfer_pair_id) {
     const r = await client.query(
-      'SELECT id, amount, type FROM transactions WHERE id = $1 AND user_id = $2',
-      [transfer.transfer_pair_id, transfer.user_id]
+      'SELECT id, amount, type, user_id FROM transactions WHERE id = $1',
+      [transfer.transfer_pair_id]
     )
     if (r.rows.length) return r.rows[0]
   }
   const r = await client.query(
-    "SELECT id, amount, type FROM transactions WHERE type = 'income' AND account_id = $1 AND transfer_to_account_id = $2 AND user_id = $3 AND transfer_pair_id IS NULL ORDER BY created_at DESC, id DESC LIMIT 1",
+    "SELECT id, amount, type, user_id FROM transactions WHERE type = 'income' AND account_id = $1 AND transfer_to_account_id = $2 AND user_id = $3 AND transfer_pair_id IS NULL ORDER BY created_at DESC, id DESC LIMIT 1",
     [transfer.transfer_to_account_id, transfer.account_id, transfer.user_id]
   )
   return r.rows[0] || null
@@ -48,11 +51,19 @@ async function transactionRoutes(fastify, opts) {
   }, async (request, reply) => {
     const userId = request.user.userId
     const { account_id, category_id, type, from, to, search, tag_id, limit = 50, offset = 0 } = request.query
-    let where = ['t.user_id = $1']
-    let params = [userId]
+    const visible = await visibleAccountIds(fastify.db, userId)
+    if (visible.length === 0) {
+      return { items: [], total: 0, limit: parseInt(limit, 10), offset: parseInt(offset, 10) }
+    }
+    let where = ['t.account_id = ANY($1)']
+    let params = [visible]
     let idx = 2
 
-    if (account_id) { where.push(`t.account_id = $${idx++}`); params.push(account_id) }
+    if (account_id) {
+      if (!visible.includes(account_id)) return { items: [], total: 0, limit: parseInt(limit, 10), offset: parseInt(offset, 10) }
+      where.push(`t.account_id = $${idx++}`)
+      params.push(account_id)
+    }
     if (category_id) { where.push(`t.category_id = $${idx++}`); params.push(category_id) }
     if (type) { where.push(`t.type = $${idx++}`); params.push(type) }
     if (from) { where.push(`t.date >= $${idx++}`); params.push(from) }
@@ -72,14 +83,15 @@ async function transactionRoutes(fastify, opts) {
     )
 
     const result = await fastify.db.query(
-      `SELECT t.*, a.name as account_name, a.currency as account_currency, a.type as account_type, c.name as category_name, c.icon as category_icon, c.color as category_color
+      `SELECT t.*, a.name as account_name, a.currency as account_currency, a.type as account_type, c.name as category_name, c.icon as category_icon, c.color as category_color, ou.login as owner_login
        FROM transactions t
-       LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-       LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = $1
+       LEFT JOIN accounts a ON a.id = t.account_id
+       LEFT JOIN categories c ON c.id = t.category_id
+       LEFT JOIN users ou ON ou.id = t.user_id
        ${whereClause}
        ORDER BY t.date DESC, t.parent_id NULLS FIRST, t.created_at DESC
        LIMIT $${idx++} OFFSET $${idx++}`,
-      [...params, limit, offset]
+      [userId, ...params, limit, offset]
     )
 
     const transactionIds = result.rows.map(r => r.id)
@@ -186,21 +198,25 @@ async function transactionRoutes(fastify, opts) {
         }
       }
 
-      // Validate account ownership
-      const accRes = await client.query('SELECT id, currency, type FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
-      if (accRes.rows.length === 0) {
+      // Validate accounts. Family sharing: the transaction belongs to the
+      // OWNER of its account; the actor needs edit permission (own or shared).
+      const sourceAcc = await accountForWrite(client, userId, account_id)
+      if (!sourceAcc) {
         await client.query('ROLLBACK')
         reply.code(404)
         return { error: t('errors.account_not_found', {}, lang) }
       }
+      const sourceOwner = sourceAcc.owner_id
 
+      let targetOwner = null
       if (transfer_to_account_id) {
-        const tgtRes = await client.query('SELECT id, currency FROM accounts WHERE id = $1 AND user_id = $2', [transfer_to_account_id, userId])
-        if (tgtRes.rows.length === 0) {
+        const targetAcc = await accountForWrite(client, userId, transfer_to_account_id)
+        if (!targetAcc) {
           await client.query('ROLLBACK')
           reply.code(404)
           return { error: t('errors.transfer_target_not_found', {}, lang) }
         }
+        targetOwner = targetAcc.owner_id
       }
 
       if (category_id) {
@@ -213,8 +229,8 @@ async function transactionRoutes(fastify, opts) {
       }
 
       const result = await client.query(
-        'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, transfer_to_account_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-        [userId, account_id, category_id, amount, type, date, note, transfer_to_account_id]
+        'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, transfer_to_account_id, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+        [sourceOwner, account_id, category_id, amount, type, date, note, transfer_to_account_id, userId]
       )
       const transaction = result.rows[0]
 
@@ -232,31 +248,31 @@ async function transactionRoutes(fastify, opts) {
         )
       }
 
-      // Update account balance
+      // Update account balance (on the account owner's row)
       const sign = type === 'income' ? 1 : -1
       await client.query(
         'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
-        [amount * sign, account_id, userId]
+        [amount * sign, account_id, sourceOwner]
       )
 
       // Split children: same account/date/type as the parent, no balance effect
       if (hasSplits) {
         await client.query(
           'UPDATE transactions SET is_split = true, category_id = NULL WHERE id = $1 AND user_id = $2',
-          [transaction.id, userId]
+          [transaction.id, sourceOwner]
         )
         for (const sp of splits) {
           await client.query(
-            'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, parent_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-            [userId, account_id, sp.category_id, sp.amount, type, date, sp.note || null, transaction.id]
+            'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, parent_id, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+            [sourceOwner, account_id, sp.category_id, sp.amount, type, date, sp.note || null, transaction.id, userId]
           )
         }
       }
 
       if (type === 'transfer' && transfer_to_account_id) {
         const [srcRes, tgtRes] = await Promise.all([
-          client.query('SELECT currency, type FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId]),
-          client.query('SELECT currency, type FROM accounts WHERE id = $1 AND user_id = $2', [transfer_to_account_id, userId])
+          client.query('SELECT currency, type FROM accounts WHERE id = $1', [account_id]),
+          client.query('SELECT currency, type FROM accounts WHERE id = $1', [transfer_to_account_id])
         ])
         const sourceCurrency = srcRes.rows[0]?.currency
         const targetCurrency = tgtRes.rows[0]?.currency
@@ -273,18 +289,19 @@ async function transactionRoutes(fastify, opts) {
           targetAmount = converted
         }
 
+        // Credit the target account on ITS owner's row
         await client.query(
           'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
-          [targetAmount, transfer_to_account_id, userId]
+          [targetAmount, transfer_to_account_id, targetOwner]
         )
-        // Create the paired income leg and link both rows to each other
+        // The paired income leg belongs to the target account's owner
         const legRes = await client.query(
-          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, transfer_to_account_id, transfer_pair_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
-          [userId, transfer_to_account_id, null, targetAmount, 'income', date, null, account_id, transaction.id]
+          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, transfer_to_account_id, transfer_pair_id, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id',
+          [targetOwner, transfer_to_account_id, null, targetAmount, 'income', date, null, account_id, transaction.id, userId]
         )
         await client.query(
           'UPDATE transactions SET transfer_pair_id = $1 WHERE id = $2 AND user_id = $3',
-          [legRes.rows[0].id, transaction.id, userId]
+          [legRes.rows[0].id, transaction.id, sourceOwner]
         )
         transaction.transfer_pair_id = legRes.rows[0].id
       }
@@ -294,7 +311,7 @@ async function transactionRoutes(fastify, opts) {
       // Check budget status for expense transactions
       if (type === 'expense' && category_id) {
         try {
-          const lang = await getUserLang(fastify.db, userId)
+          const lang = await getUserLang(fastify.db, sourceOwner)
           const budgetRes = await fastify.db.query(
             `SELECT b.id, b.amount as limit_amount, COALESCE(SUM(t.amount), 0) as spent, c.name as category_name
              FROM budgets b
@@ -304,29 +321,29 @@ async function transactionRoutes(fastify, opts) {
              JOIN categories c ON c.id = b.category_id AND c.user_id = b.user_id
              WHERE b.category_id = $1 AND b.is_active = true AND b.user_id = $2
              GROUP BY b.id, b.amount, c.name`,
-            [category_id, userId]
+            [category_id, sourceOwner]
           )
           for (const budget of budgetRes.rows) {
             const spent = parseFloat(budget.spent)
             const limit = parseFloat(budget.limit_amount)
             const pct = limit > 0 ? (spent / limit) : 0
             if (spent > limit) {
-              const dup = await checkDuplicateNotification(fastify, { userId, type: 'budget_exceeded', entityId: budget.id })
+              const dup = await checkDuplicateNotification(fastify, { userId: sourceOwner, type: 'budget_exceeded', entityId: budget.id })
               if (!dup) {
                 const title = t('notifications.budget_exceeded', {}, lang)
                 const message = t('notifications.budget_exceeded_body', { category: budget.category_name || '', amount: limit }, lang)
-                await notify(fastify, userId, {
+                await notify(fastify, sourceOwner, {
                   type: 'budget_exceeded', title, message,
                   data: { entity_id: budget.id, url: '/budgets' },
                   channels: ['bell', 'push', 'shoutrrr']
                 })
               }
             } else if (pct >= 0.8 && pct < 1.0) {
-              const dup = await checkDuplicateNotification(fastify, { userId, type: 'budget_warning', entityId: budget.id })
+              const dup = await checkDuplicateNotification(fastify, { userId: sourceOwner, type: 'budget_warning', entityId: budget.id })
               if (!dup) {
                 const title = t('notifications.budget_warning', {}, lang)
                 const message = t('notifications.budget_warning_body', { category: budget.category_name || '', percent: Math.round(pct * 100) }, lang)
-                await notify(fastify, userId, {
+                await notify(fastify, sourceOwner, {
                   type: 'budget_warning', title, message,
                   data: { entity_id: budget.id, url: '/budgets' },
                   channels: ['bell', 'push']
@@ -342,20 +359,20 @@ async function transactionRoutes(fastify, opts) {
       // Check goal achievement for income transactions to goal accounts
       if (type === 'income' && account_id) {
         try {
-          const lang = await getUserLang(fastify.db, userId)
+          const lang = await getUserLang(fastify.db, sourceOwner)
           const goalRes = await fastify.db.query(
             `SELECT id, name, balance, target_amount FROM accounts WHERE id = $1 AND type = 'goal' AND target_amount > 0 AND user_id = $2`,
-            [account_id, userId]
+            [account_id, sourceOwner]
           )
           for (const goal of goalRes.rows) {
             const balance = parseFloat(goal.balance)
             const target = parseFloat(goal.target_amount)
             if (balance >= target) {
-              const dup = await checkDuplicateNotification(fastify, { userId, type: 'goal_reached', entityId: goal.id })
+              const dup = await checkDuplicateNotification(fastify, { userId: sourceOwner, type: 'goal_reached', entityId: goal.id })
               if (!dup) {
                 const title = t('notifications.goal_reached', {}, lang)
                 const message = t('notifications.goal_reached_body', { name: goal.name, balance, target }, lang)
-                await notify(fastify, userId, {
+                await notify(fastify, sourceOwner, {
                   type: 'goal_reached', title, message,
                   data: { entity_id: goal.id, url: `/accounts/${goal.id}` },
                   channels: ['bell', 'push', 'shoutrrr']
@@ -370,15 +387,15 @@ async function transactionRoutes(fastify, opts) {
 
       // Check for overdrawn account after transaction
       try {
-        const lang = await getUserLang(fastify.db, userId)
-        const accRes = await fastify.db.query('SELECT id, name, balance, type FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
+        const lang = await getUserLang(fastify.db, sourceOwner)
+        const accRes = await fastify.db.query('SELECT id, name, balance, type FROM accounts WHERE id = $1 AND user_id = $2', [account_id, sourceOwner])
         const acc = accRes.rows[0]
         if (acc && parseFloat(acc.balance) < 0) {
-          const dup = await checkDuplicateNotification(fastify, { userId, type: 'account_overdrawn', entityId: acc.id })
+          const dup = await checkDuplicateNotification(fastify, { userId: sourceOwner, type: 'account_overdrawn', entityId: acc.id })
           if (!dup) {
             const title = t('notifications.account_overdrawn', {}, lang)
             const message = t('notifications.account_overdrawn_body', { name: acc.name, balance: acc.balance }, lang)
-            await notify(fastify, userId, {
+            await notify(fastify, sourceOwner, {
               type: 'account_overdrawn', title, message,
               data: { entity_id: acc.id, url: '/accounts' },
               channels: ['bell', 'push', 'shoutrrr']
@@ -386,14 +403,14 @@ async function transactionRoutes(fastify, opts) {
           }
         }
         if (type === 'transfer' && transfer_to_account_id) {
-          const tgtRes = await fastify.db.query('SELECT id, name, balance, type FROM accounts WHERE id = $1 AND user_id = $2', [transfer_to_account_id, userId])
+          const tgtRes = await fastify.db.query('SELECT id, name, balance, type FROM accounts WHERE id = $1 AND user_id = $2', [transfer_to_account_id, targetOwner])
           const tgt = tgtRes.rows[0]
           if (tgt && parseFloat(tgt.balance) < 0) {
-            const dup = await checkDuplicateNotification(fastify, { userId, type: 'account_overdrawn', entityId: tgt.id })
+            const dup = await checkDuplicateNotification(fastify, { userId: targetOwner, type: 'account_overdrawn', entityId: tgt.id })
             if (!dup) {
               const title = t('notifications.account_overdrawn', {}, lang)
               const message = t('notifications.account_overdrawn_body', { name: tgt.name, balance: tgt.balance }, lang)
-              await notify(fastify, userId, {
+              await notify(fastify, targetOwner, {
                 type: 'account_overdrawn', title, message,
                 data: { entity_id: tgt.id, url: '/accounts' },
                 channels: ['bell', 'push', 'shoutrrr']
@@ -451,8 +468,8 @@ async function transactionRoutes(fastify, opts) {
       // Lock the row so a concurrent PUT/DELETE of the same transaction cannot
       // double-revert the balance effects.
       const oldRes = await client.query(
-        'SELECT * FROM transactions WHERE id = $1 AND user_id = $2 FOR UPDATE',
-        [id, userId]
+        'SELECT * FROM transactions WHERE id = $1 FOR UPDATE',
+        [id]
       )
       if (oldRes.rows.length === 0) {
         await client.query('ROLLBACK')
@@ -460,6 +477,14 @@ async function transactionRoutes(fastify, opts) {
         return { error: t('errors.transaction_not_found', {}, lang) }
       }
       const old = oldRes.rows[0]
+
+      // Permission: own transaction or edit-shared account it sits on
+      if (!(await canModifyTransaction(client, userId, old))) {
+        await client.query('ROLLBACK')
+        reply.code(403)
+        return { error: t('errors.not_allowed', {}, lang) }
+      }
+      const oldOwner = old.user_id
 
       if (old.transfer_pair_id && old.type === 'income') {
         await client.query('ROLLBACK')
@@ -492,21 +517,24 @@ async function transactionRoutes(fastify, opts) {
         }
       }
 
-      // Validate new account ownership
-      const accRes = await client.query('SELECT id, currency, type FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
-      if (accRes.rows.length === 0) {
+      // Validate new accounts (edit permission on each)
+      const newAcc = await accountForWrite(client, userId, account_id)
+      if (!newAcc) {
         await client.query('ROLLBACK')
         reply.code(404)
         return { error: t('errors.account_not_found', {}, lang) }
       }
+      const newOwner = newAcc.owner_id
 
+      let targetOwner = null
       if (transfer_to_account_id) {
-        const tgtRes = await client.query('SELECT id, currency FROM accounts WHERE id = $1 AND user_id = $2', [transfer_to_account_id, userId])
-        if (tgtRes.rows.length === 0) {
+        const targetAcc = await accountForWrite(client, userId, transfer_to_account_id)
+        if (!targetAcc) {
           await client.query('ROLLBACK')
           reply.code(404)
           return { error: t('errors.transfer_target_not_found', {}, lang) }
         }
+        targetOwner = targetAcc.owner_id
       }
 
       if (category_id) {
@@ -518,11 +546,11 @@ async function transactionRoutes(fastify, opts) {
         }
       }
 
-      // Revert old transaction balance effects
+      // Revert old balance effects — each leg on its OWN owner's row
       const oldSign = old.type === 'income' ? 1 : -1
       await client.query(
         'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
-        [parseFloat(old.amount) * oldSign, old.account_id, userId]
+        [parseFloat(old.amount) * oldSign, old.account_id, oldOwner]
       )
       if (old.type === 'transfer' && old.transfer_to_account_id) {
         // Reverse the amount that was actually credited to the target account
@@ -530,22 +558,23 @@ async function transactionRoutes(fastify, opts) {
         // amount, which differs once currencies differ.
         const leg = await findTransferLeg(client, old)
         const creditedAmount = leg ? parseFloat(leg.amount) : parseFloat(old.amount)
-        await client.query(
-          'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
-          [creditedAmount, old.transfer_to_account_id, userId]
-        )
-        if (leg) {
+        const legOwner = leg ? leg.user_id : null
+        if (legOwner) {
           await client.query(
-            'DELETE FROM transactions WHERE id = $1 AND user_id = $2',
-            [leg.id, userId]
+            'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
+            [creditedAmount, old.transfer_to_account_id, legOwner]
+          )
+          await client.query(
+            'DELETE FROM transactions WHERE id = $1',
+            [leg.id]
           )
         }
       }
 
       // Update main transaction
       const result = await client.query(
-        'UPDATE transactions SET account_id = $1, category_id = $2, amount = $3, type = $4, date = $5, note = $6, transfer_to_account_id = $7, updated_at = NOW() WHERE id = $8 AND user_id = $9 RETURNING *',
-        [account_id, category_id, amount, type, date, note, transfer_to_account_id, id, userId]
+        'UPDATE transactions SET account_id = $1, category_id = $2, amount = $3, type = $4, date = $5, note = $6, transfer_to_account_id = $7, user_id = $8, created_by = $9, updated_at = NOW() WHERE id = $10 RETURNING *',
+        [account_id, category_id, amount, type, date, note, transfer_to_account_id, newOwner, userId, id]
       )
       const transaction = result.rows[0]
 
@@ -569,13 +598,13 @@ async function transactionRoutes(fastify, opts) {
       const sign = type === 'income' ? 1 : -1
       await client.query(
         'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
-        [amount * sign, account_id, userId]
+        [amount * sign, account_id, newOwner]
       )
 
       if (type === 'transfer' && transfer_to_account_id) {
         const [srcRes, tgtRes] = await Promise.all([
-          client.query('SELECT currency, type FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId]),
-          client.query('SELECT currency, type FROM accounts WHERE id = $1 AND user_id = $2', [transfer_to_account_id, userId])
+          client.query('SELECT currency, type FROM accounts WHERE id = $1', [account_id]),
+          client.query('SELECT currency, type FROM accounts WHERE id = $1', [transfer_to_account_id])
         ])
         const sourceCurrency = srcRes.rows[0]?.currency
         const targetCurrency = tgtRes.rows[0]?.currency
@@ -594,15 +623,15 @@ async function transactionRoutes(fastify, opts) {
 
         await client.query(
           'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
-          [targetAmount, transfer_to_account_id, userId]
+          [targetAmount, transfer_to_account_id, targetOwner]
         )
         const legRes = await client.query(
-          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, transfer_to_account_id, transfer_pair_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
-          [userId, transfer_to_account_id, null, targetAmount, 'income', date, null, account_id, transaction.id]
+          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, transfer_to_account_id, transfer_pair_id, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id',
+          [targetOwner, transfer_to_account_id, null, targetAmount, 'income', date, null, account_id, transaction.id, userId]
         )
         await client.query(
           'UPDATE transactions SET transfer_pair_id = $1 WHERE id = $2 AND user_id = $3',
-          [legRes.rows[0].id, transaction.id, userId]
+          [legRes.rows[0].id, transaction.id, newOwner]
         )
         transaction.transfer_pair_id = legRes.rows[0].id
       }
@@ -636,8 +665,8 @@ async function transactionRoutes(fastify, opts) {
       await client.query('BEGIN')
 
       const oldRes = await client.query(
-        'SELECT * FROM transactions WHERE id = $1 AND user_id = $2 FOR UPDATE',
-        [id, userId]
+        'SELECT * FROM transactions WHERE id = $1 FOR UPDATE',
+        [id]
       )
       if (oldRes.rows.length === 0) {
         await client.query('ROLLBACK')
@@ -645,6 +674,14 @@ async function transactionRoutes(fastify, opts) {
         return { error: t('errors.transaction_not_found', {}, lang) }
       }
       const old = oldRes.rows[0]
+
+      // Permission: own transaction or edit-shared account it sits on
+      if (!(await canModifyTransaction(client, userId, old))) {
+        await client.query('ROLLBACK')
+        reply.code(403)
+        return { error: t('errors.not_allowed', {}, lang) }
+      }
+      const oldOwner = old.user_id
 
       if (isPairedLeg(old)) {
         await client.query('ROLLBACK')
@@ -659,30 +696,31 @@ async function transactionRoutes(fastify, opts) {
         return { error: t('errors.split_child_delete', {}, lang) }
       }
 
-      // Revert old balance effects
+      // Revert old balance effects — each leg on its OWN owner's row
       const oldSign = old.type === 'income' ? 1 : -1
       await client.query(
         'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
-        [parseFloat(old.amount) * oldSign, old.account_id, userId]
+        [parseFloat(old.amount) * oldSign, old.account_id, oldOwner]
       )
       if (old.type === 'transfer' && old.transfer_to_account_id) {
         // Reverse the amount actually credited to the target (paired leg amount)
         const leg = await findTransferLeg(client, old)
         const creditedAmount = leg ? parseFloat(leg.amount) : parseFloat(old.amount)
-        await client.query(
-          'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
-          [creditedAmount, old.transfer_to_account_id, userId]
-        )
-        if (leg) {
+        const legOwner = leg ? leg.user_id : null
+        if (legOwner) {
           await client.query(
-            'DELETE FROM transactions WHERE id = $1 AND user_id = $2',
-            [leg.id, userId]
+            'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
+            [creditedAmount, old.transfer_to_account_id, legOwner]
+          )
+          await client.query(
+            'DELETE FROM transactions WHERE id = $1',
+            [leg.id]
           )
         }
       }
 
       await client.query('DELETE FROM transaction_tags WHERE transaction_id = $1', [id])
-      await client.query('DELETE FROM transactions WHERE id = $1 AND user_id = $2', [id, userId])
+      await client.query('DELETE FROM transactions WHERE id = $1', [id])
 
       await client.query('COMMIT')
       reply.code(204)

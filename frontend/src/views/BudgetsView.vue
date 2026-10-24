@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('budgets.title') }}</h1>
-      <button v-if="!isViewer" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
+      <button class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -34,6 +34,7 @@
               #{{ tag.name }}
             </span>
           </div>
+          <Icon v-if="b.user_id === auth.user?.id && b.is_shared !== undefined" name="share" class="w-3 h-3 text-primary-400" />
           <span class="text-xs text-slate-500 whitespace-nowrap">{{ b.period === 'month' ? $t('budgets.period_month') : $t('budgets.period_week') }}</span>
         </div>
         <div class="flex justify-between text-sm mb-2">
@@ -48,7 +49,11 @@
           <span v-else-if="b.progress >= 80">{{ $t('budgets.warning') }}</span>
           <span v-else>{{ $t('budgets.remaining') }}: {{ formatConverted(b.amount - b.spent, b.currency) }}</span>
         </p>
-        <div v-if="!isViewer" class="mt-4 flex gap-2">
+        <div class="mt-4 flex gap-2 items-center">
+          <span v-if="b.owner_login" class="text-xs text-primary-500 mr-auto">@{{ b.owner_login }}</span>
+          <button v-if="!b.owner_login" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1" @click="openShare(b)">
+            <Icon name="share" class="w-3 h-3" />{{ $t('sharing.title') }}
+          </button>
           <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click="editBudget(b)">{{ $t('common.edit') }}</button>
           <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors" @click="deleteBudget(b.id)">{{ $t('common.delete') }}</button>
         </div>
@@ -110,6 +115,7 @@ v-model="form.currency" required
         </form>
       </BaseModal>
 
+    <ShareModal v-model="shareState.show" entity-type="budget" :entity-id="shareState.id" :entity-label="shareState.label" @saved="budgetsStore.fetchBudgets()" />
     <QuickCategoryModal v-model="showQuickCategory" default-type="expense" @created="onQuickCategoryCreated" />
   </div>
 </template>
@@ -119,7 +125,6 @@ import { ref, onMounted, reactive, computed } from 'vue'
 import { useBudgetsStore } from '../stores/budgets'
 import { useCategoriesStore } from '../stores/categories'
 import { useTagsStore } from '../stores/tags'
-import { useAuthStore } from '../stores/auth'
 import { useRatesStore } from '../stores/rates'
 import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
@@ -128,6 +133,8 @@ import QuickCategoryModal from '../components/QuickCategoryModal.vue'
 import CurrencySelect from '../components/CurrencySelect.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import BaseSkeleton from '@/components/BaseSkeleton.vue'
+import ShareModal from '@/components/ShareModal.vue'
+import { useAuthStore } from '../stores/auth'
 import { parseAmount } from '@/utils/format'
 
 const { t } = useI18n()
@@ -139,10 +146,9 @@ useHotkeys({
 const budgetsStore = useBudgetsStore()
 const categoriesStore = useCategoriesStore()
 const tagsStore = useTagsStore()
-const authStore = useAuthStore()
+const auth = useAuthStore()
 const ratesStore = useRatesStore()
 const baseCurrency = computed(() => ratesStore.baseCurrency)
-const isViewer = computed(() => authStore.user?.role === 'viewer')
 const showModal = ref(false)
 const showQuickCategory = ref(false)
 const isEditing = ref(false)
@@ -153,6 +159,12 @@ onMounted(() => {
   categoriesStore.fetchCategories()
   tagsStore.fetchTags()
 })
+
+const shareState = ref({ show: false, id: null, label: '' })
+
+function openShare(b) {
+  shareState.value = { show: true, id: b.id, label: b.category_name || t('budgets.title') }
+}
 
 function toggleTag(tagId) {
   const idx = form.tag_ids.indexOf(tagId)

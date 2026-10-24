@@ -8,10 +8,15 @@ async function budgetRoutes(fastify, opts) {
     const userId = request.user.userId
     const [budgetsResult, rates] = await Promise.all([
       fastify.db.query(`
-        SELECT b.*, c.name as category_name, c.color as category_color
+        SELECT b.*, c.name as category_name, c.color as category_color,
+               CASE WHEN b.user_id = $1 THEN NULL ELSE ou.login END AS owner_login,
+               CASE WHEN b.user_id = $1 THEN COALESCE((SELECT true FROM entity_shares es3 WHERE es3.entity_type = 'budget' AND es3.entity_id = b.id AND es3.owner_id = b.user_id LIMIT 1), false) ELSE false END AS is_shared
         FROM budgets b
-        LEFT JOIN categories c ON c.id = b.category_id AND c.user_id = $1
-        WHERE b.is_active = true AND b.user_id = $1
+        LEFT JOIN categories c ON c.id = b.category_id
+        JOIN users ou ON ou.id = b.user_id
+        LEFT JOIN entity_shares es ON es.entity_type = 'budget' AND es.entity_id = b.id
+          AND es.owner_id = b.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
+        WHERE b.is_active = true AND (b.user_id = $1 OR es.id IS NOT NULL)
         ORDER BY b.created_at DESC
       `, [userId]),
       loadRates(fastify.db)
@@ -43,7 +48,7 @@ async function budgetRoutes(fastify, opts) {
       SELECT t.amount, a.currency as account_currency, b.id as budget_id, b.currency as budget_currency
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-      JOIN budgets b ON b.user_id = $1
+      JOIN budgets b ON b.user_id = t.user_id
         AND (
           (b.category_id IS NOT NULL AND b.category_id = t.category_id)
           OR EXISTS (
@@ -54,7 +59,12 @@ async function budgetRoutes(fastify, opts) {
         )
       WHERE t.type = 'expense'
         AND NOT t.is_split
-        AND t.user_id = $1
+        AND b.user_id IN (
+          SELECT b2.user_id FROM budgets b2
+          LEFT JOIN entity_shares es2 ON es2.entity_type = 'budget' AND es2.entity_id = b2.id
+            AND es2.owner_id = b2.user_id AND (es2.shared_with = $1 OR es2.shared_with IS NULL)
+          WHERE b2.is_active = true AND (b2.user_id = $1 OR es2.id IS NOT NULL)
+        )
         AND t.date >= CASE WHEN b.period = 'week' THEN date_trunc('week', CURRENT_DATE) ELSE date_trunc('month', CURRENT_DATE) END
         AND t.date < CASE WHEN b.period = 'week' THEN date_trunc('week', CURRENT_DATE) + INTERVAL '7 days' ELSE date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' END
         AND b.is_active = true
@@ -230,6 +240,7 @@ async function budgetRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
+    await fastify.db.query("DELETE FROM entity_shares WHERE entity_type = 'budget' AND entity_id = $1", [id])
     const result = await fastify.db.query('DELETE FROM budgets WHERE id = $1 AND user_id = $2', [id, userId])
     if (result.rowCount === 0) {
       reply.code(404)

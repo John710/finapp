@@ -5,11 +5,15 @@ async function recurringRoutes(fastify, opts) {
   fastify.get('/recurring', async (request, reply) => {
     const userId = request.user.userId
     const result = await fastify.db.query(`
-      SELECT r.*, a.name as account_name, c.name as category_name
+      SELECT r.*, a.name as account_name, c.name as category_name,
+             CASE WHEN r.user_id = $1 THEN NULL ELSE ou.login END AS owner_login
       FROM recurring_rules r
-      LEFT JOIN accounts a ON a.id = r.account_id AND a.user_id = $1
-      LEFT JOIN categories c ON c.id = r.category_id AND c.user_id = $1
-      WHERE r.user_id = $1
+      LEFT JOIN accounts a ON a.id = r.account_id
+      LEFT JOIN categories c ON c.id = r.category_id
+      JOIN users ou ON ou.id = r.user_id
+      LEFT JOIN entity_shares es ON es.entity_type = 'recurring' AND es.entity_id = r.id
+        AND es.owner_id = r.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
+      WHERE r.user_id = $1 OR es.id IS NOT NULL
       ORDER BY r.next_date ASC
     `, [userId])
     return result.rows
@@ -122,6 +126,7 @@ async function recurringRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
+    await fastify.db.query("DELETE FROM entity_shares WHERE entity_type = 'recurring' AND entity_id = $1", [id])
     const result = await fastify.db.query('DELETE FROM recurring_rules WHERE id = $1 AND user_id = $2', [id, userId])
     if (result.rowCount === 0) {
       reply.code(404)

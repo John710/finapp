@@ -4,6 +4,12 @@
       <h2 class="font-semibold">{{ $t('settings.access_title') }}</h2>
     </div>
 
+    <!-- Family sharing how-to -->
+    <div class="p-5">
+      <p class="font-medium">{{ $t('settings.sharing_title') }}</p>
+      <p class="text-sm text-slate-500">{{ $t('settings.sharing_desc') }}</p>
+    </div>
+
     <!-- Two-factor authentication -->
     <div class="p-5">
       <div class="mb-3">
@@ -13,10 +19,9 @@
       <div v-if="totpEnabled" class="text-sm text-emerald-600 dark:text-emerald-400 mb-3">{{ $t('settings.totp_enabled') }}</div>
       <div v-else class="text-sm text-slate-500 mb-3">{{ $t('settings.totp_disabled') }}</div>
 
-      <!-- Enable flow: password -> QR -> code -->
       <div v-if="!totpEnabled && setupStage === 'idle'" class="space-y-2 max-w-sm">
         <input v-model="totpPassword" type="password" autocomplete="current-password" :placeholder="$t('settings.password_current')" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-        <button :disabled="totpLoading || !totpPassword" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50" @click="startTotpSetup">
+        <button @click="startTotpSetup" :disabled="totpLoading || !totpPassword" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
           {{ totpLoading ? $t('common.loading') : $t('settings.totp_setup') }}
         </button>
       </div>
@@ -27,17 +32,17 @@
         </div>
         <div class="flex gap-2 max-w-xs mx-auto">
           <input v-model="totpCode" type="text" inputmode="numeric" maxlength="8" :placeholder="$t('auth.totp_code')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm tracking-widest" />
-          <button :disabled="totpLoading || !totpCode" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50" @click="enableTotp">
+          <button @click="enableTotp" :disabled="totpLoading || !totpCode" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
             {{ totpLoading ? $t('common.loading') : $t('settings.totp_enable') }}
           </button>
         </div>
       </div>
-      <div v-else-if="totpEnabled" class="space-y-2 max-w-sm">
+      <div v-else class="space-y-2 max-w-sm">
         <div class="flex gap-2">
           <input v-model="totpPassword" type="password" autocomplete="current-password" :placeholder="$t('settings.password_current')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
           <input v-model="totpCode" type="text" inputmode="numeric" maxlength="8" :placeholder="$t('auth.totp_code')" class="w-28 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm tracking-widest" />
         </div>
-        <button :disabled="totpLoading || !totpPassword || !totpCode" class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50" @click="disableTotp">
+        <button @click="disableTotp" :disabled="totpLoading || !totpPassword || !totpCode" class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">
           {{ totpLoading ? $t('common.loading') : $t('settings.totp_disable') }}
         </button>
       </div>
@@ -61,7 +66,7 @@
             <span class="font-medium truncate block">{{ tok.name }}</span>
             <p class="text-xs text-slate-500">{{ $t('settings.token_last_used') }}: {{ tok.last_used_at ? formatDateTime(tok.last_used_at) : '—' }}</p>
           </div>
-          <button class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600" @click="revokeToken(tok.id)">
+          <button @click="revokeToken(tok.id)" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600">
             {{ $t('common.delete') }}
           </button>
         </li>
@@ -69,35 +74,41 @@
       <p v-else class="text-sm text-slate-500 mb-3">{{ $t('settings.tokens_empty') }}</p>
       <div class="flex gap-2 max-w-sm">
         <input v-model="newTokenName" type="text" :placeholder="$t('settings.token_name')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-        <button :disabled="tokenLoading || !newTokenName.trim()" class="px-4 py-2 rounded-full bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50" @click="createToken">
+        <button @click="createToken" :disabled="tokenLoading || !newTokenName.trim()" class="px-4 py-2 rounded-full bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
           {{ tokenLoading ? $t('common.loading') : $t('common.add') }}
         </button>
       </div>
     </div>
 
-    <!-- Shared read-only viewers -->
-    <div class="p-5">
+    <!-- User management (admin only) -->
+    <div v-if="isAdmin" class="p-5">
       <div class="mb-3">
-        <p class="font-medium">{{ $t('settings.viewers_title') }}</p>
-        <p class="text-sm text-slate-500">{{ $t('settings.viewers_desc') }}</p>
+        <p class="font-medium">{{ $t('settings.users_title') }}</p>
+        <p class="text-sm text-slate-500">{{ $t('settings.users_desc') }}</p>
       </div>
-      <ul v-if="viewers.length" class="space-y-2 mb-3">
-        <li v-for="v in viewers" :key="v.id" class="flex items-center justify-between p-3 rounded-lg bg-slate-100 dark:bg-slate-800 bg-slate-50 dark:bg-slate-800/50">
-          <div class="text-sm">
-            <span class="font-medium">{{ v.login }}</span>
-            <p class="text-xs text-slate-500">{{ $t('settings.viewer_since') }}: {{ formatDateTime(v.created_at) }}</p>
+      <ul v-if="users.length" class="space-y-2 mb-3">
+        <li v-for="u in users" :key="u.id" class="flex items-center justify-between gap-2 p-3 rounded-lg bg-slate-100 dark:bg-slate-800 bg-slate-50 dark:bg-slate-800/50">
+          <div class="text-sm min-w-0">
+            <span class="font-medium">{{ u.login }}</span>
+            <span v-if="u.role === 'admin'" class="ml-2 text-xs px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300">{{ $t('settings.users_admin_badge') }}</span>
+            <span v-if="u.id === auth.user?.id" class="ml-2 text-xs text-slate-400">({{ $t('settings.users_you') }})</span>
+            <p class="text-xs text-slate-500">{{ $t('settings.users_created') }}: {{ formatDateTime(u.created_at) }}</p>
           </div>
-          <button class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700" @click="removeViewer(v.id)">
-            {{ $t('common.delete') }}
-          </button>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button @click="resetPassword(u)" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600">
+              {{ $t('settings.users_reset_password') }}
+            </button>
+            <button v-if="u.id !== auth.user?.id" @click="deleteUser(u)" class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700">
+              {{ $t('common.delete') }}
+            </button>
+          </div>
         </li>
       </ul>
-      <p v-else class="text-sm text-slate-500 mb-3">{{ $t('settings.viewers_empty') }}</p>
       <div class="flex flex-col sm:flex-row gap-2 max-w-md">
-        <input v-model="viewerLogin" type="text" :placeholder="$t('auth.username')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-        <input v-model="viewerPassword" type="password" autocomplete="new-password" :placeholder="$t('auth.password')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-        <button :disabled="viewerLoading || !viewerLogin.trim() || viewerPassword.length < 8" class="px-4 py-2 rounded-full bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50" @click="createViewer">
-          {{ viewerLoading ? $t('common.loading') : $t('common.add') }}
+        <input v-model="newLogin" type="text" :placeholder="$t('auth.username')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+        <input v-model="newPassword" type="password" autocomplete="new-password" :placeholder="$t('auth.password')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+        <button @click="createUser" :disabled="userLoading || !newLogin.trim() || newPassword.length < 8" class="px-4 py-2 rounded-full bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
+          {{ userLoading ? $t('common.loading') : $t('common.add') }}
         </button>
       </div>
     </div>
@@ -115,8 +126,10 @@ import { useAuthStore } from '../../stores/auth'
 const { locale, t } = useI18n()
 const auth = useAuthStore()
 
+const isAdmin = computed(() => auth.user?.role === 'admin')
+
 const totpEnabled = computed(() => Boolean(auth.user?.totp_enabled))
-const setupStage = ref('idle') // idle | confirm
+const setupStage = ref('idle')
 const totpPassword = ref('')
 const totpCode = ref('')
 const totpSecret = ref('')
@@ -128,14 +141,14 @@ const newTokenName = ref('')
 const newToken = ref('')
 const tokenLoading = ref(false)
 
-const viewers = ref([])
-const viewerLogin = ref('')
-const viewerPassword = ref('')
-const viewerLoading = ref(false)
+const users = ref([])
+const newLogin = ref('')
+const newPassword = ref('')
+const userLoading = ref(false)
 
 onMounted(() => {
   loadTokens()
-  loadViewers()
+  if (isAdmin.value) loadUsers()
 })
 
 function formatDateTime(value) {
@@ -225,37 +238,49 @@ async function revokeToken(id) {
   }
 }
 
-async function loadViewers() {
+async function loadUsers() {
   try {
-    viewers.value = await api('/users/viewers')
+    users.value = await api('/admin/users')
   } catch (e) {
-    logger.error('Failed to load viewers', e)
+    logger.error('Failed to load users', e)
   }
 }
 
-async function createViewer() {
-  viewerLoading.value = true
+async function createUser() {
+  userLoading.value = true
   try {
-    await api('/users/viewers', { method: 'POST', body: JSON.stringify({ login: viewerLogin.value.trim(), password: viewerPassword.value }) })
-    viewerLogin.value = ''
-    viewerPassword.value = ''
-    await loadViewers()
+    await api('/admin/users', { method: 'POST', body: JSON.stringify({ login: newLogin.value.trim(), password: newPassword.value }) })
+    newLogin.value = ''
+    newPassword.value = ''
+    await loadUsers()
     window.$toast?.success(t('common.created'))
   } catch (e) {
-    logger.error('Failed to create viewer', e)
+    logger.error('Failed to create user', e)
     window.$toast?.error(e.message || t('common.error'))
   } finally {
-    viewerLoading.value = false
+    userLoading.value = false
   }
 }
 
-async function removeViewer(id) {
-  if (!(await window.$confirm({ message: t('settings.viewer_remove_confirm') }))) return
+async function resetPassword(u) {
+  const newPasswordValue = prompt(t('settings.users_new_password_prompt', { login: u.login }))
+  if (!newPasswordValue || newPasswordValue.length < 8) return
   try {
-    await api(`/users/viewers/${id}`, { method: 'DELETE' })
-    await loadViewers()
+    await api(`/admin/users/${u.id}`, { method: 'PATCH', body: JSON.stringify({ password: newPasswordValue }) })
+    window.$toast?.success(t('common.saved'))
   } catch (e) {
-    logger.error('Failed to remove viewer', e)
+    logger.error('Failed to reset password', e)
+    window.$toast?.error(e.message || t('common.error'))
+  }
+}
+
+async function deleteUser(u) {
+  if (!(await window.$confirm({ message: t('settings.users_delete_confirm', { login: u.login }), danger: true }))) return
+  try {
+    await api(`/admin/users/${u.id}`, { method: 'DELETE' })
+    await loadUsers()
+  } catch (e) {
+    logger.error('Failed to delete user', e)
     window.$toast?.error(e.message || t('common.error'))
   }
 }

@@ -26,6 +26,7 @@ export const uiIconImports = {
   repeat: () => import('@hugeicons/core-free-icons/dist/esm/RepeatIcon'),
   bell: () => import('@hugeicons/core-free-icons/dist/esm/Notification03Icon'),
   tag: () => import('@hugeicons/core-free-icons/dist/esm/Tag01Icon'),
+  share: () => import('@hugeicons/core-free-icons/dist/esm/Share01Icon'),
   settings: () => import('@hugeicons/core-free-icons/dist/esm/Settings01Icon'),
   user: () => import('@hugeicons/core-free-icons/dist/esm/UserIcon'),
   userAdd: () => import('@hugeicons/core-free-icons/dist/esm/UserAdd01Icon'),

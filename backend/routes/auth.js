@@ -175,7 +175,7 @@ async function authRoutes(fastify, opts) {
 
     fastify.log.info({ userId: user.id, login, ip: request.ip }, 'Login successful')
 
-    const tokenPayload = { userId: user.id, login: user.login, role: user.role || 'owner', ownerId: user.shared_owner_id || null }
+    const tokenPayload = { userId: user.id, login: user.login, role: user.role || 'user' }
     const accessToken = fastify.signAccessToken(tokenPayload)
     const refreshToken = fastify.signRefreshToken({ userId: user.id })
     const refreshTokenHash = hashToken(refreshToken)
@@ -193,7 +193,7 @@ async function authRoutes(fastify, opts) {
       user: {
         id: user.id,
         login: user.login,
-        role: user.role || 'owner',
+        role: user.role || 'user',
         language: user.language,
         base_currency: user.base_currency,
         coingecko_api_key: maskSecret(decrypt(user.coingecko_api_key)),
@@ -229,7 +229,7 @@ async function authRoutes(fastify, opts) {
 
       const user = result.rows[0]
 
-      const newAccessToken = fastify.signAccessToken({ userId: user.id, login: user.login, role: user.role || 'owner', ownerId: user.shared_owner_id || null })
+      const newAccessToken = fastify.signAccessToken({ userId: user.id, login: user.login, role: user.role || 'user' })
       const newRefreshToken = fastify.signRefreshToken({ userId: user.id })
       const newRefreshTokenHash = hashToken(newRefreshToken)
       const refreshExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -284,7 +284,7 @@ async function authRoutes(fastify, opts) {
         user: {
           id: user.id,
           login: user.login,
-          role: user.role || 'owner',
+          role: user.role || 'user',
           language: user.language,
           base_currency: user.base_currency,
           coingecko_api_key: maskSecret(decrypt(user.coingecko_api_key)),
@@ -692,64 +692,6 @@ async function authRoutes(fastify, opts) {
     return { success: true }
   })
 
-  // ---------- Shared read-only viewers ----------
-
-  fastify.post('/users/viewers', {
-    schema: {
-      body: {
-        type: 'object',
-        required: ['login', 'password'],
-        properties: {
-          login: { type: 'string', minLength: 3, maxLength: 64 },
-          password: { type: 'string', minLength: 8, maxLength: 128 }
-        }
-      }
-    }
-  }, async (request, reply) => {
-    const ownerId = request.user.userId
-    const { login, password } = request.body
-    const hash = await bcrypt.hash(password, 12)
-    // Viewers inherit the owner's language and base currency
-    const result = await fastify.db.query(
-      `INSERT INTO users (login, password_hash, language, base_currency, role, shared_owner_id)
-       SELECT $2, $3, u.language, u.base_currency, 'viewer', u.id FROM users u WHERE u.id = $1
-       RETURNING id, login, created_at`,
-      [ownerId, login, hash]
-    )
-    reply.code(201)
-    return result.rows[0]
-  })
-
-  fastify.get('/users/viewers', async (request, reply) => {
-    const ownerId = request.user.userId
-    const result = await fastify.db.query(
-      'SELECT id, login, created_at FROM users WHERE shared_owner_id = $1 ORDER BY created_at',
-      [ownerId]
-    )
-    return result.rows
-  })
-
-  fastify.delete('/users/viewers/:id', {
-    schema: {
-      params: {
-        type: 'object',
-        required: ['id'],
-        properties: { id: { type: 'integer', minimum: 1 } }
-      }
-    }
-  }, async (request, reply) => {
-    const ownerId = request.user.userId
-    const { id } = request.params
-    const check = await fastify.db.query('SELECT id FROM users WHERE id = $1 AND shared_owner_id = $2', [id, ownerId])
-    if (check.rows.length === 0) {
-      const lang = await getUserLang(fastify.db, ownerId)
-      reply.code(404)
-      return { error: t('errors.viewer_not_found', {}, lang) }
-    }
-    await fastify.db.query('DELETE FROM refresh_tokens WHERE user_id = $1', [id])
-    await fastify.db.query('DELETE FROM users WHERE id = $1 AND shared_owner_id = $2', [id, ownerId])
-    reply.code(204)
-  })
 }
 
 export default authRoutes

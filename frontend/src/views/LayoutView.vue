@@ -32,9 +32,6 @@ to="/settings"
 
       <!-- Main content -->
       <main class="flex-1 min-w-0 pb-28 lg:pb-8">
-        <div v-if="auth.user?.role === 'viewer'" class="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-xs text-center py-1.5 px-4">
-          {{ $t('common.viewer_mode') }}
-        </div>
         <!-- Header -->
         <header class="sticky top-0 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md flex items-center gap-3 justify-between px-4 lg:px-8 py-3 lg:py-4">
           <div class="flex items-center min-w-0 gap-4">
@@ -333,12 +330,10 @@ function onGlobalKeydown(e) {
     }
     return
   }
-  // Ctrl+Shift+N → New transaction (owners only)
+  // Ctrl+Shift+N → New transaction
   if (e.ctrlKey && e.shiftKey && e.code === 'KeyN') {
     e.preventDefault()
-    if (auth.user?.role !== 'viewer') {
-      window.dispatchEvent(new CustomEvent('open-transaction-modal'))
-    }
+    window.dispatchEvent(new CustomEvent('open-transaction-modal'))
     return
   }
 }

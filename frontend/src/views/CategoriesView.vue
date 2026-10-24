@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('categories.title') }}</h1>
-      <button v-if="!isViewer" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
+      <button class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -40,7 +40,7 @@ v-for="cat in filteredCategories(type)" :key="cat.id"
               <span class="font-medium truncate block">{{ cat.name }}</span>
               <span v-if="cat.parent_id" class="text-xs text-slate-500">{{ parentName(cat.parent_id) }}</span>
             </div>
-            <button v-if="!isViewer" class="shrink-0 p-1.5 rounded-full text-slate-400 hover:text-primary-600 transition-colors" :aria-label="$t('categories.merge')" :title="$t('categories.merge')" @click.stop="openMerge(cat)">
+            <button class="shrink-0 p-1.5 rounded-full text-slate-400 hover:text-primary-600 transition-colors" :aria-label="$t('categories.merge')" :title="$t('categories.merge')" @click.stop="openMerge(cat)">
               <Icon name="arrowRight" class="w-4 h-4" />
             </button>
           </div>
@@ -139,8 +139,6 @@ useHotkeys({
   'esc': () => { if (showModal.value) closeModal() }
 })
 const categoriesStore = useCategoriesStore()
-const authStore = useAuthStore()
-const isViewer = computed(() => authStore.user?.role === 'viewer')
 
 // Merge: move all transactions/rules/budgets into another category of the same type
 const showMerge = ref(false)

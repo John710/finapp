@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import { loadRates, convertAmountDecimal } from '../services/currency.js'
+import { visibleAccountIds } from '../services/visibility.js'
 
 async function dashboardRoutes(fastify, opts) {
   // One endpoint for the dashboard mount instead of ~11 parallel requests.
@@ -20,6 +21,7 @@ async function dashboardRoutes(fastify, opts) {
     const userId = request.user.userId
     const { base_currency = 'USD', trend_months = 6, networth_months = 12, recent_limit = 5 } = request.query
     const rates = await loadRates(fastify.db)
+    const visible = await visibleAccountIds(fastify.db, userId)
 
     const toBase = (amount, currency) => {
       if (!currency || currency === base_currency) return new Decimal(amount)
@@ -37,42 +39,70 @@ async function dashboardRoutes(fastify, opts) {
       fastify.db.query(
         `SELECT t.type, a.currency, COALESCE(SUM(t.amount), 0) as sum
          FROM transactions t
-         JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-         WHERE t.user_id = $1 AND t.parent_id IS NULL AND t.date >= $2 AND t.date <= $3
+         JOIN accounts a ON a.id = t.account_id
+         WHERE t.account_id = ANY($4) AND t.parent_id IS NULL AND t.date >= $2 AND t.date <= $3
          GROUP BY t.type, a.currency`,
-        [userId, monthStart, today]
+        [userId, monthStart, today, visible]
       ),
       // Monthly trend
       fastify.db.query(
         `SELECT to_char(t.date, 'YYYY-MM') as month, t.type, a.currency, COALESCE(SUM(t.amount), 0) as sum
          FROM transactions t
-         JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-         WHERE t.user_id = $1 AND t.parent_id IS NULL AND t.date >= $2 AND t.date <= $3
+         JOIN accounts a ON a.id = t.account_id
+         WHERE t.account_id = ANY($4) AND t.parent_id IS NULL AND t.date >= $2 AND t.date <= $3
          GROUP BY 1, t.type, a.currency`,
-        [userId, trendStart, today]
+        [userId, trendStart, today, visible]
       ),
-      fastify.db.query('SELECT id, name, type, currency, balance, color, icon, is_archived FROM accounts WHERE user_id = $1 ORDER BY is_archived, sort_order, created_at DESC', [userId]),
+      fastify.db.query(
+        `SELECT a.id, a.name, a.type, a.currency, a.balance, a.color, a.icon, a.is_archived,
+                CASE WHEN a.user_id = $1 THEN NULL ELSE ou.login END AS owner_login,
+                CASE WHEN a.user_id = $1 THEN COALESCE((SELECT true FROM entity_shares es WHERE es.entity_type = 'account' AND es.entity_id = a.id AND es.owner_id = a.user_id LIMIT 1), false) ELSE false END AS is_shared,
+                CASE WHEN a.user_id = $1 THEN 'owner' ELSE COALESCE(es.permission, 'view') END AS access
+         FROM accounts a
+         JOIN users ou ON ou.id = a.user_id
+         LEFT JOIN entity_shares es ON es.entity_type = 'account' AND es.entity_id = a.id
+           AND es.owner_id = a.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
+         WHERE a.user_id = $1 OR es.id IS NOT NULL
+         ORDER BY a.is_archived, a.sort_order, a.created_at DESC`,
+        [userId]
+      ),
       fastify.db.query(
         `SELECT t.id, t.amount, t.type, t.date, t.note, t.is_split, t.account_id, t.transfer_to_account_id,
-                a.name as account_name, a.currency as account_currency, c.name as category_name, c.color as category_color, c.icon as category_icon
+                a.name as account_name, a.currency as account_currency, c.name as category_name, c.color as category_color, c.icon as category_icon,
+                CASE WHEN t.user_id = $1 THEN NULL ELSE ou.login END AS owner_login
          FROM transactions t
-         LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-         LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = $1
-         WHERE t.user_id = $1
+         LEFT JOIN accounts a ON a.id = t.account_id
+         LEFT JOIN categories c ON c.id = t.category_id
+         LEFT JOIN users ou ON ou.id = t.user_id
+         WHERE t.account_id = ANY($3)
          ORDER BY t.date DESC, t.created_at DESC
          LIMIT $2`,
-        [userId, recent_limit]
+        [userId, recent_limit, visible]
       ),
       fastify.db.query(
-        `SELECT r.*, a.name as account_name, c.name as category_name
+        `SELECT r.*, a.name as account_name, c.name as category_name,
+                CASE WHEN r.user_id = $1 THEN NULL ELSE ou.login END AS owner_login
          FROM recurring_rules r
-         LEFT JOIN accounts a ON a.id = r.account_id AND a.user_id = $1
-         LEFT JOIN categories c ON c.id = r.category_id AND c.user_id = $1
-         WHERE r.user_id = $1 AND r.is_active = true
+         LEFT JOIN accounts a ON a.id = r.account_id
+         LEFT JOIN categories c ON c.id = r.category_id
+         JOIN users ou ON ou.id = r.user_id
+         LEFT JOIN entity_shares es ON es.entity_type = 'recurring' AND es.entity_id = r.id
+           AND es.owner_id = r.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
+         WHERE r.is_active = true AND (r.user_id = $1 OR es.id IS NOT NULL)
          ORDER BY r.next_date ASC`,
         [userId]
       ),
-      fastify.db.query('SELECT id, name, counterparty, amount, currency, type, status, due_date FROM debts WHERE user_id = $1 ORDER BY due_date ASC NULLS LAST', [userId])
+      fastify.db.query(
+        `SELECT d.id, d.name, d.counterparty, d.amount, d.currency, d.type, d.status, d.due_date,
+                CASE WHEN d.user_id = $1 THEN NULL ELSE ou.login END AS owner_login
+         FROM debts d
+         JOIN users ou ON ou.id = d.user_id
+         LEFT JOIN entity_shares es ON es.entity_type = 'debt' AND es.entity_id = d.id
+           AND es.owner_id = d.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
+         WHERE d.user_id = $1 OR es.id IS NOT NULL
+         ORDER BY d.due_date ASC NULLS LAST`,
+        [userId]
+      )
     ])
 
     // Month summary
@@ -108,10 +138,10 @@ async function dashboardRoutes(fastify, opts) {
     const allFlowGroups = await fastify.db.query(
       `SELECT to_char(t.date, 'YYYY-MM') as month, t.type, a.currency, COALESCE(SUM(t.amount), 0) as sum
        FROM transactions t
-       JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-       WHERE t.user_id = $1 AND t.parent_id IS NULL
+       JOIN accounts a ON a.id = t.account_id
+       WHERE t.account_id = ANY($2) AND t.parent_id IS NULL
        GROUP BY 1, t.type, a.currency`,
-      [userId]
+      [userId, visible]
     )
     for (const g of allFlowGroups.rows) {
       const val = toBase(g.sum, g.currency).times(g.type === 'income' ? 1 : -1)

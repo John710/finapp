@@ -1,11 +1,20 @@
 import { t, getUserLang } from '../services/i18n.js'
 
 async function accountRoutes(fastify, opts) {
-  // List
+  // List: own accounts plus accounts shared with the user (or with the family)
   fastify.get('/accounts', async (request, reply) => {
     const userId = request.user.userId
     const result = await fastify.db.query(
-      'SELECT * FROM accounts WHERE user_id = $1 ORDER BY is_archived, sort_order, created_at DESC',
+      `SELECT a.*,
+              CASE WHEN a.user_id = $1 THEN NULL ELSE ou.login END AS owner_login,
+              CASE WHEN a.user_id = $1 THEN COALESCE((SELECT true FROM entity_shares es WHERE es.entity_type = 'account' AND es.entity_id = a.id AND es.owner_id = a.user_id LIMIT 1), false) ELSE false END AS is_shared,
+              CASE WHEN a.user_id = $1 THEN 'owner' ELSE COALESCE(es.permission, 'view') END AS access
+       FROM accounts a
+       JOIN users ou ON ou.id = a.user_id
+       LEFT JOIN entity_shares es ON es.entity_type = 'account' AND es.entity_id = a.id
+         AND es.owner_id = a.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
+       WHERE a.user_id = $1 OR es.id IS NOT NULL
+       ORDER BY a.is_archived, a.sort_order, a.created_at DESC`,
       [userId]
     )
     return result.rows
@@ -226,10 +235,13 @@ async function accountRoutes(fastify, opts) {
 
       // transaction_tags rows cascade via FK; remove every transaction that
       // lives on this account or references it as a transfer counterparty.
+      // Share grants for this account are removed manually (entity_id is a
+      // generic reference without FK).
       await client.query(
         'DELETE FROM transactions WHERE (account_id = $1 OR transfer_to_account_id = $1) AND user_id = $2',
         [id, userId]
       )
+      await client.query("DELETE FROM entity_shares WHERE entity_type = 'account' AND entity_id = $1", [id])
       await client.query('DELETE FROM accounts WHERE id = $1 AND user_id = $2', [id, userId])
 
       await client.query('COMMIT')

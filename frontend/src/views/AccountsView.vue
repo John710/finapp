@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('accounts.title') }}</h1>
-      <button v-if="!isViewer" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
+      <button class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -62,13 +62,20 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
               <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white" :style="{ backgroundColor: account.color || '#64748b' }">
                 <Icon v-if="account.type" :name="typeIconName(account.type)" class="w-5 h-5" />
               </div>
-              <div>
-                <p class="font-semibold">{{ account.name }}</p>
-                <p class="text-xs text-slate-500">{{ $t('accounts.types.' + account.type) }} • {{ account.currency }}</p>
+              <div class="min-w-0">
+                <p class="font-semibold truncate">{{ account.name }}
+                  <Icon v-if="account.is_shared" name="share" class="inline w-3 h-3 text-primary-400" />
+                </p>
+                <p class="text-xs text-slate-500">{{ $t('accounts.types.' + account.type) }} • {{ account.currency }}
+                  <span v-if="account.owner_login" class="text-primary-500">• @{{ account.owner_login }}</span>
+                </p>
               </div>
             </div>
             <p class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ formatCurrency(account.balance, account.currency) }}</p>
             <div class="mt-4 flex gap-2">
+              <button v-if="!account.owner_login" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1" @click.stop="openShare(account)">
+                <Icon name="share" class="w-3 h-3" />{{ $t('sharing.title') }}
+              </button>
               <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click.stop="editAccount(account)">{{ $t('common.edit') }}</button>
               <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors" @click.stop="deleteAccount(account.id)">{{ $t('common.delete') }}</button>
             </div>
@@ -112,9 +119,13 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
               <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white" :style="{ backgroundColor: account.color || '#64748b' }">
                 <Icon v-if="account.type" :name="typeIconName(account.type)" class="w-5 h-5" />
               </div>
-              <div>
-                <p class="font-semibold">{{ account.name }}</p>
-                <p class="text-xs text-slate-500">{{ account.currency }}</p>
+              <div class="min-w-0">
+                <p class="font-semibold truncate">{{ account.name }}
+                  <Icon v-if="account.is_shared" name="share" class="inline w-3 h-3 text-primary-400" />
+                </p>
+                <p class="text-xs text-slate-500">{{ account.currency }}
+                  <span v-if="account.owner_login" class="text-primary-500">• @{{ account.owner_login }}</span>
+                </p>
               </div>
             </div>
             <div>
@@ -122,6 +133,9 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
               <p v-if="cryptoValue(account)" class="text-sm text-slate-500 mt-1">≈ {{ formatCurrency(cryptoValue(account), baseCurrency) }}</p>
             </div>
             <div class="mt-4 flex gap-2">
+              <button v-if="!account.owner_login" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1" @click.stop="openShare(account)">
+                <Icon name="share" class="w-3 h-3" />{{ $t('sharing.title') }}
+              </button>
               <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click.stop="editAccount(account)">{{ $t('common.edit') }}</button>
               <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors" @click.stop="deleteAccount(account.id)">{{ $t('common.delete') }}</button>
             </div>
@@ -166,8 +180,12 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
                 <Icon v-if="account.type" :name="typeIconName(account.type)" class="w-5 h-5" />
               </div>
               <div>
-                <p class="font-semibold">{{ account.name }}</p>
-                <p class="text-xs text-slate-500">{{ $t('accounts.types.' + account.type) }}</p>
+                <p class="font-semibold truncate">{{ account.name }}
+                  <Icon v-if="account.is_shared" name="share" class="inline w-3 h-3 text-primary-400" />
+                </p>
+                <p class="text-xs text-slate-500">{{ $t('accounts.types.' + account.type) }}
+                  <span v-if="account.owner_login" class="text-primary-500">• @{{ account.owner_login }}</span>
+                </p>
               </div>
             </div>
             <div class="mb-2">
@@ -181,6 +199,9 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
               <p class="text-xs mt-1 text-slate-500">{{ goalProgress(account) }}% {{ $t('accounts.completed') }}</p>
             </div>
             <div class="mt-3 flex gap-2">
+              <button v-if="!account.owner_login" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1" @click.stop="openShare(account)">
+                <Icon name="share" class="w-3 h-3" />{{ $t('sharing.title') }}
+              </button>
               <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click.stop="editAccount(account)">{{ $t('common.edit') }}</button>
               <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors" @click.stop="deleteAccount(account.id)">{{ $t('common.delete') }}</button>
             </div>
@@ -273,7 +294,6 @@ import { logger } from '@/utils/logger.js'
 import { ref, onMounted, onBeforeUnmount, reactive, computed, watch, nextTick } from 'vue'
 import { useAccountsStore } from '../stores/accounts'
 import { useRatesStore } from '../stores/rates'
-import { useAuthStore } from '../stores/auth'
 import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
@@ -284,6 +304,7 @@ import { formatCurrency as formatCurrencyValue, parseAmount } from '@/utils/form
 import CurrencySelect from '../components/CurrencySelect.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import BaseSkeleton from '@/components/BaseSkeleton.vue'
+import ShareModal from '@/components/ShareModal.vue'
 
 const { t } = useI18n()
 const ratesStore = useRatesStore()
@@ -295,8 +316,6 @@ useHotkeys({
 })
 
 const accountsStore = useAccountsStore()
-const authStore = useAuthStore()
-const isViewer = computed(() => authStore.user?.role === 'viewer')
 const baseCurrency = computed(() => ratesStore.baseCurrency)
 const showModal = ref(false)
 const isEditing = ref(false)
@@ -417,6 +436,12 @@ function editAccount(account) {
   showModal.value = true
 }
 
+const shareState = ref({ show: false, id: null, label: '' })
+
+function openShare(account) {
+  shareState.value = { show: true, id: account.id, label: account.name }
+}
+
 function closeModal() {
   showModal.value = false
 }
@@ -525,7 +550,6 @@ function onDrop(e, targetAccount) {
 // Keyboard-accessible reorder: Alt-free Up/Down on the focused handle swaps
 // the account with its neighbour within the same type.
 function moveByKey(account, direction) {
-  if (isViewer.value) return
   const sameType = accountsStore.accounts
     .filter(a => a.type === account.type && !a.is_archived)
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))

@@ -72,7 +72,14 @@
     "budget_target_required": "A budget needs a category or at least one tag",
     "merge_same_target": "Cannot merge a category into itself",
     "merge_type_mismatch": "Categories of different types cannot be merged",
-    "token_not_found": "API token not found"
+    "token_not_found": "API token not found",
+    "not_found": "Not found",
+    "not_allowed": "You do not have permission to modify this item",
+    "admin_only": "Only the administrator can manage users",
+    "login_taken": "This login is already taken",
+    "admin_last": "Cannot demote or delete the last administrator",
+    "admin_self_delete": "You cannot delete your own account",
+    "user_not_found": "User not found"
   },
   "notifications": {
     "recurring_created": "Recurring transaction created",

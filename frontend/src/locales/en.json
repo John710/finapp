@@ -357,11 +357,16 @@
     "token_name": "Token name",
     "token_created_once": "Copy the token now — it is shown only once:",
     "token_last_used": "Last used",
-    "viewers_title": "Shared read-only access",
-    "viewers_desc": "Accounts that can view your data but cannot change anything",
-    "viewers_empty": "No shared viewers",
-    "viewer_since": "Added",
-    "viewer_remove_confirm": "Remove this viewer? They will lose access immediately."
+    "sharing_title": "Family sharing",
+    "sharing_desc": "Open any account, budget, debt or recurring rule and press Share to grant access to the whole family or to specific users. Shared accounts appear in everyone’s reports and dashboards.",
+    "users_title": "Users",
+    "users_desc": "Create accounts for family members (admin only). Each user keeps private finances and can share individual entities.",
+    "users_admin_badge": "admin",
+    "users_you": "you",
+    "users_created": "Created",
+    "users_reset_password": "Reset password",
+    "users_new_password_prompt": "New password for {login} (min 8 chars):",
+    "users_delete_confirm": "Delete user {login} with ALL their data? This cannot be undone."
   },
   "common": {
     "save": "Save",
@@ -387,8 +392,7 @@
     "created": "Created",
     "error": "Error",
     "prev": "Previous",
-    "next": "Next",
-    "viewer_mode": "Read-only access: changes are disabled on this account"
+    "next": "Next"
   },
   "notifications": {
     "title": "Notifications",
@@ -437,5 +441,13 @@
     "of": "of",
     "completed": "completed",
     "reorder_handle": "Reorder: press ArrowUp/ArrowDown to move this account"
+  },
+  "sharing": {
+    "title": "Share",
+    "family": "Whole family",
+    "users": "Specific users",
+    "view": "Can view",
+    "edit": "Can edit",
+    "pick_user": "Select a user…"
   }
 }
