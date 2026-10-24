@@ -10,10 +10,16 @@ body = """
 {% endif %}\
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group | striptags | trim | upper_first }}
-{% for commit in commits %}
+{% for commit in commits %}\
 - {{ commit.message | upper_first }} by @{{ commit.author.name }}\
+{% if commit.body %}{{ "\n" }}\
+{% for line in commit.body | split(pat="\n") %}\
+{% if line is starting_with("- ") %}{{ "  - " }}{{ line | trim_start_matches(pat="- ") }}
+{% endif %}\
+{% endfor %}\
+{% endif %}\
 {% endfor %}
-{% endfor %}
+{% endfor %}\
 {% if previous.version %}
 **Full Changelog**: [{{ previous.version }}...{{ version }}](https://github.com/John710/finapp/compare/{{ previous.version }}...{{ version }})
 {% endif %}\n
