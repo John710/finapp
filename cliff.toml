@@ -14,7 +14,10 @@ body = """
 - {{ commit.message | upper_first }} by @{{ commit.author.name }}\
 {% if commit.body %}{{ "\n" }}\
 {% for line in commit.body | split(pat="\n") %}\
+{% if line %}\
 {% if line is starting_with("- ") %}{{ "  - " }}{{ line | trim_start_matches(pat="- ") }}
+{% else %}{{ "    " }}{{ line | trim }}
+{% endif %}\
 {% endif %}\
 {% endfor %}\
 {% endif %}\
