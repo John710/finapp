@@ -30,7 +30,7 @@
     "decimal.js": "^10.6.0",
     "dotenv": "^16.4.0",
     "fastify": "^5.8.5",
-    "isomorphic-dompurify": "^3.16.0",
+    "isomorphic-dompurify": "^4.6.0",
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1",
     "node-pg-migrate": "^8.0.4",
