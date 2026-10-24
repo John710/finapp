@@ -42,9 +42,14 @@ v-for="account in regularAccounts" :key="account.id"
             @drop="onDrop($event, account)"
             @click="$router.push(`/accounts/${account.id}`)">
             <div class="absolute top-0 right-0 w-24 h-24 rounded-bl-full" :style="{ backgroundColor: account.color + '10' }"></div>
-            <div
-class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing"
+            <button
+class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
               draggable="true"
+              tabindex="0"
+              :aria-label="$t('accounts.reorder_handle')"
+              :title="$t('accounts.reorder_handle')"
+              @keydown.up.prevent="moveByKey(account, -1)"
+              @keydown.down.prevent="moveByKey(account, 1)"
               @dragstart="onDragStart($event, account)"
               @dragend="onDragEnd"
               @click.stop>
@@ -52,7 +57,7 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
                 <circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/>
                 <circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
               </svg>
-            </div>
+            </button>
             <div class="flex items-center gap-3 mb-4">
               <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white" :style="{ backgroundColor: account.color || '#64748b' }">
                 <Icon v-if="account.type" :name="typeIconName(account.type)" class="w-5 h-5" />
@@ -87,9 +92,14 @@ v-for="account in cryptoAccounts" :key="account.id"
             @drop="onDrop($event, account)"
             @click="$router.push(`/accounts/${account.id}`)">
             <div class="absolute top-0 right-0 w-24 h-24 rounded-bl-full" :style="{ backgroundColor: account.color + '10' }"></div>
-            <div
-class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing"
+            <button
+class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
               draggable="true"
+              tabindex="0"
+              :aria-label="$t('accounts.reorder_handle')"
+              :title="$t('accounts.reorder_handle')"
+              @keydown.up.prevent="moveByKey(account, -1)"
+              @keydown.down.prevent="moveByKey(account, 1)"
               @dragstart="onDragStart($event, account)"
               @dragend="onDragEnd"
               @click.stop>
@@ -97,7 +107,7 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
                 <circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/>
                 <circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
               </svg>
-            </div>
+            </button>
             <div class="flex items-center gap-3 mb-3">
               <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white" :style="{ backgroundColor: account.color || '#64748b' }">
                 <Icon v-if="account.type" :name="typeIconName(account.type)" class="w-5 h-5" />
@@ -135,9 +145,14 @@ v-for="account in goalAccounts" :key="account.id"
             @drop="onDrop($event, account)"
             @click="$router.push(`/accounts/${account.id}`)">
             <div class="absolute top-0 right-0 w-24 h-24 rounded-bl-full" :style="{ backgroundColor: account.color + '10' }"></div>
-            <div
-class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing"
+            <button
+class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
               draggable="true"
+              tabindex="0"
+              :aria-label="$t('accounts.reorder_handle')"
+              :title="$t('accounts.reorder_handle')"
+              @keydown.up.prevent="moveByKey(account, -1)"
+              @keydown.down.prevent="moveByKey(account, 1)"
               @dragstart="onDragStart($event, account)"
               @dragend="onDragEnd"
               @click.stop>
@@ -145,7 +160,7 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
                 <circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/>
                 <circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
               </svg>
-            </div>
+            </button>
             <div class="flex items-center gap-3 mb-3">
               <div class="w-10 h-10 rounded-lg flex items-center justify-center text-white" :style="{ backgroundColor: account.color || '#64748b' }">
                 <Icon v-if="account.type" :name="typeIconName(account.type)" class="w-5 h-5" />
@@ -503,6 +518,30 @@ function onDrop(e, targetAccount) {
     logger.error('Reorder failed', err)
     window.$toast?.error(t('common.error'))
     // Refresh to restore server state
+    accountsStore.fetchAccounts()
+  })
+}
+
+// Keyboard-accessible reorder: Alt-free Up/Down on the focused handle swaps
+// the account with its neighbour within the same type.
+function moveByKey(account, direction) {
+  if (isViewer.value) return
+  const sameType = accountsStore.accounts
+    .filter(a => a.type === account.type && !a.is_archived)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+  const idx = sameType.findIndex(a => a.id === account.id)
+  const swapIdx = idx + direction
+  if (idx === -1 || swapIdx < 0 || swapIdx >= sameType.length) return
+
+  ;[sameType[idx], sameType[swapIdx]] = [sameType[swapIdx], sameType[idx]]
+  const orders = sameType.map((a, i) => ({ id: a.id, sort_order: i }))
+  for (const item of orders) {
+    const acc = accountsStore.accounts.find(a => a.id === item.id)
+    if (acc) acc.sort_order = item.sort_order
+  }
+  accountsStore.reorderAccounts(orders).catch(err => {
+    logger.error('Reorder failed', err)
+    window.$toast?.error(t('common.error'))
     accountsStore.fetchAccounts()
   })
 }

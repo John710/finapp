@@ -435,6 +435,7 @@
     "target_amount": "Target amount",
     "color": "Color",
     "of": "of",
-    "completed": "completed"
+    "completed": "completed",
+    "reorder_handle": "Reorder: press ArrowUp/ArrowDown to move this account"
   }
 }
