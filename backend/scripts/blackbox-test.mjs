@@ -8,6 +8,9 @@ function ok(name, extra = '') { PASS++; console.log(`  ok   ${name}${extra ? ' �
 function fail(name, extra = '') { FAIL++; console.log(`  FAIL ${name}${extra ? ' — ' + extra : ''}`) }
 function assert(name, cond, extra = '') { cond ? ok(name, extra) : fail(name, extra) }
 function near(a, b, eps = 0.02) { return Math.abs(parseFloat(a) - parseFloat(b)) <= eps }
+const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+// reqRetry kept for call sites; 429 handling now lives inside req()
+async function reqRetry(method, path, opts = {}) { return req(method, path, opts) }
 
 async function req(method, path, { body, auth = true, rawCookie = null } = {}) {
   const headers = {}
@@ -19,11 +22,22 @@ async function req(method, path, { body, auth = true, rawCookie = null } = {}) {
       cookies.refreshToken ? `refreshToken=${cookies.refreshToken}` : ''
     ].filter(Boolean).join('; ')
   }
-  const res = await fetch(`${BASE}${path}`, {
+  let res = await fetch(`${BASE}${path}`, {
     method, headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(20000)
   })
+  // The suite bursts long GET runs too (reports) — the 100/min GET limit can
+  // trip mid-suite; wait out the window and retry once.
+  if (res.status === 429) {
+    console.log('  ...rate-limited, waiting 61s and retrying')
+    await sleep(61000)
+    res = await fetch(`${BASE}${path}`, {
+      method, headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(20000)
+    })
+  }
   const setCookies = res.headers.getSetCookie?.() || []
   for (const sc of setCookies) {
     const m = sc.match(/^(accessToken|refreshToken)=([^;]+)/)
@@ -34,17 +48,7 @@ async function req(method, path, { body, auth = true, rawCookie = null } = {}) {
   try { json = JSON.parse(text) } catch { /* html */ }
   return { status: res.status, json, text, setCookies }
 }
-const sleep = (ms) => new Promise(r => setTimeout(r, ms))
-// The suite bursts a lot of non-GET requests; respect the 30/min global limit
-async function reqRetry(method, path, opts = {}) {
-  let r = await req(method, path, opts)
-  if (r.status === 429) {
-    console.log('  ...rate-limited, waiting 61s and retrying')
-    await sleep(61000)
-    r = await req(method, path, opts)
-  }
-  return r
-}
+
 
 // ---------- A/B: health ----------
 {
