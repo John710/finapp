@@ -251,7 +251,8 @@ async function authRoutes(fastify, opts) {
           shoutrrr_url: maskSecret(decrypt(user.shoutrrr_url)),
           shoutrrr_url_set: Boolean(user.shoutrrr_url),
           vapid_public_key: user.vapid_public_key,
-          vapid_subject: user.vapid_subject
+          vapid_subject: user.vapid_subject,
+          avatar_set: Boolean(user.avatar)
         }
       }
     } catch (err) {
