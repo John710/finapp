@@ -9,7 +9,22 @@ function fail(name, extra = '') { FAIL++; console.log(`  FAIL ${name}${extra ? '
 function assert(name, cond, extra = '') { cond ? ok(name, extra) : fail(name, extra) }
 function near(a, b, eps = 0.02) { return Math.abs(parseFloat(a) - parseFloat(b)) <= eps }
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
-// reqRetry kept for call sites; 429 handling now lives inside req()
+// Rolling-window pacing for non-auth requests: the report burst would
+// otherwise exceed the 100/min GET limit and fail assertions with 429s.
+const reqTimes = []
+async function pace(path) {
+  if (path.startsWith('/auth/')) return
+  const now = Date.now()
+  while (reqTimes.length && now - reqTimes[0] > 60000) reqTimes.shift()
+  if (reqTimes.length >= 80) {
+    const wait = 60000 - (now - reqTimes[0]) + 1000
+    console.log(`  ...pacing (${reqTimes.length}/min), waiting ${Math.ceil(wait / 1000)}s`)
+    await sleep(wait)
+    return pace(path)
+  }
+  reqTimes.push(Date.now())
+}
+// reqRetry kept for existing call sites (429s are no longer retried)
 async function reqRetry(method, path, opts = {}) { return req(method, path, opts) }
 
 async function req(method, path, { body, auth = true, rawCookie = null } = {}) {
@@ -22,22 +37,12 @@ async function req(method, path, { body, auth = true, rawCookie = null } = {}) {
       cookies.refreshToken ? `refreshToken=${cookies.refreshToken}` : ''
     ].filter(Boolean).join('; ')
   }
-  let res = await fetch(`${BASE}${path}`, {
+  await pace(path)
+  const res = await fetch(`${BASE}${path}`, {
     method, headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(20000)
   })
-  // The suite bursts long GET runs too (reports) — the 100/min GET limit can
-  // trip mid-suite; wait out the window and retry once.
-  if (res.status === 429) {
-    console.log('  ...rate-limited, waiting 61s and retrying')
-    await sleep(61000)
-    res = await fetch(`${BASE}${path}`, {
-      method, headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(20000)
-    })
-  }
   const setCookies = res.headers.getSetCookie?.() || []
   for (const sc of setCookies) {
     const m = sc.match(/^(accessToken|refreshToken)=([^;]+)/)
