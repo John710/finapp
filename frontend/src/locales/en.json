@@ -33,7 +33,8 @@
     "no_account": "Don't have an account?",
     "already_have_account": "Already have an account?",
     "go_to_register": "Create one",
-    "go_to_login": "Sign in"
+    "go_to_login": "Sign in",
+    "totp_code": "2FA code"
   },
   "dashboard": {
     "total_balance": "Total balance",
@@ -74,7 +75,15 @@
     "types": {
       "transfer": "Transfer"
     },
-    "invalid_amount": "Enter a valid amount"
+    "invalid_amount": "Enter a valid amount",
+    "split": "Split",
+    "split_toggle": "Split by categories",
+    "split_add_part": "Add part",
+    "split_sum": "Sum",
+    "split_invalid": "Each split part needs a category and an amount",
+    "attachments": "Attachments",
+    "attachments_empty": "No attachments yet",
+    "attachments_upload": "Upload file"
   },
   "categories": {
     "title": "Categories",
@@ -88,7 +97,11 @@
       "income": "Income",
       "expense": "Expenses"
     },
-    "uncategorized": "Uncategorized"
+    "uncategorized": "Uncategorized",
+    "merge": "Merge",
+    "merge_desc": "Move everything from \"{name}\" into:",
+    "merge_confirm": "Merge this category? All its transactions, rules and budgets will be moved.",
+    "merge_done": "Categories merged"
   },
   "budgets": {
     "title": "Budgets",
@@ -99,7 +112,10 @@
     "period_week": "Week",
     "remaining": "Remaining",
     "warning": "⚠️ 80% reached",
-    "exceeded": "❌ Budget exceeded"
+    "exceeded": "❌ Budget exceeded",
+    "no_category": "No category (tags only)",
+    "target_hint": "A budget can target a category, tags, or both",
+    "target_required": "Select a category or at least one tag"
   },
   "debts": {
     "title": "Debts",
@@ -212,7 +228,8 @@
     "name": "Name",
     "color": "Color",
     "empty": "No tags",
-    "empty_desc": "Create tags to group transactions"
+    "empty_desc": "Create tags to group transactions",
+    "empty_list": "No tags yet"
   },
   "command_palette": {
     "placeholder": "Search commands...",
@@ -323,7 +340,28 @@
     "avatar_desc": "PNG, JPEG, WebP or GIF — automatically resized to 256px",
     "avatar_upload": "Upload",
     "avatar_remove": "Remove",
-    "avatar_invalid": "Could not process the image — use a PNG, JPEG, WebP or GIF file"
+    "avatar_invalid": "Could not process the image — use a PNG, JPEG, WebP or GIF file",
+    "access_title": "Access & API",
+    "totp_title": "Two-factor authentication",
+    "totp_desc": "An extra one-time code from an authenticator app at login",
+    "totp_enabled": "Two-factor authentication is enabled",
+    "totp_disabled": "Two-factor authentication is disabled",
+    "totp_setup": "Start setup",
+    "totp_enable": "Confirm",
+    "totp_disable": "Disable 2FA",
+    "totp_enabled_success": "Two-factor authentication enabled",
+    "totp_disabled_success": "Two-factor authentication disabled",
+    "tokens_title": "API tokens",
+    "tokens_desc": "Bearer tokens for external clients (Authorization: Bearer <token>)",
+    "tokens_empty": "No tokens created",
+    "token_name": "Token name",
+    "token_created_once": "Copy the token now — it is shown only once:",
+    "token_last_used": "Last used",
+    "viewers_title": "Shared read-only access",
+    "viewers_desc": "Accounts that can view your data but cannot change anything",
+    "viewers_empty": "No shared viewers",
+    "viewer_since": "Added",
+    "viewer_remove_confirm": "Remove this viewer? They will lose access immediately."
   },
   "common": {
     "save": "Save",
@@ -349,7 +387,8 @@
     "created": "Created",
     "error": "Error",
     "prev": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "viewer_mode": "Read-only access: changes are disabled on this account"
   },
   "notifications": {
     "title": "Notifications",

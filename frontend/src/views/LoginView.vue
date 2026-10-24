@@ -17,6 +17,10 @@
           <label class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">{{ $t('auth.password') }}</label>
           <input v-model="form.password" type="password" autocomplete="current-password" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-400" />
         </div>
+        <div v-if="totpRequired">
+          <label class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">{{ $t('auth.totp_code') }}</label>
+          <input v-model="form.totp_code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-400 tracking-widest" />
+        </div>
         <button type="submit" :disabled="loading" class="w-full py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card disabled:opacity-50 text-white font-medium transition-colors">
           {{ loading ? $t('common.loading') : $t('auth.submit') }}
         </button>
@@ -42,20 +46,28 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const form = reactive({ login: '', password: '' })
+const form = reactive({ login: '', password: '', totp_code: '' })
 const loading = ref(false)
+const totpRequired = ref(false)
 
 async function handleLogin() {
   loading.value = true
   try {
-    await auth.login(form.login, form.password)
+    await auth.login(form.login, form.password, form.totp_code)
     // Return the user to the page they were trying to open (set by the router guard)
     const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
       ? route.query.redirect
       : '/'
     router.push(redirect)
   } catch (e) {
-    window.$toast?.error(t('auth.invalid_credentials'))
+    // The API signals a missing/invalid second factor with totp_required
+    if (e?.totp_required) {
+      totpRequired.value = true
+      form.totp_code = ''
+      window.$toast?.error(e.message || t('auth.totp_required'))
+    } else {
+      window.$toast?.error(e?.message || t('auth.invalid_credentials'))
+    }
   } finally {
     loading.value = false
   }

@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('budgets.title') }}</h1>
-      <button @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
+      <button v-if="!isViewer" @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -25,11 +25,16 @@
 
     <div v-else class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <div v-for="b in budgetsStore.budgets" :key="b.id" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark">
-        <div class="flex items-center justify-between mb-3">
-          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" :style="{ backgroundColor: b.category_color + '20', color: b.category_color }">
-            {{ b.category_name }}
-          </span>
-          <span class="text-xs text-slate-500">{{ b.period === 'month' ? $t('budgets.period_month') : $t('budgets.period_week') }}</span>
+        <div class="flex items-center justify-between mb-3 gap-2">
+          <div class="flex flex-wrap items-center gap-1 min-w-0">
+            <span v-if="b.category_name" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" :style="{ backgroundColor: b.category_color + '20', color: b.category_color }">
+              {{ b.category_name }}
+            </span>
+            <span v-for="tag in b.tags || []" :key="tag.id" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" :style="{ backgroundColor: (tag.color || '#94a3b8') + '20', color: tag.color || '#94a3b8' }">
+              #{{ tag.name }}
+            </span>
+          </div>
+          <span class="text-xs text-slate-500 whitespace-nowrap">{{ b.period === 'month' ? $t('budgets.period_month') : $t('budgets.period_week') }}</span>
         </div>
         <div class="flex justify-between text-sm mb-2">
           <span class="text-slate-500">{{ formatConverted(b.spent, b.currency) }} / {{ formatConverted(b.amount, b.currency) }}</span>
@@ -43,7 +48,7 @@
           <span v-else-if="b.progress >= 80">{{ $t('budgets.warning') }}</span>
           <span v-else>{{ $t('budgets.remaining') }}: {{ formatConverted(b.amount - b.spent, b.currency) }}</span>
         </p>
-        <div class="mt-4 flex gap-2">
+        <div class="mt-4 flex gap-2" v-if="!isViewer">
           <button @click="editBudget(b)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">{{ $t('common.edit') }}</button>
           <button @click="deleteBudget(b.id)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors">{{ $t('common.delete') }}</button>
         </div>
@@ -57,12 +62,25 @@
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('categories.title') }}</label>
             <div class="flex gap-2">
-              <select v-model="form.category_id" required class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+              <select v-model="form.category_id" class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+                <option :value="null">{{ $t('budgets.no_category') }}</option>
                 <option v-for="cat in expenseCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
               </select>
               <button type="button" @click="showQuickCategory = true" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">{{ $t('budgets.target_hint') }}</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">{{ $t('tags.title') }}</label>
+            <div class="flex flex-wrap gap-1.5">
+              <button type="button" v-for="tag in tagsStore.tags" :key="tag.id" @click="toggleTag(tag.id)"
+                class="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors"
+                :class="form.tag_ids.includes(tag.id) ? 'bg-primary-600 text-white border-primary-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'">
+                {{ tag.name }}
+              </button>
+              <span v-if="tagsStore.tags.length === 0" class="text-xs text-slate-500">{{ $t('tags.empty_list') }}</span>
             </div>
           </div>
           <div>
@@ -98,6 +116,8 @@
 import { ref, onMounted, reactive, computed } from 'vue'
 import { useBudgetsStore } from '../stores/budgets'
 import { useCategoriesStore } from '../stores/categories'
+import { useTagsStore } from '../stores/tags'
+import { useAuthStore } from '../stores/auth'
 import { useRatesStore } from '../stores/rates'
 import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
@@ -116,17 +136,27 @@ useHotkeys({
 })
 const budgetsStore = useBudgetsStore()
 const categoriesStore = useCategoriesStore()
+const tagsStore = useTagsStore()
+const authStore = useAuthStore()
 const ratesStore = useRatesStore()
 const baseCurrency = computed(() => ratesStore.baseCurrency)
+const isViewer = computed(() => authStore.user?.role === 'viewer')
 const showModal = ref(false)
 const showQuickCategory = ref(false)
 const isEditing = ref(false)
-const form = reactive({ category_id: null, amount: 0, currency: '', period: 'month' })
+const form = reactive({ category_id: null, tag_ids: [], amount: 0, currency: '', period: 'month' })
 
 onMounted(() => {
   budgetsStore.fetchBudgets()
   categoriesStore.fetchCategories()
+  tagsStore.fetchTags()
 })
+
+function toggleTag(tagId) {
+  const idx = form.tag_ids.indexOf(tagId)
+  if (idx === -1) form.tag_ids.push(tagId)
+  else form.tag_ids.splice(idx, 1)
+}
 
 const expenseCategories = computed(() => categoriesStore.categories.filter(c => c.type === 'expense'))
 
@@ -148,13 +178,13 @@ function progressBarColor(progress) {
 
 function openModal() {
   isEditing.value = false
-  Object.assign(form, { category_id: expenseCategories.value[0]?.id || null, amount: 0, currency: baseCurrency.value, period: 'month' })
+  Object.assign(form, { category_id: expenseCategories.value[0]?.id || null, tag_ids: [], amount: 0, currency: baseCurrency.value, period: 'month' })
   showModal.value = true
 }
 
 function editBudget(budget) {
   isEditing.value = true
-  Object.assign(form, budget)
+  Object.assign(form, { ...budget, tag_ids: (budget.tags || []).map(tag => tag.id) })
   showModal.value = true
 }
 
@@ -168,10 +198,15 @@ function onQuickCategoryCreated(category) {
 
 async function saveBudget() {
   form.amount = parseAmount(form.amount)
+  if (!form.category_id && form.tag_ids.length === 0) {
+    window.$toast?.error(t('budgets.target_required'))
+    return
+  }
+  const payload = { category_id: form.category_id || null, tag_ids: [...form.tag_ids], amount: form.amount, currency: form.currency, period: form.period, start_date: form.start_date, is_active: form.is_active !== false }
   if (isEditing.value) {
-    await budgetsStore.updateBudget(form.id, { ...form })
+    await budgetsStore.updateBudget(form.id, payload)
   } else {
-    await budgetsStore.createBudget({ ...form })
+    await budgetsStore.createBudget(payload)
   }
   closeModal()
 }

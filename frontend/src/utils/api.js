@@ -76,7 +76,12 @@ export async function api(path, options = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP ${res.status}`)
+    const e = new Error(err.error || `HTTP ${res.status}`)
+    // Expose extra API flags (e.g. totp_required on login) to callers
+    for (const key of Object.keys(err)) {
+      if (key !== 'error') e[key] = err[key]
+    }
+    throw e
   }
 
   if (res.status === 204) return null

@@ -4,10 +4,13 @@
 
     <template v-if="ready">
       <SettingsProfile />
-      <SettingsIntegrations />
-      <SettingsNotifications />
-      <SettingsSecurity />
-      <SettingsData />
+      <template v-if="!isViewer">
+        <SettingsIntegrations />
+        <SettingsNotifications />
+        <SettingsSecurity />
+        <SettingsAccess />
+        <SettingsData />
+      </template>
     </template>
   </div>
 </template>
@@ -19,9 +22,12 @@ import SettingsProfile from '../components/settings/SettingsProfile.vue'
 import SettingsIntegrations from '../components/settings/SettingsIntegrations.vue'
 import SettingsNotifications from '../components/settings/SettingsNotifications.vue'
 import SettingsSecurity from '../components/settings/SettingsSecurity.vue'
+import SettingsAccess from '../components/settings/SettingsAccess.vue'
 import SettingsData from '../components/settings/SettingsData.vue'
+import { computed } from 'vue'
 
 const auth = useAuthStore()
+const isViewer = computed(() => auth.user?.role === 'viewer')
 // Sections initialize from auth.user on mount — make sure it is loaded first
 const ready = ref(false)
 

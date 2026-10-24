@@ -11,10 +11,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!user.value)
 
-  async function login(login, password) {
+  async function login(login, password, totpCode) {
+    const body = { login, password }
+    if (totpCode) body.totp_code = totpCode
     const data = await api('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ login, password })
+      body: JSON.stringify(body)
     })
     user.value = data.user
     if (data.user?.language) {

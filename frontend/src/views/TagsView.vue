@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('tags.title') }}</h1>
-      <button @click="openModal()" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card text-white rounded-full text-sm font-medium transition-colors">
+      <button v-if="!isViewer" @click="openModal()" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card text-white rounded-full text-sm font-medium transition-colors">
         {{ $t('tags.add') }}
       </button>
     </div>
@@ -63,11 +63,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseModal from '@/components/BaseModal.vue'
 import { useRouter } from 'vue-router'
 import { useTagsStore } from '../stores/tags'
+import { useAuthStore } from '../stores/auth'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
 
@@ -75,6 +76,8 @@ const { t } = useI18n()
 const router = useRouter()
 const undo = useUndo('tags')
 const tagsStore = useTagsStore()
+const authStore = useAuthStore()
+const isViewer = computed(() => authStore.user?.role === 'viewer')
 
 useHotkeys({
   'ctrl+enter': () => { if (showModal.value) saveTag() },

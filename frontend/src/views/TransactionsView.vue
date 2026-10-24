@@ -2,7 +2,7 @@
   <div>
     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('transactions.title') }}</h1>
-      <div class="flex gap-2 self-start">
+      <div v-if="!isViewer" class="flex gap-2 self-start">
         <button @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
           <Icon name="plus" class="w-4 h-4" />
           {{ $t('common.add') }}
@@ -71,10 +71,13 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-            <tr v-for="t in transactionsStore.transactions" :key="t.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-              <td class="px-5 py-3 text-slate-500">{{ formatDate(t.date) }}</td>
+            <tr v-for="t in transactionsStore.transactions" :key="t.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors" :class="t.parent_id ? 'bg-slate-50/60 dark:bg-slate-800/20' : ''">
+              <td class="px-5 py-3 text-slate-500" :class="t.parent_id ? 'pl-10' : ''">{{ formatDate(t.date) }}</td>
               <td class="px-5 py-3">
-                <span v-if="t.type === 'transfer' || (t.type === 'income' && t.transfer_to_account_id)" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                <span v-if="t.is_split" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                  {{ $t('transactions.split') }}
+                </span>
+                <span v-else-if="t.type === 'transfer' || (t.type === 'income' && t.transfer_to_account_id)" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
                   {{ $t('transactions.types.transfer') }}
                 </span>
                 <span v-else-if="t.category_name || t.category_id" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium" :class="categoryClass(t.type)">
@@ -92,9 +95,12 @@
               <td class="px-5 py-3 text-right font-medium" :class="amountClass(t.type)">{{ formatAmount(t) }}</td>
               <td class="px-5 py-3">
                 <div class="flex items-center gap-2">
+                  <button v-if="!t.parent_id && !isViewer" @click="openAttachments(t.id)" class="text-slate-400 hover:text-primary-600 transition-colors" :aria-label="$t('transactions.attachments')" :title="$t('transactions.attachments')">
+                    <Icon name="upload" class="w-4 h-4" />
+                  </button>
                   <!-- Incoming transfer legs are managed through their source transfer row -->
-                  <template v-if="!(t.type === 'income' && t.transfer_to_account_id)">
-                    <button @click="openEditModal(t)" class="text-slate-400 hover:text-primary-600 transition-colors" :aria-label="$t('common.edit')" :title="$t('common.edit')">
+                  <template v-if="!(t.type === 'income' && t.transfer_to_account_id) && !t.parent_id && !isViewer">
+                    <button v-if="!t.is_split" @click="openEditModal(t)" class="text-slate-400 hover:text-primary-600 transition-colors" :aria-label="$t('common.edit')" :title="$t('common.edit')">
                       <Icon name="edit" class="w-4 h-4" />
                     </button>
                     <button @click="deleteTransaction(t.id)" class="text-slate-400 hover:text-danger-500 transition-colors" :aria-label="$t('common.delete')" :title="$t('common.delete')">
@@ -186,7 +192,7 @@
               </button>
             </div>
           </div>
-          <div v-if="form.type !== 'transfer'">
+          <div v-if="form.type !== 'transfer' && !useSplits">
             <label class="block text-sm font-medium mb-1">{{ $t('categories.title') }}</label>
             <div class="flex gap-2">
               <select v-model="form.category_id" class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
@@ -196,6 +202,30 @@
               <button type="button" @click="showQuickCategory = true" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
+            </div>
+          </div>
+          <div v-if="form.type !== 'transfer'">
+            <label class="flex items-center gap-2 text-sm font-medium mb-2 cursor-pointer">
+              <input type="checkbox" v-model="useSplits" class="rounded" />
+              {{ $t('transactions.split_toggle') }}
+            </label>
+            <div v-if="useSplits" class="space-y-2">
+              <div v-for="(row, i) in splitRows" :key="i" class="flex gap-2 items-center">
+                <select v-model="row.category_id" class="flex-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+                  <option :value="null">-</option>
+                  <option v-for="cat in filteredCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+                </select>
+                <input v-model.number="row.amount" type="number" step="0.01" min="0" class="w-24 px-2 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+                <button type="button" v-if="splitRows.length > 1" @click="splitRows.splice(i, 1)" class="text-slate-400 hover:text-danger-500 shrink-0" :aria-label="$t('common.delete')">
+                  <Icon name="cancel" class="w-4 h-4" />
+                </button>
+              </div>
+              <div class="flex items-center justify-between text-xs">
+                <button type="button" @click="splitRows.push({ category_id: null, amount: 0 })" class="text-primary-600 font-medium">{{ $t('transactions.split_add_part') }}</button>
+                <span :class="splitSumOk ? 'text-slate-500' : 'text-danger-500 font-medium'">
+                  {{ $t('transactions.split_sum') }}: {{ splitSum.toFixed(2) }} / {{ form.amount }}
+                </span>
+              </div>
             </div>
           </div>
           <div v-if="form.type === 'transfer'">
@@ -247,6 +277,31 @@
       </BaseModal>
 
     <ImportCsvModal v-model="showImportModal" @imported="transactionsStore.fetchTransactions()" />
+
+    <!-- Attachments -->
+    <BaseModal v-model="showAttachments" widthClass="max-w-md">
+      <h2 class="font-display text-xl font-semibold mb-4">{{ $t('transactions.attachments') }}</h2>
+      <div class="space-y-3">
+        <p v-if="attachmentsLoading" class="text-sm text-slate-500">{{ $t('common.loading') }}</p>
+        <template v-else>
+          <div v-for="att in attachments" :key="att.id" class="flex items-center justify-between gap-2 p-3 rounded-2xl bg-slate-100 dark:bg-slate-800">
+            <a :href="`/api/v1/attachments/${att.id}`" target="_blank" rel="noopener" class="text-sm font-medium truncate flex-1 hover:underline">{{ att.filename }}</a>
+            <span class="text-xs text-slate-400 whitespace-nowrap">{{ (att.size / 1024).toFixed(0) }} KB</span>
+            <button v-if="!isViewer" @click="deleteAttachment(att.id)" class="text-slate-400 hover:text-danger-500" :aria-label="$t('common.delete')">
+              <Icon name="cancel" class="w-4 h-4" />
+            </button>
+          </div>
+          <p v-if="attachments.length === 0" class="text-sm text-slate-500">{{ $t('transactions.attachments_empty') }}</p>
+        </template>
+        <div v-if="!isViewer" class="flex gap-2">
+          <input ref="attachmentInput" type="file" class="hidden" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain" @change="uploadAttachment" />
+          <button type="button" @click="attachmentInput?.click()" :disabled="attachmentUploading" class="flex-1 py-2 rounded-full bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium disabled:opacity-50">
+            {{ attachmentUploading ? $t('common.loading') : $t('transactions.attachments_upload') }}
+          </button>
+        </div>
+      </div>
+    </BaseModal>
+
     <QuickAccountModal v-model="showQuickAccount" @created="onQuickAccountCreated" />
     <QuickCategoryModal v-model="showQuickCategory" :default-type="form.type" @created="onQuickCategoryCreated" />
   </div>
@@ -260,6 +315,7 @@ import { useAccountsStore } from '../stores/accounts'
 import { useCategoriesStore } from '../stores/categories'
 import { useTagsStore } from '../stores/tags'
 import { useRatesStore } from '../stores/rates'
+import { useAuthStore } from '../stores/auth'
 import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
@@ -268,6 +324,7 @@ import { formatFull } from '@/utils/currency'
 import { formatDate as formatDateValue, parseAmount } from '@/utils/format'
 import { debounce } from '@/utils/debounce'
 import { logger } from '@/utils/logger.js'
+import { api } from '@/utils/api'
 import ImportCsvModal from '../components/ImportCsvModal.vue'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import QuickCategoryModal from '../components/QuickCategoryModal.vue'
@@ -293,7 +350,9 @@ const transactionsStore = useTransactionsStore()
 const accountsStore = useAccountsStore()
 const categoriesStore = useCategoriesStore()
 const tagsStore = useTagsStore()
+const authStore = useAuthStore()
 const { formatNote, amountClass, categoryClass } = useTransactionDisplay(accountsStore)
+const isViewer = computed(() => authStore.user?.role === 'viewer')
 const showModal = ref(false)
 const showImportModal = ref(false)
 const showQuickAccount = ref(false)
@@ -304,6 +363,20 @@ const filters = reactive({ search: '', account_id: '', category_id: '', type: ''
 const form = reactive({ type: 'expense', amount: 0, account_id: null, category_id: null, date: new Date().toLocaleDateString('sv-SE'), note: '', transfer_to_account_id: null, tags: [] })
 const newTagName = ref('')
 const newTagColor = ref('#94a3b8')
+
+// Split-by-category state (create only: splits are managed by delete+recreate)
+const useSplits = ref(false)
+const splitRows = ref([{ category_id: null, amount: 0 }])
+const splitSum = computed(() => splitRows.value.reduce((s, r) => s + (Number(r.amount) || 0), 0))
+const splitSumOk = computed(() => Math.abs(splitSum.value - Number(form.amount || 0)) < 0.005)
+
+// Attachments state
+const showAttachments = ref(false)
+const attachmentsTxId = ref(null)
+const attachments = ref([])
+const attachmentsLoading = ref(false)
+const attachmentInput = ref(null)
+const attachmentUploading = ref(false)
 
 // Pagination + request cancellation
 const page = ref(1)
@@ -404,12 +477,16 @@ function formatAmount(tx) {
 
 function openModal() {
   editingId.value = null
+  useSplits.value = false
+  splitRows.value = [{ category_id: null, amount: 0 }]
   Object.assign(form, { type: 'expense', amount: 0, account_id: accountsStore.accounts[0]?.id || null, category_id: null, date: new Date().toLocaleDateString('sv-SE'), note: '', transfer_to_account_id: null, tags: [] })
   showModal.value = true
 }
 
 function openEditModal(tx) {
   editingId.value = tx.id
+  useSplits.value = false
+  splitRows.value = [{ category_id: null, amount: 0 }]
   Object.assign(form, {
     type: tx.type,
     amount: parseFloat(tx.amount),
@@ -463,6 +540,19 @@ async function saveTransaction() {
     window.$toast?.error(t('transactions.invalid_amount'))
     return
   }
+  if (payload.type !== 'transfer' && useSplits.value) {
+    const rows = splitRows.value.map(r => ({ category_id: r.category_id, amount: parseAmount(r.amount) }))
+    if (rows.some(r => !r.category_id || !r.amount || Number.isNaN(r.amount))) {
+      window.$toast?.error(t('transactions.split_invalid'))
+      return
+    }
+    if (Math.abs(rows.reduce((s, r) => s + r.amount, 0) - payload.amount) > 0.005) {
+      window.$toast?.error(t('transactions.split_sum'))
+      return
+    }
+    payload.splits = rows
+    payload.category_id = null
+  }
   if (editingId.value) {
     await transactionsStore.updateTransaction(editingId.value, payload)
     window.$toast?.success(t('common.saved'))
@@ -472,6 +562,52 @@ async function saveTransaction() {
   }
   closeModal()
   fetchPage()
+}
+
+// ---------- Attachments ----------
+
+async function openAttachments(txId) {
+  attachmentsTxId.value = txId
+  showAttachments.value = true
+  attachments.value = []
+  attachmentsLoading.value = true
+  try {
+    attachments.value = await api(`/transactions/${txId}/attachments`)
+  } catch (e) {
+    logger.error('Failed to load attachments', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    attachmentsLoading.value = false
+  }
+}
+
+async function uploadAttachment(e) {
+  const file = e.target.files?.[0]
+  if (!file || !attachmentsTxId.value) return
+  attachmentUploading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    await api(`/transactions/${attachmentsTxId.value}/attachments`, { method: 'POST', body: formData })
+    attachments.value = await api(`/transactions/${attachmentsTxId.value}/attachments`)
+    window.$toast?.success(t('common.saved'))
+  } catch (err) {
+    logger.error('Attachment upload failed', err)
+    window.$toast?.error(err.message || t('common.error'))
+  } finally {
+    attachmentUploading.value = false
+    if (attachmentInput.value) attachmentInput.value.value = ''
+  }
+}
+
+async function deleteAttachment(id) {
+  try {
+    await api(`/attachments/${id}`, { method: 'DELETE' })
+    attachments.value = attachments.value.filter(a => a.id !== id)
+  } catch (e) {
+    logger.error('Attachment delete failed', e)
+    window.$toast?.error(e.message || t('common.error'))
+  }
 }
 
 async function deleteTransaction(id) {

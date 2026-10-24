@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('categories.title') }}</h1>
-      <button @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
+      <button v-if="!isViewer" @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -35,14 +35,33 @@
               <Icon v-else-if="cat.icon" :name="cat.icon" set="category" class="w-5 h-5" />
               <Icon v-else name="tag" class="w-5 h-5" />
             </div>
-            <div class="min-w-0">
+            <div class="min-w-0 flex-1">
               <span class="font-medium truncate block">{{ cat.name }}</span>
               <span v-if="cat.parent_id" class="text-xs text-slate-500">{{ parentName(cat.parent_id) }}</span>
             </div>
+            <button v-if="!isViewer" @click.stop="openMerge(cat)" class="shrink-0 p-1.5 rounded-full text-slate-400 hover:text-primary-600 transition-colors" :aria-label="$t('categories.merge')" :title="$t('categories.merge')">
+              <Icon name="arrowRight" class="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Merge modal -->
+    <BaseModal v-model="showMerge" widthClass="max-w-sm">
+      <h2 class="font-display text-xl font-semibold mb-2">{{ $t('categories.merge') }}</h2>
+      <p class="text-sm text-slate-500 mb-4">{{ $t('categories.merge_desc', { name: mergeSource?.name || '' }) }}</p>
+      <form @submit.prevent="confirmMerge" class="space-y-4">
+        <select v-model="mergeTargetId" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+          <option :value="null" disabled>-</option>
+          <option v-for="cat in mergeTargets" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
+        </select>
+        <div class="flex gap-3">
+          <button type="button" @click="showMerge = false" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
+          <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium">{{ $t('categories.merge') }}</button>
+        </div>
+      </form>
+    </BaseModal>
 
     <!-- Modal -->
     <BaseModal v-model="showModal" widthClass="max-w-lg" contentClass="max-h-[90vh] overflow-y-auto">
@@ -101,6 +120,7 @@
 <script setup>
 import { ref, onMounted, reactive, computed } from 'vue'
 import { useCategoriesStore } from '../stores/categories'
+import { useAuthStore } from '../stores/auth'
 import SafeSvg from '../components/SafeSvg.vue'
 import { useI18n } from 'vue-i18n'
 import { useHotkeys } from '@/composables/useHotkeys'
@@ -108,6 +128,7 @@ import { categoryIconImports } from '@/utils/icons'
 import { presetColors } from '@/utils/colors'
 import BaseModal from '@/components/BaseModal.vue'
 import BaseSkeleton from '@/components/BaseSkeleton.vue'
+import { api } from '@/utils/api'
 
 const { t } = useI18n()
 useHotkeys({
@@ -115,6 +136,38 @@ useHotkeys({
   'esc': () => { if (showModal.value) closeModal() }
 })
 const categoriesStore = useCategoriesStore()
+const authStore = useAuthStore()
+const isViewer = computed(() => authStore.user?.role === 'viewer')
+
+// Merge: move all transactions/rules/budgets into another category of the same type
+const showMerge = ref(false)
+const mergeSource = ref(null)
+const mergeTargetId = ref(null)
+const mergeTargets = computed(() =>
+  mergeSource.value
+    ? categoriesStore.categories.filter(c => c.type === mergeSource.value.type && c.id !== mergeSource.value.id)
+    : []
+)
+
+function openMerge(cat) {
+  mergeSource.value = cat
+  mergeTargetId.value = null
+  showMerge.value = true
+}
+
+async function confirmMerge() {
+  if (!mergeSource.value || !mergeTargetId.value) return
+  const confirmed = await window.$confirm({ message: t('categories.merge_confirm', { name: mergeSource.value.name }) })
+  if (!confirmed) return
+  try {
+    await api(`/categories/${mergeSource.value.id}/merge`, { method: 'POST', body: JSON.stringify({ target_id: mergeTargetId.value }) })
+    await categoriesStore.fetchCategories()
+    window.$toast?.success(t('categories.merge_done'))
+    showMerge.value = false
+  } catch (e) {
+    window.$toast?.error(e.message || t('common.error'))
+  }
+}
 const showModal = ref(false)
 const isEditing = ref(false)
 const fileInput = ref(null)

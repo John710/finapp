@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('accounts.title') }}</h1>
-      <button @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
+      <button v-if="!isViewer" @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -249,6 +249,7 @@ import { logger } from '@/utils/logger.js'
 import { ref, onMounted, onBeforeUnmount, reactive, computed, watch, nextTick } from 'vue'
 import { useAccountsStore } from '../stores/accounts'
 import { useRatesStore } from '../stores/rates'
+import { useAuthStore } from '../stores/auth'
 import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
@@ -270,6 +271,8 @@ useHotkeys({
 })
 
 const accountsStore = useAccountsStore()
+const authStore = useAuthStore()
+const isViewer = computed(() => authStore.user?.role === 'viewer')
 const baseCurrency = computed(() => ratesStore.baseCurrency)
 const showModal = ref(false)
 const isEditing = ref(false)
