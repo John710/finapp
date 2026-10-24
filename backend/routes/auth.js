@@ -1,10 +1,27 @@
 import bcrypt from 'bcryptjs'
 import crypto from 'node:crypto'
-import { authenticator } from 'otplib'
+import { OTP, NobleCryptoPlugin, ScureBase32Plugin } from 'otplib'
 import QRCode from 'qrcode'
 import { notify, checkDuplicateNotification } from '../services/notify.js'
 import { t, getUserLang, getReqLang } from '../services/i18n.js'
 import { encrypt, decrypt } from '../services/crypto.js'
+
+// otplib v13 (verified against current docs via Context7): the OTP class with
+// explicit plugins replaced the old authenticator singleton. verify() takes
+// {secret, token} and returns a VerifyResult object; generateURI() builds the
+// otpauth:// URL for the QR code.
+const otpCrypto = new NobleCryptoPlugin()
+const otpBase32 = new ScureBase32Plugin()
+
+async function verifyTotp(secret, token) {
+  try {
+    const otp = new OTP({ crypto: otpCrypto, base32: otpBase32 })
+    const result = await otp.verify({ secret, token: String(token || '').trim() })
+    return Boolean(result?.valid)
+  } catch {
+    return false
+  }
+}
 
 const ACCESS_TOKEN_NAME = 'accessToken'
 const REFRESH_TOKEN_NAME = 'refreshToken'
@@ -150,7 +167,7 @@ async function authRoutes(fastify, opts) {
         reply.code(401)
         return { error: t('auth.totp_required', {}, lang), totp_required: true }
       }
-      if (!secret || !authenticator.verify({ token: String(code), secret })) {
+      if (!secret || !(await verifyTotp(secret, code))) {
         reply.code(401)
         return { error: t('auth.invalid_totp_code', {}, lang), totp_required: true }
       }
@@ -611,9 +628,10 @@ async function authRoutes(fastify, opts) {
       reply.code(400)
       return { error: t('errors.totp_already_enabled', {}, lang) }
     }
-    const secret = authenticator.generateSecret()
+    const otp = new OTP({ crypto: otpCrypto, base32: otpBase32 })
+    const secret = otp.generateSecret()
     await fastify.db.query('UPDATE users SET totp_secret = $1 WHERE id = $2', [encrypt(secret), userId])
-    const otpauthUrl = authenticator.keyuri(user.login || 'finapp', 'FinApp', secret)
+    const otpauthUrl = otp.generateURI({ issuer: 'FinApp', label: user.login || 'finapp', secret })
     const qr = await QRCode.toDataURL(otpauthUrl)
     return { secret, otpauth_url: otpauthUrl, qr }
   })
@@ -637,7 +655,7 @@ async function authRoutes(fastify, opts) {
       reply.code(400)
       return { error: t('errors.totp_not_setup', {}, lang) }
     }
-    if (!authenticator.verify({ token: String(request.body.code), secret })) {
+    if (!(await verifyTotp(secret, request.body.code))) {
       reply.code(400)
       return { error: t('auth.invalid_totp_code', {}, lang) }
     }
@@ -666,7 +684,7 @@ async function authRoutes(fastify, opts) {
       return { error: t('auth.invalid_current_password', {}, lang) }
     }
     const secret = decrypt(user.totp_secret)
-    if (!secret || !authenticator.verify({ token: String(request.body.code), secret })) {
+    if (!secret || !(await verifyTotp(secret, request.body.code))) {
       reply.code(400)
       return { error: t('auth.invalid_totp_code', {}, lang) }
     }
