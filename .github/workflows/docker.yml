@@ -159,15 +159,32 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Compute changelog args
+        id: cliffargs
+        # Betas: incremental changelog (--latest, since the previous tag).
+        # Stable after a beta series: explicit range from the previous STABLE
+        # tag + --ignore-tags — prerelease tags stop being section boundaries
+        # and all beta commits roll into the stable section. (--latest with
+        # --ignore-tags DROPS the beta releases instead of merging them.)
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" == *-* ]]; then
+            echo "args=--latest --strip header" >> "$GITHUB_OUTPUT"
+          else
+            PREV=$(git tag -l 'v*' | grep -v -- '-' | sort -V | awk -v t="$TAG" '$0==t{print p; exit} {p=$0}')
+            if [ -z "$PREV" ]; then
+              echo "args=--latest --strip header" >> "$GITHUB_OUTPUT"
+            else
+              echo "args=${PREV}..${TAG} --strip header --ignore-tags .*-.*" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
       - name: Generate changelog
         id: cliff
         uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
         with:
           config: cliff.toml
-          # Stable releases after a beta series: ignore prerelease tags as
-          # section boundaries so the changelog covers everything since the
-          # previous STABLE release, not just the final version bump
-          args: --latest --strip header${{ !contains(github.ref, '-') && ' --ignore-tags .*-.*' || '' }}
+          args: ${{ steps.cliffargs.outputs.args }}
         env:
           OUTPUT: CHANGELOG.md
 
