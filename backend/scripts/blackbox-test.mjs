@@ -299,7 +299,10 @@ let eurRate = null
 // ---------- S: net-worth anchored to balances ----------
 {
   const nw = await req('GET', '/reports/net-worth?months=2&base_currency=USD')
-  const series = nw.json || []
+  const series = Array.isArray(nw.json) ? nw.json : []
+  if (!series.length) {
+    console.log(`  ...net-worth diagnostic: status=${nw.status} body=${String(nw.text).slice(0, 300)}`)
+  }
   const last = series[series.length - 1]
   // EUR -> USD is the inverse of the USD -> EUR rate: 500 EUR = 500 / rate USD
   // (USD wallet is 900 here: M left one 100-transfer to USD2 in place)
