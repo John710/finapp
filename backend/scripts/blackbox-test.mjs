@@ -12,7 +12,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 // Rolling-window pacing for non-auth requests: the report burst would
 // otherwise exceed the 100/min GET limit and fail assertions with 429s.
 const windows = { get: [], post: [] }
-const LIMITS = { get: 80, post: 25 }
+const LIMITS = { get: 60, post: 12 }
 async function pace(method, path) {
   if (path.startsWith('/auth/')) return
   const bucket = method === 'GET' ? 'get' : 'post'
@@ -42,11 +42,22 @@ async function req(method, path, { body, auth = true, rawCookie = null } = {}) {
     ].filter(Boolean).join('; ')
   }
   await pace(method, path)
-  const res = await fetch(`${BASE}${path}`, {
+  let res = await fetch(`${BASE}${path}`, {
     method, headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(20000)
   })
+  // GETs occasionally still trip the limiter — wait out and retry once.
+  // /auth excluded: its rate-limit test must observe the raw 429.
+  if (res.status === 429 && method === 'GET' && !path.startsWith('/auth/')) {
+    console.log('  ...GET rate-limited, waiting 61s and retrying')
+    await sleep(61000)
+    res = await fetch(`${BASE}${path}`, {
+      method, headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(20000)
+    })
+  }
   const setCookies = res.headers.getSetCookie?.() || []
   for (const sc of setCookies) {
     const m = sc.match(/^(accessToken|refreshToken)=([^;]+)/)
