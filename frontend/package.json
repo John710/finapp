@@ -1,7 +1,7 @@
 {
   "name": "finapp-frontend",
   "private": true,
-  "version": "1.2.7",
+  "version": "1.2.8-beta.1",
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/montserrat": "^5.3.0",
     "@hugeicons/core-free-icons": "^4.2.0",
     "@hugeicons/vue": "^1.0.5",
     "dompurify": "^3.4.10",

@@ -3,14 +3,27 @@
 @variant dark (&:is(.dark *));
 
 @theme {
-  --color-primary-50: #ecfdf5;
-  --color-primary-100: #d1fae5;
-  --color-primary-200: #a7f3d0;
-  --color-primary-300: #6ee7b7;
-  --color-primary-400: #34d399;
-  --color-primary-500: #10b981;
-  --color-primary-600: #059669;
-  --color-primary-700: #047857;
+  /* Display font: Montserrat (Poppins-like geometry with full Cyrillic).
+     Body font: Inter Variable. */
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Montserrat Variable", "Inter Variable", system-ui, sans-serif;
+
+  /* Primary: violet anchored at #7C6FDE */
+  --color-primary-50: #f4f2fd;
+  --color-primary-100: #eae7fc;
+  --color-primary-200: #d6cff8;
+  --color-primary-300: #b9adf2;
+  --color-primary-400: #9b8be9;
+  --color-primary-500: #7c6fde;
+  --color-primary-600: #6a5cd1;
+  --color-primary-700: #594bc0;
+  --color-primary-800: #483ba0;
+  --color-primary-900: #2f2673;
+
+  /* App background: soft lavender */
+  --color-app: #f1f1f7;
+  --color-app-dark: #12121f;
+
   --color-danger-50: #fff1f2;
   --color-danger-100: #ffe4e6;
   --color-danger-200: #fecdd3;
@@ -25,10 +38,27 @@
   --color-warning-400: #fbbf24;
   --color-warning-500: #f59e0b;
   --color-warning-600: #d97706;
+
+  /* Soft card shadows used across the design */
+  --shadow-card: 0 10px 34px -12px rgba(47, 38, 115, 0.10);
+  --shadow-float: 0 24px 60px -16px rgba(47, 38, 115, 0.18);
 }
 
 html {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
+}
+
+body {
+  background-color: var(--color-app);
+}
+
+.dark body {
+  background-color: var(--color-app-dark);
+}
+
+::selection {
+  background: #d6cff8;
+  color: #2f2673;
 }
 
 ::-webkit-scrollbar {
@@ -41,10 +71,22 @@ html {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #c9c9dd;
   border-radius: 3px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #475569;
+  background: #3b3b52;
+}
+
+/* Undo toast transition (used by LayoutView) */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(12px);
 }

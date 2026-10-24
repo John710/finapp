@@ -2,7 +2,7 @@
   <div role="status" aria-live="polite" aria-atomic="true" class="fixed bottom-4 right-4 z-[70] space-y-2">
     <TransitionGroup name="toast">
       <div v-for="toast in toasts" :key="toast.id"
-        class="flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium max-w-sm"
+        class="flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-float border-0 text-sm font-medium max-w-sm"
         :class="typeClass(toast.type)">
         <Icon v-if="toast.type === 'success'" name="check" class="w-5 h-5 shrink-0" />
         <Icon v-else-if="toast.type === 'error'" name="cancel" class="w-5 h-5 shrink-0" />
@@ -29,10 +29,10 @@ function remove(id) {
 
 function typeClass(type) {
   switch (type) {
-    case 'success': return 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-200'
-    case 'error': return 'bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-900/30 dark:border-rose-800 dark:text-rose-200'
-    case 'warning': return 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-200'
-    default: return 'bg-slate-50 border-slate-200 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200'
+    case 'success': return 'bg-emerald-50 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200'
+    case 'error': return 'bg-rose-50 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200'
+    case 'warning': return 'bg-amber-50 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+    default: return 'bg-white text-slate-800 dark:bg-slate-800 dark:text-slate-200'
   }
 }
 </script>

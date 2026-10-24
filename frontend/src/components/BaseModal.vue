@@ -12,9 +12,9 @@
     @keydown.esc="close"
     tabindex="-1"
   >
-    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click.self="close"></div>
+    <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" @click.self="close"></div>
     <div
-      class="bg-white dark:bg-slate-900 w-full rounded-2xl p-6 relative z-10 shadow-2xl border border-slate-200 dark:border-slate-700"
+      class="bg-white dark:bg-slate-900 w-full rounded-3xl p-6 relative z-10 shadow-float border-0"
       :class="[widthClass, contentClass]"
     >
       <slot />

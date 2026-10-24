@@ -1,8 +1,8 @@
 <template>
   <div>
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold">{{ $t('tags.title') }}</h1>
-      <button @click="openModal()" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium transition-colors">
+      <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('tags.title') }}</h1>
+      <button @click="openModal()" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card text-white rounded-full text-sm font-medium transition-colors">
         {{ $t('tags.add') }}
       </button>
     </div>
@@ -11,7 +11,7 @@
       <p class="text-slate-500">{{ $t('common.loading') }}</p>
     </div>
 
-    <div v-else-if="tagsStore.tags.length === 0" class="bg-white dark:bg-slate-900 rounded-xl p-12 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+    <div v-else-if="tagsStore.tags.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-none text-center">
       <div class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
         <Icon name="tag" class="w-8 h-8 text-slate-400" />
       </div>
@@ -20,17 +20,17 @@
     </div>
 
     <div v-else class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div v-for="tag in tagsStore.tags" :key="tag.id" @click="goToTransactions(tag.id)" class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+      <div v-for="tag in tagsStore.tags" :key="tag.id" @click="goToTransactions(tag.id)" class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-none flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
         <div class="flex items-center gap-3">
           <div class="w-4 h-4 rounded-full" :style="{ backgroundColor: tag.color || '#94a3b8' }"></div>
           <span class="font-medium">{{ tag.name }}</span>
           <span class="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-full">{{ tag.transaction_count ?? 0 }}</span>
         </div>
         <div class="flex items-center gap-1" @click.stop>
-          <button @click="openModal(tag)" class="p-1.5 text-slate-400 hover:text-primary-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+          <button @click="openModal(tag)" class="p-1.5 text-slate-400 hover:text-primary-600 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
             <Icon name="edit" class="w-4 h-4" />
           </button>
-          <button @click="deleteTag(tag.id)" :disabled="deletingId === tag.id" class="p-1.5 text-slate-400 hover:text-danger-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50">
+          <button @click="deleteTag(tag.id)" :disabled="deletingId === tag.id" class="p-1.5 text-slate-400 hover:text-danger-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50">
             <Icon name="delete" class="w-4 h-4" />
           </button>
         </div>
@@ -43,7 +43,7 @@
         <div class="space-y-4">
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('tags.name') }}</label>
-            <input v-model="form.name" type="text" class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent text-sm" :placeholder="$t('tags.name')" />
+            <input v-model="form.name" type="text" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" :placeholder="$t('tags.name')" />
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('tags.color') }}</label>
@@ -53,8 +53,8 @@
           </div>
         </div>
         <div class="flex justify-end gap-2 mt-6">
-          <button @click="showModal = false" :disabled="saving" class="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm disabled:opacity-50">{{ $t('common.cancel') }}</button>
-          <button @click="saveTag" :disabled="saving || !form.name.trim()" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
+          <button @click="showModal = false" :disabled="saving" class="px-4 py-2 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm disabled:opacity-50">{{ $t('common.cancel') }}</button>
+          <button @click="saveTag" :disabled="saving || !form.name.trim()" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card disabled:opacity-50 text-white rounded-full text-sm font-medium">
             {{ saving ? $t('common.loading') : $t('common.save') }}
           </button>
         </div>
@@ -85,15 +85,15 @@ const showModal = ref(false)
 const editingTag = ref(null)
 const saving = ref(false)
 const deletingId = ref(null)
-const form = ref({ name: '', color: '#0f766e' })
+const form = ref({ name: '', color: '#7c6fde' })
 
-const colors = ['#0f766e', '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#f43f5e', '#ec4899', '#6366f1', '#14b8a6', '#84cc16']
+const colors = ['#7c6fde', '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#f43f5e', '#ec4899', '#6366f1', '#14b8a6', '#84cc16']
 
 onMounted(() => tagsStore.fetchTags())
 
 function openModal(tag = null) {
   editingTag.value = tag
-  form.value = tag ? { name: tag.name, color: tag.color || '#0f766e' } : { name: '', color: '#0f766e' }
+  form.value = tag ? { name: tag.name, color: tag.color || '#7c6fde' } : { name: '', color: '#7c6fde' }
   showModal.value = true
 }
 

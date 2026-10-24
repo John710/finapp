@@ -1,9 +1,9 @@
 <template>
   <div>
-    <h1 class="text-2xl font-bold mb-6">{{ $t('settings.title') }}</h1>
+    <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight mb-6">{{ $t('settings.title') }}</h1>
 
     <!-- Profile -->
-    <section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 mb-6">
+    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none divide-y divide-slate-100 dark:divide-slate-800 mb-6">
       <div class="p-4 border-b border-slate-100 dark:border-slate-800">
         <h2 class="font-semibold">{{ $t('settings.profile_title') }}</h2>
       </div>
@@ -12,7 +12,7 @@
           <p class="font-medium">{{ $t('settings.theme') }}</p>
           <p class="text-sm text-slate-500">{{ $t('settings.theme_desc') }}</p>
         </div>
-        <select v-model="theme" @change="changeTheme" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm">
+        <select v-model="theme" @change="changeTheme" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
           <option value="auto">{{ $t('settings.theme_auto') }}</option>
           <option value="light">{{ $t('settings.theme_light') }}</option>
           <option value="dark">{{ $t('settings.theme_dark') }}</option>
@@ -23,7 +23,7 @@
           <p class="font-medium">{{ $t('settings.language') }}</p>
           <p class="text-sm text-slate-500">{{ $t('settings.language_desc') }}</p>
         </div>
-        <select v-model="locale" @change="changeLang" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm">
+        <select v-model="locale" @change="changeLang" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
           <option value="ru">{{ $t('settings.lang_ru') }}</option>
           <option value="en">{{ $t('settings.lang_en') }}</option>
         </select>
@@ -34,18 +34,18 @@
           <p class="text-sm text-slate-500">{{ $t('settings.base_currency_desc') }}</p>
         </div>
         <div class="relative w-48" ref="selectRef">
-          <button type="button" @click="showDropdown = !showDropdown" class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-left text-sm flex items-center justify-between">
+          <button type="button" @click="showDropdown = !showDropdown" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-left text-sm flex items-center justify-between">
             <span>{{ selectedCurrency?.code }} ({{ selectedCurrency?.symbol || selectedCurrency?.code }})</span>
             <Icon name="arrowDown" class="w-4 h-4 text-slate-400" />
           </button>
-          <div v-if="showDropdown" class="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg max-h-60 overflow-hidden flex flex-col">
+          <div v-if="showDropdown" class="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 rounded-lg border-0 bg-slate-100 dark:bg-slate-800 shadow-lg max-h-60 overflow-hidden flex flex-col">
             <div class="p-2 border-b border-slate-100 dark:border-slate-800">
-              <input v-model="search" type="text" :placeholder="$t('common.search')" ref="searchInput" class="w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 dark:border-slate-700 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-500" @keydown="onKeydown" />
+              <input v-model="search" type="text" :placeholder="$t('common.search')" ref="searchInput" class="w-full px-2 py-1.5 text-sm rounded-md border-0 bg-slate-100 dark:bg-slate-800 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-400" @keydown="onKeydown" />
             </div>
             <div class="overflow-y-auto flex-1">
               <button v-for="fc in filteredCurrencies" :key="fc.code" type="button" @click="selectCurrency(fc)"
                 class="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between transition-colors"
-                :class="baseCurrency === fc.code ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600' : ''">
+                :class="baseCurrency === fc.code ? 'bg-primary-100 dark:bg-primary-500/15 text-primary-600' : ''">
                 <span class="font-medium">{{ fc.code }}</span>
                 <span class="text-slate-500 text-xs">{{ fc.name }}</span>
               </button>
@@ -57,7 +57,7 @@
     </section>
 
     <!-- Integrations -->
-    <section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 mb-6">
+    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none divide-y divide-slate-100 dark:divide-slate-800 mb-6">
       <div class="p-4 border-b border-slate-100 dark:border-slate-800">
         <h2 class="font-semibold">{{ $t('settings.integrations_title') }}</h2>
       </div>
@@ -72,11 +72,11 @@
           <StatusBadge :dirty="isCoingeckoDirty" />
         </div>
         <div class="flex gap-2">
-          <input v-model="coingeckoKey" type="text" placeholder="CG-..." class="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
-          <button v-if="isCoingeckoDirty" @click="saveCoingeckoKey" :disabled="savingKey || !coingeckoKey.trim()" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
+          <input v-model="coingeckoKey" type="text" placeholder="CG-..." class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+          <button v-if="isCoingeckoDirty" @click="saveCoingeckoKey" :disabled="savingKey || !coingeckoKey.trim()" class="px-4 py-2 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-semibold disabled:opacity-50">
             {{ savingKey ? $t('common.loading') : $t('common.save') }}
           </button>
-          <button v-else-if="auth.user?.coingecko_api_key" @click="testCoingeckoKey" :disabled="coingeckoTestLoading" class="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
+          <button v-else-if="auth.user?.coingecko_api_key" @click="testCoingeckoKey" :disabled="coingeckoTestLoading" class="px-4 py-2 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-semibold disabled:opacity-50">
             {{ coingeckoTestLoading ? $t('common.loading') : $t('settings.coingecko_test') }}
           </button>
         </div>
@@ -96,7 +96,7 @@
             <label class="block text-sm font-medium mb-1">{{ $t('settings.shoutrrr_provider') }}</label>
             <select
               v-model="shoutrrrProvider"
-              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm"
+              class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm"
             >
               <option value="">{{ $t('settings.shoutrrr_provider_placeholder') }}</option>
               <option v-for="p in SHOUTRRR_PROVIDERS" :key="p.key" :value="p.key">{{ p.label }}</option>
@@ -109,7 +109,7 @@
               type="text"
               :placeholder="shoutrrrPlaceholder"
               :disabled="shoutrrrLoading || shoutrrrTestLoading"
-              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm disabled:opacity-50"
+              class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm disabled:opacity-50"
             />
             <p v-if="shoutrrrUrlError" class="mt-1 text-sm text-red-600 dark:text-red-400">{{ shoutrrrUrlError }}</p>
           </div>
@@ -153,7 +153,7 @@
     </section>
 
     <!-- Notifications -->
-    <section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 mb-6">
+    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none divide-y divide-slate-100 dark:divide-slate-800 mb-6">
       <div class="p-4 border-b border-slate-100 dark:border-slate-800">
         <h2 class="font-semibold">{{ $t('settings.notifications_title') }}</h2>
       </div>
@@ -181,7 +181,7 @@
               type="email"
               :placeholder="$t('settings.vapid_email')"
               :disabled="vapidLoading || vapidDeleteLoading"
-              class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm disabled:opacity-50"
+              class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm disabled:opacity-50"
             />
           </div>
           <div class="flex items-center gap-2">
@@ -240,7 +240,7 @@
     </section>
 
     <!-- Security -->
-    <section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800 mb-6">
+    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none divide-y divide-slate-100 dark:divide-slate-800 mb-6">
       <div class="p-4 border-b border-slate-100 dark:border-slate-800">
         <h2 class="font-semibold">{{ $t('settings.security_title') }}</h2>
       </div>
@@ -253,19 +253,19 @@
         </div>
         <div class="space-y-3 max-w-md">
           <div class="relative">
-            <input v-model="currentPassword" autocomplete="current-password" :type="showPasswords.current ? 'text' : 'password'" :placeholder="$t('settings.password_current')" class="w-full px-3 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+            <input v-model="currentPassword" autocomplete="current-password" :type="showPasswords.current ? 'text' : 'password'" :placeholder="$t('settings.password_current')" class="w-full px-3 pr-10 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
             <button type="button" @click="showPasswords.current = !showPasswords.current" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.current ? $t('settings.password_hide') : $t('settings.password_show')">
               <Icon :name="showPasswords.current ? 'eyeOff' : 'eye'" size="18" />
             </button>
           </div>
           <div class="relative">
-            <input v-model="newPassword" autocomplete="new-password" :type="showPasswords.new ? 'text' : 'password'" :placeholder="$t('settings.password_new')" class="w-full px-3 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+            <input v-model="newPassword" autocomplete="new-password" :type="showPasswords.new ? 'text' : 'password'" :placeholder="$t('settings.password_new')" class="w-full px-3 pr-10 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
             <button type="button" @click="showPasswords.new = !showPasswords.new" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.new ? $t('settings.password_hide') : $t('settings.password_show')">
               <Icon :name="showPasswords.new ? 'eyeOff' : 'eye'" size="18" />
             </button>
           </div>
           <div class="relative">
-            <input v-model="confirmPassword" autocomplete="new-password" :type="showPasswords.confirm ? 'text' : 'password'" :placeholder="$t('settings.password_confirm')" class="w-full px-3 pr-10 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm" />
+            <input v-model="confirmPassword" autocomplete="new-password" :type="showPasswords.confirm ? 'text' : 'password'" :placeholder="$t('settings.password_confirm')" class="w-full px-3 pr-10 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
             <button type="button" @click="showPasswords.confirm = !showPasswords.confirm" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.confirm ? $t('settings.password_hide') : $t('settings.password_show')">
               <Icon :name="showPasswords.confirm ? 'eyeOff' : 'eye'" size="18" />
             </button>
@@ -298,7 +298,7 @@
         </div>
         <div v-if="sessions.length === 0" class="text-sm text-slate-500">{{ $t('settings.sessions_empty') }}</div>
         <ul v-else class="space-y-2">
-          <li v-for="session in sessions" :key="session.id" class="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+          <li v-for="session in sessions" :key="session.id" class="flex items-center justify-between p-3 rounded-lg border-0 bg-slate-100 dark:bg-slate-800 bg-slate-50 dark:bg-slate-800/50">
             <div class="text-sm">
               <span class="font-medium">{{ formatDateTime(session.created_at) }}</span>
               <span v-if="session.is_current" class="ml-2 text-xs px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300">{{ $t('settings.sessions_current') }}</span>
@@ -318,7 +318,7 @@
     </section>
 
     <!-- Data -->
-    <section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800">
+    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none divide-y divide-slate-100 dark:divide-slate-800">
       <div class="p-4 border-b border-slate-100 dark:border-slate-800">
         <h2 class="font-semibold">{{ $t('settings.data_title') }}</h2>
       </div>

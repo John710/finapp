@@ -54,7 +54,11 @@
     "savings_rate_desc": "of income saved",
     "saved": "Saved",
     "spent": "Spent",
-    "no_chart_data": "Not enough data for chart"
+    "no_chart_data": "Not enough data for chart",
+    "greeting_morning": "Good morning",
+    "greeting_afternoon": "Good afternoon",
+    "greeting_evening": "Good evening",
+    "greeting_night": "Good night"
   },
   "transactions": {
     "title": "Transactions",

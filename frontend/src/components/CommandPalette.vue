@@ -2,7 +2,7 @@
   <BaseModal
     :modelValue="modelValue"
     @update:modelValue="$emit('update:modelValue', $event)"
-    widthClass="max-w-lg p-0 rounded-xl overflow-hidden"
+    widthClass="max-w-lg p-0 rounded-3xl overflow-hidden"
     zClass="z-[60]"
     alignClass="items-start justify-center pt-[20vh]"
   >
@@ -31,7 +31,7 @@
         :aria-selected="i === selectedIndex"
         @click="select(item)"
         class="w-full text-left px-4 py-2.5 flex items-center gap-3 transition-colors"
-        :class="i === selectedIndex ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300' : 'hover:bg-slate-50 dark:hover:bg-slate-800'"
+        :class="i === selectedIndex ? 'bg-primary-100 dark:bg-primary-500/15 text-primary-700 dark:text-primary-300' : 'hover:bg-slate-50 dark:hover:bg-slate-800'"
       >
         <Icon :name="item.icon" class="w-4 h-4 text-slate-400" />
         <span class="text-sm">{{ item.name }}</span>

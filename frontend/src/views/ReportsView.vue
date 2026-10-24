@@ -1,15 +1,15 @@
   <template>
     <div>
       <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-        <h1 class="text-2xl font-bold">{{ $t('reports.title') }}</h1>
-        <button @click="exportData" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors self-start">
+        <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('reports.title') }}</h1>
+        <button @click="exportData" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors self-start">
           <Icon name="upload" class="w-4 h-4" />
           {{ $t('reports.export_csv') }}
         </button>
       </div>
 
       <!-- Filters -->
-      <div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm mb-6 flex flex-wrap gap-3 items-center">
+      <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-none mb-6 flex flex-wrap gap-3 items-center">
         <div class="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
           <button v-for="p in periodOptions" :key="p.value" @click="setPeriod(p.value)"
             class="px-3 py-2 rounded-md text-sm font-medium transition-colors"
@@ -19,40 +19,40 @@
         </div>
         <div class="flex items-center gap-2">
           <label class="text-xs text-slate-500">{{ $t('reports.from') }}</label>
-          <input v-model="filters.from" type="date" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent text-sm" />
+          <input v-model="filters.from" type="date" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" />
         </div>
         <div class="flex items-center gap-2">
           <label class="text-xs text-slate-500">{{ $t('reports.to') }}</label>
-          <input v-model="filters.to" type="date" class="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent text-sm" />
+          <input v-model="filters.to" type="date" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" />
         </div>
-        <button @click="applyFilters" :disabled="loading" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors">
+        <button @click="applyFilters" :disabled="loading" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card disabled:opacity-50 text-white rounded-full text-sm font-medium transition-colors">
           {{ loading ? $t('common.loading') + '...' : $t('reports.apply') }}
         </button>
       </div>
 
       <!-- Summary cards -->
       <div v-if="reportsStore.summary" class="grid grid-cols-4 gap-4 mb-6">
-        <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none text-center">
           <p class="text-xs text-slate-500 mb-1">{{ $t('reports.total_income') }}</p>
-          <p class="text-xl font-bold text-primary-600">+{{ formatCurrency(reportsStore.summary.total_income) }}</p>
+          <p class="font-display text-xl font-semibold text-primary-600">+{{ formatCurrency(reportsStore.summary.total_income) }}</p>
         </div>
-        <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none text-center">
           <p class="text-xs text-slate-500 mb-1">{{ $t('reports.total_expense') }}</p>
-          <p class="text-xl font-bold text-danger-500">−{{ formatCurrency(reportsStore.summary.total_expense) }}</p>
+          <p class="font-display text-xl font-semibold text-danger-500">−{{ formatCurrency(reportsStore.summary.total_expense) }}</p>
         </div>
-        <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none text-center">
           <p class="text-xs text-slate-500 mb-1">{{ $t('reports.total_transfer') }}</p>
-          <p class="text-xl font-bold text-blue-500">{{ formatCurrency(reportsStore.summary.total_transfer || 0) }}</p>
+          <p class="font-display text-xl font-semibold text-blue-500">{{ formatCurrency(reportsStore.summary.total_transfer || 0) }}</p>
         </div>
-        <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none text-center">
           <p class="text-xs text-slate-500 mb-1">{{ $t('reports.net') }}</p>
-          <p class="text-xl font-bold" :class="net >= 0 ? 'text-primary-600' : 'text-danger-500'">{{ net >= 0 ? '+' : '' }}{{ formatCurrency(net) }}</p>
+          <p class="font-display text-xl font-semibold" :class="net >= 0 ? 'text-primary-600' : 'text-danger-500'">{{ net >= 0 ? '+' : '' }}{{ formatCurrency(net) }}</p>
         </div>
       </div>
 
       <div class="grid lg:grid-cols-2 gap-6">
         <!-- Trend chart -->
-        <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none">
           <h3 class="font-semibold mb-4">{{ $t('reports.monthly_trend') }}</h3>
           <div v-if="reportsStore.trend.length" class="relative h-64">
             <BaseChart :option="trendChartOption" />
@@ -61,7 +61,7 @@
         </div>
 
         <!-- Category chart -->
-        <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none">
           <div class="flex items-center justify-between mb-4">
             <h3 class="font-semibold">{{ categoryType === 'income' ? $t('reports.income_by_category') : $t('reports.expenses_by_category') }}</h3>
             <div class="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
@@ -80,7 +80,7 @@
       </div>
 
       <!-- Sankey chart -->
-      <div v-if="sankeyData.links.length" class="mt-6 bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div v-if="sankeyData.links.length" class="mt-6 bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none">
         <h3 class="font-semibold mb-4">{{ $t('reports.cash_flow') }}</h3>
         <div class="relative h-[400px]">
           <BaseChart :option="sankeyChartOption" :height="'400px'" />
@@ -88,12 +88,12 @@
       </div>
 
       <!-- Category table -->
-      <div class="mt-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
           <h3 class="font-semibold">{{ $t('reports.by_category') }}</h3>
         </div>
         <table class="w-full text-sm">
-          <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400">
+          <thead class="bg-transparent dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 uppercase tracking-wider text-xs">
             <tr>
               <th class="text-left px-5 py-3 font-medium">{{ $t('categories.title') }}</th>
               <th class="text-right px-5 py-3 font-medium">{{ $t('transactions.amount') }}</th>
@@ -125,14 +125,14 @@
       </div>
 
       <!-- Crypto Holdings -->
-      <div class="mt-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <h3 class="font-semibold">{{ $t('reports.crypto_holdings') }}</h3>
           <span v-if="cryptoAccounts.length" class="text-sm font-bold text-slate-900 dark:text-white">{{ formatCurrency(cryptoTotalValue) }}</span>
         </div>
         <div v-if="!cryptoAccounts.length" class="p-8 text-center text-slate-500">{{ $t('common.empty') }}</div>
         <table v-else class="w-full text-sm">
-          <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400">
+          <thead class="bg-transparent dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 uppercase tracking-wider text-xs">
             <tr>
               <th class="text-left px-5 py-3 font-medium">{{ $t('common.name') }}</th>
               <th class="text-right px-5 py-3 font-medium">{{ $t('reports.balance') }}</th>
@@ -156,13 +156,13 @@
       </div>
 
       <!-- Budgets -->
-      <div class="mt-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
           <h3 class="font-semibold">{{ $t('reports.budgets') }}</h3>
         </div>
         <div v-if="!budgetsStore.budgets.length" class="p-8 text-center text-slate-500">{{ $t('common.empty') }}</div>
         <table v-else class="w-full text-sm">
-          <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400">
+          <thead class="bg-transparent dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 uppercase tracking-wider text-xs">
             <tr>
               <th class="text-left px-5 py-3 font-medium">{{ $t('categories.title') }}</th>
               <th class="text-right px-5 py-3 font-medium">{{ $t('reports.limit') }}</th>
@@ -198,22 +198,22 @@
       <!-- Debts -->
       <div class="mt-6">
         <div class="grid grid-cols-2 gap-4 mb-4">
-          <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+          <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none text-center">
             <p class="text-xs text-slate-500 mb-1">{{ $t('reports.total_owed') }}</p>
-            <p class="text-xl font-bold text-danger-500">{{ formatCurrency(totalOwed) }}</p>
+            <p class="font-display text-xl font-semibold text-danger-500">{{ formatCurrency(totalOwed) }}</p>
           </div>
-          <div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+          <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none text-center">
             <p class="text-xs text-slate-500 mb-1">{{ $t('reports.total_lent') }}</p>
-            <p class="text-xl font-bold text-primary-600">{{ formatCurrency(totalLent) }}</p>
+            <p class="font-display text-xl font-semibold text-primary-600">{{ formatCurrency(totalLent) }}</p>
           </div>
         </div>
-        <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
           <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
             <h3 class="font-semibold">{{ $t('reports.unpaid') }}</h3>
           </div>
           <div v-if="!unpaidDebts.length" class="p-8 text-center text-slate-500">{{ $t('common.empty') }}</div>
           <table v-else class="w-full text-sm">
-            <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400">
+            <thead class="bg-transparent dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 uppercase tracking-wider text-xs">
               <tr>
                 <th class="text-left px-5 py-3 font-medium">{{ $t('debts.counterparty') }}</th>
                 <th class="text-right px-5 py-3 font-medium">{{ $t('transactions.amount') }}</th>
@@ -238,13 +238,13 @@
       </div>
 
       <!-- Recurring -->
-      <div class="mt-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
           <h3 class="font-semibold">{{ $t('reports.upcoming_recurring_payments') }}</h3>
         </div>
         <div v-if="!upcomingRecurring.length" class="p-8 text-center text-slate-500">{{ $t('common.empty') }}</div>
         <table v-else class="w-full text-sm">
-          <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400">
+          <thead class="bg-transparent dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 uppercase tracking-wider text-xs">
             <tr>
               <th class="text-left px-5 py-3 font-medium">{{ $t('common.name') }}</th>
               <th class="text-right px-5 py-3 font-medium">{{ $t('transactions.amount') }}</th>
@@ -432,11 +432,11 @@ const trendChartOption = computed(() => {
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: '#10b981' },
-              { offset: 1, color: '#059669' }
+              { offset: 0, color: '#8b7fe8' },
+              { offset: 1, color: '#7c6fde' }
             ]
           },
-          borderRadius: [4, 4, 0, 0]
+          borderRadius: [8, 8, 0, 0]
         }
       },
       {
@@ -451,11 +451,11 @@ const trendChartOption = computed(() => {
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: '#f43f5e' },
-              { offset: 1, color: '#dc2626' }
+              { offset: 0, color: '#c3cbef' },
+              { offset: 1, color: '#b8c1ea' }
             ]
           },
-          borderRadius: [4, 4, 0, 0]
+          borderRadius: [8, 8, 0, 0]
         }
       },
       {
@@ -470,11 +470,11 @@ const trendChartOption = computed(() => {
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: '#3b82f6' },
-              { offset: 1, color: '#2563eb' }
+              { offset: 0, color: '#a5d4f6' },
+              { offset: 1, color: '#8fc3ee' }
             ]
           },
-          borderRadius: [4, 4, 0, 0]
+          borderRadius: [8, 8, 0, 0]
         }
       }
     ]
@@ -569,7 +569,7 @@ const sankeyData = computed(() => {
     nodes.push({
       name: cashFlowName,
       value: totalIncome,
-      itemStyle: { color: '#059669' }
+      itemStyle: { color: '#7c6fde' }
     })
     nodeNames.add(cashFlowName)
     nodeValues[cashFlowName] = totalIncome

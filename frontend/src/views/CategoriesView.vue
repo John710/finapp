@@ -1,8 +1,8 @@
 <template>
   <div>
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold">{{ $t('categories.title') }}</h1>
-      <button @click="openModal()" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+      <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('categories.title') }}</h1>
+      <button @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -12,7 +12,7 @@
       <p class="text-slate-500">{{ $t('common.loading') }}</p>
     </div>
 
-    <div v-else-if="categoriesStore.categories.length === 0" class="bg-white dark:bg-slate-900 rounded-xl p-12 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+    <div v-else-if="categoriesStore.categories.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-none text-center">
       <p class="text-slate-500">{{ $t('categories.empty') }}</p>
     </div>
 
@@ -21,7 +21,7 @@
         <h3 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">{{ $t('categories.types.' + type) }}</h3>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           <div v-for="cat in filteredCategories(type)" :key="cat.id"
-            class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer"
+            class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-none flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer"
             @click="editCategory(cat)">
             <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" :style="{ backgroundColor: cat.color + '20', color: cat.color }">
               <SafeSvg v-if="cat.icon_custom" :svg="cat.icon_custom" class="w-5 h-5" />
@@ -39,11 +39,11 @@
 
     <!-- Modal -->
     <BaseModal v-model="showModal" widthClass="max-w-lg" contentClass="max-h-[90vh] overflow-y-auto">
-        <h2 class="text-xl font-bold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
+        <h2 class="font-display text-xl font-semibold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
         <form @submit.prevent="saveCategory" class="space-y-4">
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('common.name') }}</label>
-            <input v-model="form.name" required class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <input v-model="form.name" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 focus:outline-none focus:ring-2 focus:ring-primary-400" />
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('common.type') }}</label>
@@ -77,14 +77,14 @@
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('categories.parent') }}</label>
-            <select v-model="form.parent_id" class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100">
+            <select v-model="form.parent_id" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
               <option :value="null">{{ $t('categories.no_parent') }}</option>
               <option v-for="cat in parentOptions" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
             </select>
           </div>
           <div class="flex gap-3 mt-6">
-            <button type="button" @click="closeModal" class="flex-1 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
-            <button type="submit" class="flex-1 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium">{{ $t('common.save') }}</button>
+            <button type="button" @click="closeModal" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
+            <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>
       </BaseModal>

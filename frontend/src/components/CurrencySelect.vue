@@ -1,18 +1,18 @@
 <template>
   <div class="relative" ref="selectRef">
-    <button type="button" @click="toggle" class="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-left text-sm flex items-center justify-between">
+    <button type="button" @click="toggle" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-left text-sm flex items-center justify-between">
       <span v-if="modelValue">{{ selectedLabel }}</span>
       <span v-else class="text-slate-400">{{ placeholder }}</span>
       <Icon name="arrowDown" class="w-4 h-4 text-slate-400" />
     </button>
-    <div v-if="showDropdown" class="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg max-h-60 overflow-hidden flex flex-col">
+    <div v-if="showDropdown" class="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 rounded-lg border-0 bg-slate-100 dark:bg-slate-800 shadow-lg max-h-60 overflow-hidden flex flex-col">
       <div class="p-2 border-b border-slate-100 dark:border-slate-800">
-        <input v-model="search" type="text" :placeholder="searchPlaceholder" ref="searchInput" class="w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 dark:border-slate-700 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-500" @keydown="onKeydown" />
+        <input v-model="search" type="text" :placeholder="searchPlaceholder" ref="searchInput" class="w-full px-2 py-1.5 text-sm rounded-md border-0 bg-slate-100 dark:bg-slate-800 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-400" @keydown="onKeydown" />
       </div>
       <div class="overflow-y-auto flex-1">
         <button v-for="fc in filteredCurrencies" :key="fc.code" type="button" @click="select(fc)"
           class="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between transition-colors"
-          :class="modelValue === fc.code ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600' : ''">
+          :class="modelValue === fc.code ? 'bg-primary-100 dark:bg-primary-500/15 text-primary-600' : ''">
           <span class="font-medium">{{ fc.code }}</span>
           <span class="text-slate-500 text-xs">{{ fc.name }}</span>
         </button>

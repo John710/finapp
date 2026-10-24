@@ -1,10 +1,10 @@
 <template>
   <BaseModal :modelValue="modelValue" @update:modelValue="$emit('update:modelValue', $event)" widthClass="max-w-sm" zClass="z-50">
-    <h2 class="text-xl font-bold mb-4">{{ $t('common.add') }} {{ $t('categories.title').toLowerCase() }}</h2>
+    <h2 class="font-display text-xl font-semibold mb-4">{{ $t('common.add') }} {{ $t('categories.title').toLowerCase() }}</h2>
     <form @submit.prevent="save" class="space-y-4">
       <div>
         <label class="block text-sm font-medium mb-1">{{ $t('common.name') }}</label>
-        <input v-model="form.name" required class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-500" />
+        <input v-model="form.name" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 focus:outline-none focus:ring-2 focus:ring-primary-400" />
       </div>
       <div>
         <label class="block text-sm font-medium mb-1">{{ $t('common.type') }}</label>
@@ -33,8 +33,8 @@
         </div>
       </div>
       <div class="flex gap-3 mt-6">
-        <button type="button" @click="close" class="flex-1 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
-        <button type="submit" class="flex-1 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium">{{ $t('common.save') }}</button>
+        <button type="button" @click="close" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
+        <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
       </div>
     </form>
   </BaseModal>

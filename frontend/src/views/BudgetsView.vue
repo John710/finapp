@@ -1,8 +1,8 @@
 <template>
   <div>
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold">{{ $t('budgets.title') }}</h1>
-      <button @click="openModal()" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+      <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('budgets.title') }}</h1>
+      <button @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -12,12 +12,12 @@
       <p class="text-slate-500">{{ $t('common.loading') }}</p>
     </div>
 
-    <div v-else-if="budgetsStore.budgets.length === 0" class="bg-white dark:bg-slate-900 rounded-xl p-12 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+    <div v-else-if="budgetsStore.budgets.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-none text-center">
       <p class="text-slate-500">{{ $t('budgets.empty') }}</p>
     </div>
 
     <div v-else class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div v-for="b in budgetsStore.budgets" :key="b.id" class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div v-for="b in budgetsStore.budgets" :key="b.id" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none">
         <div class="flex items-center justify-between mb-3">
           <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" :style="{ backgroundColor: b.category_color + '20', color: b.category_color }">
             {{ b.category_name }}
@@ -37,30 +37,30 @@
           <span v-else>{{ $t('budgets.remaining') }}: {{ formatConverted(b.amount - b.spent, b.currency) }}</span>
         </p>
         <div class="mt-4 flex gap-2">
-          <button @click="editBudget(b)" class="text-xs px-2 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">{{ $t('common.edit') }}</button>
-          <button @click="deleteBudget(b.id)" class="text-xs px-2 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors">{{ $t('common.delete') }}</button>
+          <button @click="editBudget(b)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">{{ $t('common.edit') }}</button>
+          <button @click="deleteBudget(b.id)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors">{{ $t('common.delete') }}</button>
         </div>
       </div>
     </div>
 
     <!-- Modal -->
     <BaseModal v-model="showModal" widthClass="max-w-md">
-        <h2 class="text-xl font-bold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
+        <h2 class="font-display text-xl font-semibold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
         <form @submit.prevent="saveBudget" class="space-y-4">
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('categories.title') }}</label>
             <div class="flex gap-2">
-              <select v-model="form.category_id" required class="flex-1 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100">
+              <select v-model="form.category_id" required class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
                 <option v-for="cat in expenseCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
               </select>
-              <button type="button" @click="showQuickCategory = true" class="shrink-0 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')">
+              <button type="button" @click="showQuickCategory = true" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
             </div>
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('budgets.amount') }}</label>
-            <input v-model.number="form.amount" type="number" step="0.01" required class="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-transparent" />
+            <input v-model.number="form.amount" type="number" step="0.01" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
@@ -77,8 +77,8 @@
             </div>
           </div>
           <div class="flex gap-3 mt-6">
-            <button type="button" @click="closeModal" class="flex-1 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
-            <button type="submit" class="flex-1 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium">{{ $t('common.save') }}</button>
+            <button type="button" @click="closeModal" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
+            <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>
       </BaseModal>

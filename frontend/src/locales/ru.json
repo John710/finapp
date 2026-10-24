@@ -54,7 +54,11 @@
     "savings_rate_desc": "доходов сохранено",
     "saved": "Сохранено",
     "spent": "Потрачено",
-    "no_chart_data": "Недостаточно данных для графика"
+    "no_chart_data": "Недостаточно данных для графика",
+    "greeting_morning": "Доброе утро",
+    "greeting_afternoon": "Добрый день",
+    "greeting_evening": "Добрый вечер",
+    "greeting_night": "Доброй ночи"
   },
   "transactions": {
     "title": "Транзакции",

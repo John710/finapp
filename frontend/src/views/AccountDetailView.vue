@@ -1,21 +1,21 @@
 <template>
   <div>
     <div class="flex items-center gap-3 mb-6">
-      <button @click="$router.back()" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+      <button @click="$router.back()" class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
         <Icon name="arrowLeft" class="w-5 h-5" />
       </button>
-      <h1 class="text-2xl font-bold">{{ account?.name }}</h1>
+      <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ account?.name }}</h1>
     </div>
 
-    <div v-if="account" class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm mb-6">
+    <div v-if="account" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none mb-6">
       <div class="flex items-center gap-4">
         <div class="w-12 h-12 rounded-lg flex items-center justify-center text-white shrink-0" :style="{ backgroundColor: account.color || '#64748b' }">
           <Icon v-if="account.type" :name="typeIconName(account.type)" class="w-6 h-6" />
         </div>
         <div class="flex-1">
           <p class="text-sm text-slate-500">{{ $t('accounts.types.' + account.type) }} • {{ account.currency }}</p>
-          <p v-if="account.type === 'crypto'" class="text-2xl font-bold font-mono">{{ formatCryptoBalance(account.balance) }} {{ account.currency }}</p>
-          <p v-else class="text-2xl font-bold">{{ ratesStore.formatConverted(account.balance, account.currency, false) }}</p>
+          <p v-if="account.type === 'crypto'" class="font-display text-2xl lg:text-3xl font-semibold tracking-tight font-mono">{{ formatCryptoBalance(account.balance) }} {{ account.currency }}</p>
+          <p v-else class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ ratesStore.formatConverted(account.balance, account.currency, false) }}</p>
           <p v-if="account.type === 'crypto' && cryptoValue" class="text-sm text-slate-500">≈ {{ ratesStore.format(cryptoValue, baseCurrency) }}</p>
           <p v-else-if="account.currency !== baseCurrency" class="text-sm text-slate-500">{{ ratesStore.formatConverted(account.balance, account.currency) }}</p>
         </div>
@@ -39,13 +39,13 @@
       <p class="text-slate-500">{{ $t('common.loading') }}</p>
     </div>
 
-    <div v-else-if="transactionsStore.transactions.length === 0" class="bg-white dark:bg-slate-900 rounded-xl p-12 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+    <div v-else-if="transactionsStore.transactions.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-none text-center">
       <p class="text-slate-500">{{ $t('transactions.empty') }}</p>
     </div>
 
-    <div v-else class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+    <div v-else class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
       <table class="w-full text-sm">
-        <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400">
+        <thead class="bg-transparent dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 uppercase tracking-wider text-xs">
           <tr>
             <th class="text-left px-5 py-3 font-medium">{{ $t('transactions.date') }}</th>
             <th class="text-left px-5 py-3 font-medium">{{ $t('categories.title') }}</th>
