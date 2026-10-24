@@ -9,7 +9,7 @@
       </div>
 
       <!-- Filters -->
-      <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-none mb-6 flex flex-wrap gap-3 items-center">
+      <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark mb-6 flex flex-wrap gap-3 items-center">
         <div class="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
           <button v-for="p in periodOptions" :key="p.value" @click="setPeriod(p.value)"
             class="px-3 py-2 rounded-md text-sm font-medium transition-colors"
@@ -32,19 +32,19 @@
 
       <!-- Summary cards -->
       <div v-if="reportsStore.summary" class="grid grid-cols-4 gap-4 mb-6">
-        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none text-center">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark text-center">
           <p class="text-xs text-slate-500 mb-1">{{ $t('reports.total_income') }}</p>
           <p class="font-display text-xl font-semibold text-primary-600">+{{ formatCurrency(reportsStore.summary.total_income) }}</p>
         </div>
-        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none text-center">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark text-center">
           <p class="text-xs text-slate-500 mb-1">{{ $t('reports.total_expense') }}</p>
           <p class="font-display text-xl font-semibold text-danger-500">−{{ formatCurrency(reportsStore.summary.total_expense) }}</p>
         </div>
-        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none text-center">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark text-center">
           <p class="text-xs text-slate-500 mb-1">{{ $t('reports.total_transfer') }}</p>
           <p class="font-display text-xl font-semibold text-blue-500">{{ formatCurrency(reportsStore.summary.total_transfer || 0) }}</p>
         </div>
-        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none text-center">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark text-center">
           <p class="text-xs text-slate-500 mb-1">{{ $t('reports.net') }}</p>
           <p class="font-display text-xl font-semibold" :class="net >= 0 ? 'text-primary-600' : 'text-danger-500'">{{ net >= 0 ? '+' : '' }}{{ formatCurrency(net) }}</p>
         </div>
@@ -52,7 +52,7 @@
 
       <div class="grid lg:grid-cols-2 gap-6">
         <!-- Trend chart -->
-        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark">
           <h3 class="font-semibold mb-4">{{ $t('reports.monthly_trend') }}</h3>
           <div v-if="reportsStore.trend.length" class="relative h-64">
             <BaseChart :option="trendChartOption" />
@@ -61,7 +61,7 @@
         </div>
 
         <!-- Category chart -->
-        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark">
           <div class="flex items-center justify-between mb-4">
             <h3 class="font-semibold">{{ categoryType === 'income' ? $t('reports.income_by_category') : $t('reports.expenses_by_category') }}</h3>
             <div class="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
@@ -80,7 +80,7 @@
       </div>
 
       <!-- Sankey chart -->
-      <div v-if="sankeyData.links.length" class="mt-6 bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none">
+      <div v-if="sankeyData.links.length" class="mt-6 bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark">
         <h3 class="font-semibold mb-4">{{ $t('reports.cash_flow') }}</h3>
         <div class="relative h-[400px]">
           <BaseChart :option="sankeyChartOption" :height="'400px'" />
@@ -88,7 +88,7 @@
       </div>
 
       <!-- Category table -->
-      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
+      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
           <h3 class="font-semibold">{{ $t('reports.by_category') }}</h3>
         </div>
@@ -125,7 +125,7 @@
       </div>
 
       <!-- Crypto Holdings -->
-      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
+      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
           <h3 class="font-semibold">{{ $t('reports.crypto_holdings') }}</h3>
           <span v-if="cryptoAccounts.length" class="text-sm font-bold text-slate-900 dark:text-white">{{ formatCurrency(cryptoTotalValue) }}</span>
@@ -156,7 +156,7 @@
       </div>
 
       <!-- Budgets -->
-      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
+      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
           <h3 class="font-semibold">{{ $t('reports.budgets') }}</h3>
         </div>
@@ -198,16 +198,16 @@
       <!-- Debts -->
       <div class="mt-6">
         <div class="grid grid-cols-2 gap-4 mb-4">
-          <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none text-center">
+          <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark text-center">
             <p class="text-xs text-slate-500 mb-1">{{ $t('reports.total_owed') }}</p>
             <p class="font-display text-xl font-semibold text-danger-500">{{ formatCurrency(totalOwed) }}</p>
           </div>
-          <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none text-center">
+          <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark text-center">
             <p class="text-xs text-slate-500 mb-1">{{ $t('reports.total_lent') }}</p>
             <p class="font-display text-xl font-semibold text-primary-600">{{ formatCurrency(totalLent) }}</p>
           </div>
         </div>
-        <div class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark overflow-hidden">
           <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
             <h3 class="font-semibold">{{ $t('reports.unpaid') }}</h3>
           </div>
@@ -238,7 +238,7 @@
       </div>
 
       <!-- Recurring -->
-      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
+      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
           <h3 class="font-semibold">{{ $t('reports.upcoming_recurring_payments') }}</h3>
         </div>

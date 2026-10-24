@@ -12,12 +12,12 @@
       <p class="text-slate-500">{{ $t('common.loading') }}</p>
     </div>
 
-    <div v-else-if="debtsStore.debts.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-none text-center">
+    <div v-else-if="debtsStore.debts.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-card-dark text-center">
       <p class="text-slate-500">{{ $t('debts.empty') }}</p>
     </div>
 
     <div v-else class="space-y-4">
-      <div v-for="debt in debtsStore.debts" :key="debt.id" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none" :class="{ 'opacity-60': debt.status === 'paid' }">
+      <div v-for="debt in debtsStore.debts" :key="debt.id" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark" :class="{ 'opacity-60': debt.status === 'paid' }">
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2">
             <div class="w-2 h-2 rounded-full" :class="debt.type === 'borrow' ? 'bg-danger-500' : 'bg-primary-500'"></div>

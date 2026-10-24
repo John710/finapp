@@ -1,6 +1,6 @@
 <template>
   <div class="min-h-screen flex items-center justify-center bg-app dark:bg-app-dark px-4">
-    <div class="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-card dark:shadow-none border-0">
+    <div class="w-full max-w-sm bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-card dark:shadow-card-dark border-0">
       <div class="text-center mb-6">
         <div class="w-12 h-12 rounded-xl mx-auto mb-4 overflow-hidden flex-shrink-0">
           <img src="/icon-192.png" alt="FinApp" class="w-full h-full object-cover" />

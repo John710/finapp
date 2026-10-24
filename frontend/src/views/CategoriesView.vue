@@ -12,7 +12,7 @@
       <p class="text-slate-500">{{ $t('common.loading') }}</p>
     </div>
 
-    <div v-else-if="categoriesStore.categories.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-none text-center">
+    <div v-else-if="categoriesStore.categories.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-card-dark text-center">
       <p class="text-slate-500">{{ $t('categories.empty') }}</p>
     </div>
 
@@ -21,7 +21,7 @@
         <h3 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">{{ $t('categories.types.' + type) }}</h3>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           <div v-for="cat in filteredCategories(type)" :key="cat.id"
-            class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-none flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer"
+            class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer"
             @click="editCategory(cat)">
             <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" :style="{ backgroundColor: cat.color + '20', color: cat.color }">
               <SafeSvg v-if="cat.icon_custom" :svg="cat.icon_custom" class="w-5 h-5" />

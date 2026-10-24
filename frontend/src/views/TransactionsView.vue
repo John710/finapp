@@ -15,7 +15,7 @@
     </div>
 
     <!-- Filters -->
-    <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-none mb-4 flex flex-wrap gap-3">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark mb-4 flex flex-wrap gap-3">
       <input v-model="filters.search" @input="debouncedApplyFilters" type="text" :placeholder="$t('common.search') + '...'" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm w-full lg:w-64 focus:outline-none focus:ring-2 focus:ring-primary-400" />
       <select v-model="filters.account_id" @change="applyFilters" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
         <option value="">{{ $t('accounts.title') }}</option>
@@ -44,13 +44,13 @@
       <p class="text-slate-500">{{ $t('common.loading') }}</p>
     </div>
 
-    <div v-else-if="transactionsStore.transactions.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-none text-center">
+    <div v-else-if="transactionsStore.transactions.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-card-dark text-center">
       <p class="text-slate-500">{{ $t('transactions.empty') }}</p>
     </div>
 
     <div v-else>
       <!-- Desktop table -->
-      <div class="hidden lg:block bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
+      <div class="hidden lg:block bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark overflow-hidden">
         <table class="w-full text-sm">
           <thead class="bg-transparent dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 uppercase tracking-wider text-xs">
             <tr>
@@ -99,7 +99,7 @@
 
       <!-- Mobile cards -->
       <div class="lg:hidden space-y-3">
-        <div v-for="t in transactionsStore.transactions" :key="t.id" class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-none">
+        <div v-for="t in transactionsStore.transactions" :key="t.id" class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark">
           <div class="flex justify-between items-start mb-2">
             <span v-if="t.type === 'transfer' || (t.type === 'income' && t.transfer_to_account_id)" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
               {{ $t('transactions.types.transfer') }}

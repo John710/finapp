@@ -12,12 +12,12 @@
       <p class="text-slate-500">{{ $t('common.loading') }}</p>
     </div>
 
-    <div v-else-if="recurringStore.rules.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-none text-center">
+    <div v-else-if="recurringStore.rules.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-card-dark text-center">
       <p class="text-slate-500">{{ $t('recurring.empty') }}</p>
     </div>
 
     <div v-else class="space-y-3">
-      <div v-for="rule in recurringStore.rules" :key="rule.id" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none flex items-center justify-between">
+      <div v-for="rule in recurringStore.rules" :key="rule.id" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark flex items-center justify-between">
         <div class="flex items-center gap-4">
           <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" :class="rule.type === 'income' ? 'bg-primary-100 text-primary-600' : 'bg-danger-100 text-danger-600'">
             <Icon name="repeat" class="w-5 h-5" />

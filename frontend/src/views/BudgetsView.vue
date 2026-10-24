@@ -12,12 +12,12 @@
       <p class="text-slate-500">{{ $t('common.loading') }}</p>
     </div>
 
-    <div v-else-if="budgetsStore.budgets.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-none text-center">
+    <div v-else-if="budgetsStore.budgets.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-card-dark text-center">
       <p class="text-slate-500">{{ $t('budgets.empty') }}</p>
     </div>
 
     <div v-else class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div v-for="b in budgetsStore.budgets" :key="b.id" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none">
+      <div v-for="b in budgetsStore.budgets" :key="b.id" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark">
         <div class="flex items-center justify-between mb-3">
           <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium" :style="{ backgroundColor: b.category_color + '20', color: b.category_color }">
             {{ b.category_name }}

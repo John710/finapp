@@ -3,7 +3,7 @@
     <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight mb-6">{{ $t('settings.title') }}</h1>
 
     <!-- Profile -->
-    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none divide-y divide-slate-100 dark:divide-slate-800 mb-6">
+    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark divide-y divide-slate-100 dark:divide-slate-800 mb-6">
       <div class="p-4 border-b border-slate-100 dark:border-slate-800">
         <h2 class="font-semibold">{{ $t('settings.profile_title') }}</h2>
       </div>
@@ -57,7 +57,7 @@
     </section>
 
     <!-- Integrations -->
-    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none divide-y divide-slate-100 dark:divide-slate-800 mb-6">
+    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark divide-y divide-slate-100 dark:divide-slate-800 mb-6">
       <div class="p-4 border-b border-slate-100 dark:border-slate-800">
         <h2 class="font-semibold">{{ $t('settings.integrations_title') }}</h2>
       </div>
@@ -153,7 +153,7 @@
     </section>
 
     <!-- Notifications -->
-    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none divide-y divide-slate-100 dark:divide-slate-800 mb-6">
+    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark divide-y divide-slate-100 dark:divide-slate-800 mb-6">
       <div class="p-4 border-b border-slate-100 dark:border-slate-800">
         <h2 class="font-semibold">{{ $t('settings.notifications_title') }}</h2>
       </div>
@@ -240,7 +240,7 @@
     </section>
 
     <!-- Security -->
-    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none divide-y divide-slate-100 dark:divide-slate-800 mb-6">
+    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark divide-y divide-slate-100 dark:divide-slate-800 mb-6">
       <div class="p-4 border-b border-slate-100 dark:border-slate-800">
         <h2 class="font-semibold">{{ $t('settings.security_title') }}</h2>
       </div>
@@ -318,7 +318,7 @@
     </section>
 
     <!-- Data -->
-    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none divide-y divide-slate-100 dark:divide-slate-800">
+    <section class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark divide-y divide-slate-100 dark:divide-slate-800">
       <div class="p-4 border-b border-slate-100 dark:border-slate-800">
         <h2 class="font-semibold">{{ $t('settings.data_title') }}</h2>
       </div>

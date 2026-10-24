@@ -12,7 +12,7 @@
       <p class="text-slate-500">{{ $t('common.loading') }}</p>
     </div>
 
-    <div v-else-if="accountsStore.accounts.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-none text-center">
+    <div v-else-if="accountsStore.accounts.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-card-dark text-center">
       <p class="text-slate-500">{{ $t('accounts.empty') }}</p>
     </div>
 
@@ -22,7 +22,7 @@
         <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">{{ $t('accounts.regular_title') }}</h2>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div v-for="account in regularAccounts" :key="account.id"
-            class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none relative overflow-hidden cursor-pointer"
+            class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark relative overflow-hidden cursor-pointer"
             :class="{
               'opacity-60': account.is_archived,
               'ring-2 ring-primary-300 translate-y-1': dragOverId === account.id && dragOverPosition === 'after',
@@ -65,7 +65,7 @@
         <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">{{ $t('accounts.crypto_title') }}</h2>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div v-for="account in cryptoAccounts" :key="account.id"
-            class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none relative overflow-hidden cursor-pointer"
+            class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark relative overflow-hidden cursor-pointer"
             :class="{
               'opacity-60': account.is_archived,
               'ring-2 ring-primary-300 translate-y-1': dragOverId === account.id && dragOverPosition === 'after',
@@ -111,7 +111,7 @@
         <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">{{ $t('accounts.goals_title') }}</h2>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div v-for="account in goalAccounts" :key="account.id"
-            class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none relative overflow-hidden cursor-pointer"
+            class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark relative overflow-hidden cursor-pointer"
             :class="{
               'opacity-60': account.is_archived,
               'ring-2 ring-primary-300 translate-y-1': dragOverId === account.id && dragOverPosition === 'after',

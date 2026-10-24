@@ -2,7 +2,7 @@
   <div>
     <!-- Gradient stat cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-5 mb-5">
-      <div class="rounded-3xl p-5 bg-gradient-to-br from-[#c9bef7] to-[#a18ff0] text-white shadow-card">
+      <div class="rounded-3xl p-5 bg-gradient-to-br from-[#c9bef7] to-[#a18ff0] dark:from-[#4f439b] dark:to-[#3c327d] text-white shadow-card">
         <div class="flex items-start justify-between mb-6">
           <p class="text-sm text-white/80 font-medium">{{ $t('dashboard.total_balance') }}</p>
           <div class="w-10 h-10 rounded-full bg-white/25 flex items-center justify-center">
@@ -11,7 +11,7 @@
         </div>
         <p class="font-display text-2xl font-semibold tracking-tight truncate">{{ formatCurrency(totalBalance) }}</p>
       </div>
-      <div class="rounded-3xl p-5 bg-gradient-to-br from-[#fbd3b4] to-[#f2a488] text-white shadow-card">
+      <div class="rounded-3xl p-5 bg-gradient-to-br from-[#fbd3b4] to-[#f2a488] dark:from-[#b06e3a] dark:to-[#8d5124] text-white shadow-card">
         <div class="flex items-start justify-between mb-6">
           <p class="text-sm text-white/80 font-medium">{{ $t('dashboard.income_month') }}</p>
           <div class="w-10 h-10 rounded-full bg-white/25 flex items-center justify-center">
@@ -20,7 +20,7 @@
         </div>
         <p class="font-display text-2xl font-semibold tracking-tight truncate">+{{ formatCurrency(monthIncome) }}</p>
       </div>
-      <div class="rounded-3xl p-5 bg-gradient-to-br from-[#b9d5f7] to-[#8fb9ef] text-white shadow-card">
+      <div class="rounded-3xl p-5 bg-gradient-to-br from-[#b9d5f7] to-[#8fb9ef] dark:from-[#3e6ca6] dark:to-[#2e5382] text-white shadow-card">
         <div class="flex items-start justify-between mb-6">
           <p class="text-sm text-white/80 font-medium">{{ $t('dashboard.expense_month') }}</p>
           <div class="w-10 h-10 rounded-full bg-white/25 flex items-center justify-center">
@@ -29,7 +29,7 @@
         </div>
         <p class="font-display text-2xl font-semibold tracking-tight truncate">−{{ formatCurrency(monthExpense) }}</p>
       </div>
-      <div class="rounded-3xl p-5 bg-gradient-to-br from-[#bfe9d8] to-[#8fd4bc] text-white shadow-card">
+      <div class="rounded-3xl p-5 bg-gradient-to-br from-[#bfe9d8] to-[#8fd4bc] dark:from-[#2f8168] dark:to-[#226250] text-white shadow-card">
         <div class="flex items-start justify-between mb-6">
           <p class="text-sm text-white/80 font-medium">{{ $t('dashboard.active_accounts') }}</p>
           <div class="w-10 h-10 rounded-full bg-white/25 flex items-center justify-center">
@@ -42,7 +42,7 @@
 
     <!-- Quick info cards -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 lg:gap-5 mb-6">
-      <router-link to="/accounts" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none hover:shadow-float dark:hover:shadow-none transition-shadow flex items-center gap-4">
+      <router-link to="/accounts" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark hover:shadow-float dark:hover:shadow-none transition-shadow flex items-center gap-4">
         <div class="w-12 h-12 rounded-2xl bg-primary-100 dark:bg-primary-500/15 text-primary-600 dark:text-primary-400 flex items-center justify-center flex-shrink-0">
           <Icon name="money" class="w-6 h-6" />
         </div>
@@ -52,7 +52,7 @@
           <p class="text-xs text-slate-400 mt-0.5">{{ accountsStore.accounts.filter(a => a.type === 'crypto').length }} {{ $t('accounts.types.crypto') }}</p>
         </div>
       </router-link>
-      <router-link to="/debts" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none hover:shadow-float dark:hover:shadow-none transition-shadow flex items-center gap-4">
+      <router-link to="/debts" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark hover:shadow-float dark:hover:shadow-none transition-shadow flex items-center gap-4">
         <div class="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-500/15 text-rose-500 flex items-center justify-center flex-shrink-0">
           <Icon name="briefcase" class="w-6 h-6" />
         </div>
@@ -62,7 +62,7 @@
           <p class="text-xs text-slate-400 mt-0.5">{{ debtsStore.debts.filter(d => d.status !== 'paid').length }} {{ $t('reports.unpaid') }}</p>
         </div>
       </router-link>
-      <router-link to="/recurring" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none hover:shadow-float dark:hover:shadow-none transition-shadow flex items-center gap-4">
+      <router-link to="/recurring" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark hover:shadow-float dark:hover:shadow-none transition-shadow flex items-center gap-4">
         <div class="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-500/15 text-amber-500 flex items-center justify-center flex-shrink-0">
           <Icon name="repeat" class="w-6 h-6" />
         </div>
@@ -74,7 +74,7 @@
       </router-link>
     </div>
 
-    <div v-if="accountsStore.accounts.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-none text-center">
+    <div v-if="accountsStore.accounts.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-card-dark text-center">
       <div class="w-20 h-20 rounded-full bg-primary-100 dark:bg-primary-500/15 text-primary-500 flex items-center justify-center mx-auto mb-5">
         <Icon name="chart" class="w-9 h-9" />
       </div>
@@ -87,7 +87,7 @@
 
     <div v-else class="grid lg:grid-cols-2 gap-4 lg:gap-5">
       <!-- Trend chart -->
-      <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 lg:p-6 shadow-card dark:shadow-none">
+      <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 lg:p-6 shadow-card dark:shadow-card-dark">
         <div class="flex items-center justify-between mb-1">
           <h3 class="font-display font-semibold">{{ $t('dashboard.income_vs_expense') }}</h3>
           <div v-if="reportsStore.trend.length" class="flex gap-3 text-xs text-slate-400">
@@ -102,7 +102,7 @@
       </div>
 
       <!-- Category chart -->
-      <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 lg:p-6 shadow-card dark:shadow-none">
+      <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 lg:p-6 shadow-card dark:shadow-card-dark">
         <h3 class="font-display font-semibold mb-1">{{ $t('dashboard.expenses_by_category') }}</h3>
         <div v-if="reportsStore.byCategory.filter(c => parseFloat(c.total) > 0).length" class="relative h-64">
           <BaseChart :option="categoryChartOption" />
@@ -111,7 +111,7 @@
       </div>
 
       <!-- Net worth chart -->
-      <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 lg:p-6 shadow-card dark:shadow-none">
+      <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 lg:p-6 shadow-card dark:shadow-card-dark">
         <h3 class="font-display font-semibold mb-1">{{ $t('dashboard.net_worth') }}</h3>
         <div v-if="reportsStore.netWorth.length" class="relative h-64">
           <BaseChart :option="netWorthChartOption" />
@@ -120,7 +120,7 @@
       </div>
 
       <!-- Savings rate -->
-      <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 lg:p-6 shadow-card dark:shadow-none">
+      <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 lg:p-6 shadow-card dark:shadow-card-dark">
         <h3 class="font-display font-semibold mb-1">{{ $t('dashboard.savings_rate') }}</h3>
         <div v-if="reportsStore.savingsRate" class="relative h-80">
           <BaseChart :option="savingsRateChartOption" :height="'280px'" />
@@ -129,7 +129,7 @@
       </div>
 
       <!-- Recent transactions -->
-      <div class="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
+      <div class="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark overflow-hidden">
         <div class="px-5 lg:px-7 py-5 flex items-center justify-between">
           <h3 class="font-display font-semibold">{{ $t('transactions.title') }}</h3>
           <router-link to="/transactions" class="text-sm text-primary-500 hover:text-primary-600 font-medium">{{ $t('common.view_all') }} →</router-link>

@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-app dark:bg-app-dark text-slate-900 dark:text-slate-100 lg:p-4">
     <!-- App frame: white rounded canvas floating on the lavender background -->
-    <div class="bg-white dark:bg-slate-900 lg:rounded-[2rem] lg:shadow-float flex min-h-screen lg:min-h-[calc(100vh-2rem)]">
+    <div class="bg-white dark:bg-slate-950 lg:rounded-[2rem] lg:shadow-float dark:lg:shadow-card-dark flex min-h-screen lg:min-h-[calc(100vh-2rem)]">
       <!-- Sidebar (desktop) -->
       <aside class="hidden lg:flex w-64 shrink-0 flex-col sticky top-4 h-[calc(100vh-2rem)] pt-6 pb-4">
         <router-link to="/" class="flex items-center px-6 mb-8">
@@ -13,7 +13,7 @@
         <nav class="flex-1 px-3 space-y-1 overflow-y-auto">
           <router-link v-for="item in navItems" :key="item.name" :to="item.path"
             class="flex items-center px-4 py-2.5 rounded-full text-sm font-medium transition-colors"
-            :class="$route.path === item.path ? 'bg-primary-100 text-primary-600 font-semibold' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'">
+            :class="$route.path === item.path ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-600 dark:text-primary-300 font-semibold' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'">
             <Icon :name="item.icon" :class="item.iconClass" class="mr-3" />
             {{ $t(item.labelKey) }}
           </router-link>
@@ -29,7 +29,7 @@
       <!-- Main content -->
       <main class="flex-1 min-w-0 pb-28 lg:pb-8">
         <!-- Header -->
-        <header class="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex items-center gap-3 justify-between px-4 lg:px-8 py-3 lg:py-4">
+        <header class="sticky top-0 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md flex items-center gap-3 justify-between px-4 lg:px-8 py-3 lg:py-4">
           <div class="flex items-center min-w-0 gap-4">
             <div class="flex items-center lg:hidden">
               <div class="w-9 h-9 rounded-xl mr-2.5 overflow-hidden flex-shrink-0">
@@ -154,7 +154,7 @@
     <nav class="lg:hidden fixed bottom-3 left-3 right-3 bg-white dark:bg-slate-900 rounded-3xl shadow-float z-50 flex gap-1 overflow-x-auto px-2 py-2">
       <router-link v-for="item in mobileNavItems" :key="item.name" :to="item.path"
         class="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-2xl text-xs font-medium transition-colors flex-shrink-0"
-        :class="$route.path === item.path ? 'bg-primary-100 text-primary-600' : 'text-slate-400 dark:text-slate-500'">
+        :class="$route.path === item.path ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-600 dark:text-primary-300' : 'text-slate-400 dark:text-slate-500'">
         <Icon :name="item.icon" :class="item.iconClass" />
         <span>{{ $t(item.labelKey) }}</span>
       </router-link>

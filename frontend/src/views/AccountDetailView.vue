@@ -7,7 +7,7 @@
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ account?.name }}</h1>
     </div>
 
-    <div v-if="account" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-none mb-6">
+    <div v-if="account" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark mb-6">
       <div class="flex items-center gap-4">
         <div class="w-12 h-12 rounded-lg flex items-center justify-center text-white shrink-0" :style="{ backgroundColor: account.color || '#64748b' }">
           <Icon v-if="account.type" :name="typeIconName(account.type)" class="w-6 h-6" />
@@ -39,11 +39,11 @@
       <p class="text-slate-500">{{ $t('common.loading') }}</p>
     </div>
 
-    <div v-else-if="transactionsStore.transactions.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-none text-center">
+    <div v-else-if="transactionsStore.transactions.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-card-dark text-center">
       <p class="text-slate-500">{{ $t('transactions.empty') }}</p>
     </div>
 
-    <div v-else class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-none overflow-hidden">
+    <div v-else class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark overflow-hidden">
       <table class="w-full text-sm">
         <thead class="bg-transparent dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 uppercase tracking-wider text-xs">
           <tr>
