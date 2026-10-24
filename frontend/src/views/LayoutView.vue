@@ -19,10 +19,12 @@
           </router-link>
         </nav>
         <div class="px-3 pt-4">
-          <button @click="logout" class="w-full flex items-center px-4 py-2.5 rounded-full text-sm font-medium text-slate-400 hover:bg-danger-50 dark:hover:bg-danger-500/10 hover:text-danger-500 transition-colors">
-            <Icon name="logout" class="w-5 h-5 mr-3" />
-            {{ $t('auth.logout') }}
-          </button>
+          <router-link to="/settings"
+            class="w-full flex items-center px-4 py-2.5 rounded-full text-sm font-medium transition-colors"
+            :class="$route.path === '/settings' ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-600 dark:text-primary-300 font-semibold' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200'">
+            <Icon name="settings" class="w-5 h-5 mr-3" />
+            {{ $t('nav.settings') }}
+          </router-link>
         </div>
       </aside>
 
@@ -73,7 +75,15 @@
                     <option value="login_failed">{{ $t('auth.login') }}</option>
                   </select>
                 </div>
-                <div v-if="notifStore.loading" class="p-5 text-center text-sm text-slate-500">{{ $t('common.loading') }}</div>
+                <div v-if="notifStore.loading" class="p-5 space-y-3">
+                  <div v-for="i in 3" :key="i" class="flex items-center gap-3">
+                    <BaseSkeleton height="0.5rem" width="0.5rem" />
+                    <div class="flex-1 space-y-1.5">
+                      <BaseSkeleton height="0.7rem" width="70%" />
+                      <BaseSkeleton height="0.55rem" width="45%" />
+                    </div>
+                  </div>
+                </div>
                 <div v-else-if="notifStore.items.length === 0" class="p-5 text-center text-sm text-slate-500">
                   <p class="mb-2">{{ $t('notifications.empty') }}</p>
                   <button v-if="notifStore.unreadCount > 0" @click="notifStore.markAllRead()" class="text-xs text-primary-500 hover:underline">{{ $t('notifications.mark_all') }}</button>
@@ -136,9 +146,35 @@
               <Icon v-if="isDark" name="sun" class="w-5 h-5" />
               <Icon v-else name="moon" class="w-5 h-5" />
             </button>
-            <!-- Avatar -->
-            <div class="w-10 h-10 rounded-full bg-primary-500 text-white text-sm font-semibold flex items-center justify-center shadow-card select-none ml-1">
-              {{ initials }}
+            <!-- Avatar + quick profile settings -->
+            <div class="relative" ref="avatarDropdownRef">
+              <button @click="showAvatarMenu = !showAvatarMenu" :aria-label="$t('settings.title')" class="w-10 h-10 rounded-full bg-primary-500 text-white text-sm font-semibold flex items-center justify-center shadow-card select-none ml-1 overflow-hidden hover:ring-2 hover:ring-primary-300 transition-all">
+                <img v-if="auth.user?.avatar_set" :src="avatarUrl" :alt="$t('settings.avatar')" class="w-full h-full object-cover" />
+                <template v-else>{{ initials }}</template>
+              </button>
+              <!-- Dropdown with profile quick settings -->
+              <div v-if="showAvatarMenu" class="absolute right-0 mt-3 w-72 bg-white dark:bg-slate-900 rounded-3xl shadow-float z-50 p-5 space-y-4">
+                <p class="font-semibold truncate">{{ auth.user?.login }}</p>
+                <div class="flex items-center justify-between">
+                  <span class="text-sm text-slate-600 dark:text-slate-300">{{ $t('settings.theme') }}</span>
+                  <select v-model="quickTheme" @change="onQuickTheme" class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+                    <option value="auto">{{ $t('settings.theme_auto') }}</option>
+                    <option value="light">{{ $t('settings.theme_light') }}</option>
+                    <option value="dark">{{ $t('settings.theme_dark') }}</option>
+                  </select>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-sm text-slate-600 dark:text-slate-300">{{ $t('settings.language') }}</span>
+                  <select v-model="quickLocale" @change="onQuickLocale" class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+                    <option value="ru">{{ $t('settings.lang_ru') }}</option>
+                    <option value="en">{{ $t('settings.lang_en') }}</option>
+                  </select>
+                </div>
+                <button @click="logout" class="flex items-center justify-center gap-2 w-full py-2 rounded-full bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors">
+                  <Icon name="logout" class="w-4 h-4" />
+                  {{ $t('auth.logout') }}
+                </button>
+              </div>
             </div>
           </div>
         </header>
@@ -179,9 +215,10 @@
 
 <script setup>
 import { logger } from '@/utils/logger.js'
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import BaseSkeleton from '@/components/BaseSkeleton.vue'
 import { useAuthStore } from '../stores/auth'
 import { useNotificationsStore } from '../stores/notifications'
 import { useUndo } from '@/composables/useUndo'
@@ -198,7 +235,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const notifStore = useNotificationsStore()
 const undo = useUndo(route.name?.toLowerCase() || 'global')
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const currentVersion = packageJson.version
 const latestVersion = ref('')
@@ -209,7 +246,7 @@ const showCommandPalette = ref(false)
 const showHelp = ref(false)
 const confirmModalRef = ref(null)
 
-const { isDark, toggleTheme } = useTheme()
+const { isDark, toggleTheme, setTheme } = useTheme()
 const showNotifs = ref(false)
 const showGithubMenu = ref(false)
 const isHoveringIssue = ref(false)
@@ -217,9 +254,42 @@ const isHoveringStar = ref(false)
 const notifDropdownRef = ref(null)
 const githubDropdownRef = ref(null)
 
-useClickOutside([notifDropdownRef, githubDropdownRef], () => {
+// Avatar quick-settings dropdown (profile section controls)
+const showAvatarMenu = ref(false)
+const avatarDropdownRef = ref(null)
+const quickTheme = ref(localStorage.getItem('theme') || 'auto')
+const quickLocale = ref(locale.value)
+// Bust the avatar URL whenever the user object is refreshed (e.g. after an
+// avatar upload in settings) so the <img> refetches instead of showing a
+// cached image.
+const avatarBust = ref(Date.now())
+watch(() => auth.user, () => { avatarBust.value = Date.now() })
+const avatarUrl = computed(() => `/api/v1/users/me/avatar?v=${avatarBust.value}`)
+
+function onQuickTheme() {
+  setTheme(quickTheme.value)
+  window.$toast?.success(t('common.saved'))
+}
+
+async function onQuickLocale() {
+  locale.value = quickLocale.value
+  localStorage.setItem('lang', quickLocale.value)
+  if (auth.isAuthenticated) {
+    try {
+      await auth.updateLanguage(quickLocale.value)
+      window.$toast?.success(t('common.saved'))
+    } catch (e) {
+      logger.error('Failed to sync language', e)
+    }
+  } else {
+    window.$toast?.success(t('common.saved'))
+  }
+}
+
+useClickOutside([notifDropdownRef, githubDropdownRef, avatarDropdownRef], () => {
   showNotifs.value = false
   showGithubMenu.value = false
+  showAvatarMenu.value = false
 })
 
 const greeting = computed(() => {
@@ -371,8 +441,7 @@ const navItems = [
   { path: '/debts', name: 'debts', labelKey: 'nav.debts', icon: 'briefcase', iconClass: 'w-5 h-5' },
   { path: '/recurring', name: 'recurring', labelKey: 'nav.recurring', icon: 'repeat', iconClass: 'w-5 h-5' },
   { path: '/reports', name: 'reports', labelKey: 'nav.reports', icon: 'chart', iconClass: 'w-5 h-5' },
-  { path: '/tags', name: 'tags', labelKey: 'nav.tags', icon: 'tag', iconClass: 'w-5 h-5' },
-  { path: '/settings', name: 'settings', labelKey: 'nav.settings', icon: 'settings', iconClass: 'w-5 h-5' }
+  { path: '/tags', name: 'tags', labelKey: 'nav.tags', icon: 'tag', iconClass: 'w-5 h-5' }
 ]
 
 const mobileNavItems = [

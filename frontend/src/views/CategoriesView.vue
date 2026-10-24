@@ -8,8 +8,15 @@
       </button>
     </div>
 
-    <div v-if="categoriesStore.loading" class="text-center py-12">
-      <p class="text-slate-500">{{ $t('common.loading') }}</p>
+    <div v-if="categoriesStore.loading" class="bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark p-5 space-y-4">
+      <div v-for="i in 5" :key="i" class="flex items-center gap-4">
+        <BaseSkeleton height="2.5rem" width="2.5rem" />
+        <div class="flex-1 space-y-2">
+          <BaseSkeleton height="0.8rem" width="55%" />
+          <BaseSkeleton height="0.6rem" width="35%" />
+        </div>
+        <BaseSkeleton height="1rem" width="4rem" />
+      </div>
     </div>
 
     <div v-else-if="categoriesStore.categories.length === 0" class="bg-white dark:bg-slate-900 rounded-3xl p-12 shadow-card dark:shadow-card-dark text-center">
@@ -100,6 +107,7 @@ import { useHotkeys } from '@/composables/useHotkeys'
 import { categoryIconImports } from '@/utils/icons'
 import { presetColors } from '@/utils/colors'
 import BaseModal from '@/components/BaseModal.vue'
+import BaseSkeleton from '@/components/BaseSkeleton.vue'
 
 const { t } = useI18n()
 useHotkeys({
