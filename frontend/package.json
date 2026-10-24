@@ -22,7 +22,7 @@
     "@hugeicons/vue": "^1.0.5",
     "dompurify": "^3.4.10",
     "echarts": "^6.1.0",
-    "pinia": "^3.0.4",
+    "pinia": "^4.1.0",
     "vue": "^3.5.18",
     "vue-echarts": "^8.0.1",
     "vue-i18n": "^11.4.5",
