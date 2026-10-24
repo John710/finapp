@@ -53,6 +53,16 @@ async function reqRetry(method, path, opts = {}) {
   assert('GET /health (root) returns JSON', root.status === 200 && rootBody.status === 'ok' && rootBody.db === 'connected')
   const api = await req('GET', '/health', { auth: false })
   assert('GET /api/v1/health ok', api.status === 200 && api.json?.db === 'connected')
+
+  // SPA index + fallback exercise the static setHeaders hook (regression guard
+  // for the @fastify/static v10 reply/ServerResponse signature change)
+  const index = await fetch('http://127.0.0.1:6253/', { signal: AbortSignal.timeout(5000) })
+  const indexText = await index.text()
+  assert('GET / serves SPA index', index.status === 200 && indexText.includes('<div id="app">'))
+  assert('index.html served with no-cache headers', /no-cache|no-store/.test(index.headers.get('cache-control') || ''), index.headers.get('cache-control'))
+  const deep = await fetch('http://127.0.0.1:6253/accounts/42', { signal: AbortSignal.timeout(5000) })
+  const deepText = await deep.text()
+  assert('SPA fallback for deep routes', deep.status === 200 && deepText.includes('<div id="app">'))
 }
 
 // ---------- C: setup flow on empty DB ----------

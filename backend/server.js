@@ -59,11 +59,12 @@ async function start() {
     root: staticPath,
     prefix: '/',
     wildcard: false,
-    setHeaders: (res, path) => {
+    // @fastify/static v10 passes the Fastify reply, not the raw ServerResponse
+    setHeaders: (reply, path) => {
       if (path.endsWith('index.html')) {
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
-        res.setHeader('Pragma', 'no-cache')
-        res.setHeader('Expires', '0')
+        reply.header('Cache-Control', 'no-cache, no-store, must-revalidate')
+        reply.header('Pragma', 'no-cache')
+        reply.header('Expires', '0')
       }
     }
   })
