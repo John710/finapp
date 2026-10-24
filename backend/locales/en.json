@@ -10,7 +10,9 @@
     "password_too_short": "Password must be at least 8 characters",
     "session_required_for_password_change": "A browser session is required to change the password. Sign in again and retry.",
     "session_not_found": "Session not found",
-    "cannot_terminate_current": "Cannot terminate current session"
+    "cannot_terminate_current": "Cannot terminate current session",
+    "totp_required": "Two-factor code required",
+    "invalid_totp_code": "Invalid two-factor code"
   },
   "debts": {
     "title": "Debts"
@@ -54,7 +56,23 @@
     "bad_request": "Invalid request data",
     "internal": "Internal server error",
     "avatar_invalid": "Avatar must be a PNG, JPEG, WebP or GIF image",
-    "avatar_not_found": "Avatar not found"
+    "avatar_not_found": "Avatar not found",
+    "read_only_access": "This account has read-only access",
+    "totp_already_enabled": "Two-factor authentication is already enabled",
+    "totp_not_setup": "Start the two-factor setup first",
+    "viewer_not_found": "Viewer not found",
+    "attachment_invalid_type": "Only images (PNG, JPEG, WebP, GIF), PDF or text files are allowed",
+    "attachment_too_large": "File exceeds the 5 MB limit",
+    "attachment_not_found": "Attachment not found",
+    "split_transfer": "Transfers cannot be split by category",
+    "split_sum_mismatch": "Split parts must add up to the total amount",
+    "split_edit": "A split transaction cannot be edited — delete and recreate it",
+    "split_child_edit": "A split part cannot be edited separately — edit the whole split",
+    "split_child_delete": "A split part is deleted together with its parent transaction",
+    "budget_target_required": "A budget needs a category or at least one tag",
+    "merge_same_target": "Cannot merge a category into itself",
+    "merge_type_mismatch": "Categories of different types cannot be merged",
+    "token_not_found": "API token not found"
   },
   "notifications": {
     "recurring_created": "Recurring transaction created",

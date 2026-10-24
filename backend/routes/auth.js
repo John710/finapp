@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs'
 import crypto from 'node:crypto'
+import { authenticator } from 'otplib'
+import QRCode from 'qrcode'
 import { notify, checkDuplicateNotification } from '../services/notify.js'
 import { t, getUserLang, getReqLang } from '../services/i18n.js'
 import { encrypt, decrypt } from '../services/crypto.js'
@@ -93,6 +95,7 @@ async function authRoutes(fastify, opts) {
         properties: {
           login: { type: 'string', maxLength: 64 },
           password: { type: 'string', maxLength: 128 },
+          totp_code: { type: 'string', maxLength: 8 },
           language: { type: 'string', default: 'en' }
         }
       }
@@ -136,9 +139,27 @@ async function authRoutes(fastify, opts) {
       reply.code(401)
       return { error: t('auth.invalid_credentials', {}, lang) }
     }
+
+    // Second factor: when TOTP is enabled the login must present a valid code.
+    // The first response without a code carries totp_required so the client
+    // can show the code input and retry.
+    if (user.totp_enabled) {
+      const secret = decrypt(user.totp_secret)
+      const code = request.body?.totp_code
+      if (!code) {
+        reply.code(401)
+        return { error: t('auth.totp_required', {}, lang), totp_required: true }
+      }
+      if (!secret || !authenticator.verify({ token: String(code), secret })) {
+        reply.code(401)
+        return { error: t('auth.invalid_totp_code', {}, lang), totp_required: true }
+      }
+    }
+
     fastify.log.info({ userId: user.id, login, ip: request.ip }, 'Login successful')
 
-    const accessToken = fastify.signAccessToken({ userId: user.id, login: user.login })
+    const tokenPayload = { userId: user.id, login: user.login, role: user.role || 'owner', ownerId: user.shared_owner_id || null }
+    const accessToken = fastify.signAccessToken(tokenPayload)
     const refreshToken = fastify.signRefreshToken({ userId: user.id })
     const refreshTokenHash = hashToken(refreshToken)
     const refreshExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -155,6 +176,7 @@ async function authRoutes(fastify, opts) {
       user: {
         id: user.id,
         login: user.login,
+        role: user.role || 'owner',
         language: user.language,
         base_currency: user.base_currency,
         coingecko_api_key: maskSecret(decrypt(user.coingecko_api_key)),
@@ -163,7 +185,8 @@ async function authRoutes(fastify, opts) {
         shoutrrr_url_set: Boolean(user.shoutrrr_url),
         vapid_public_key: user.vapid_public_key,
         vapid_subject: user.vapid_subject,
-        avatar_set: Boolean(user.avatar)
+        avatar_set: Boolean(user.avatar),
+      totp_enabled: Boolean(user.totp_enabled)
       }
     }
   })
@@ -189,7 +212,7 @@ async function authRoutes(fastify, opts) {
 
       const user = result.rows[0]
 
-      const newAccessToken = fastify.signAccessToken({ userId: user.id, login: user.login })
+      const newAccessToken = fastify.signAccessToken({ userId: user.id, login: user.login, role: user.role || 'owner', ownerId: user.shared_owner_id || null })
       const newRefreshToken = fastify.signRefreshToken({ userId: user.id })
       const newRefreshTokenHash = hashToken(newRefreshToken)
       const refreshExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -244,6 +267,7 @@ async function authRoutes(fastify, opts) {
         user: {
           id: user.id,
           login: user.login,
+          role: user.role || 'owner',
           language: user.language,
           base_currency: user.base_currency,
           coingecko_api_key: maskSecret(decrypt(user.coingecko_api_key)),
@@ -252,7 +276,8 @@ async function authRoutes(fastify, opts) {
           shoutrrr_url_set: Boolean(user.shoutrrr_url),
           vapid_public_key: user.vapid_public_key,
           vapid_subject: user.vapid_subject,
-          avatar_set: Boolean(user.avatar)
+          avatar_set: Boolean(user.avatar),
+          totp_enabled: Boolean(user.totp_enabled)
         }
       }
     } catch (err) {
@@ -319,7 +344,7 @@ async function authRoutes(fastify, opts) {
     const lang = await getUserLang(fastify.db, request.user.userId)
     const result = await fastify.db.query(
       `SELECT id, login, language, base_currency, coingecko_api_key,
-              shoutrrr_url, vapid_public_key, vapid_subject, avatar
+              shoutrrr_url, vapid_public_key, vapid_subject, avatar, totp_enabled
        FROM users WHERE id = $1`,
       [request.user.userId]
     )
@@ -339,7 +364,8 @@ async function authRoutes(fastify, opts) {
       shoutrrr_url_set: Boolean(user.shoutrrr_url),
       vapid_public_key: user.vapid_public_key,
       vapid_subject: user.vapid_subject,
-      avatar_set: Boolean(user.avatar)
+      avatar_set: Boolean(user.avatar),
+      totp_enabled: Boolean(user.totp_enabled)
     }
   })
 
@@ -548,7 +574,7 @@ async function authRoutes(fastify, opts) {
   })
 
   fastify.post('/users/logout', async (request, reply) => {
-    const userId = request.user.userId
+    const userId = request.user.viewerUserId || request.user.userId
     const refreshToken = request.cookies?.refreshToken
     if (refreshToken) {
       const tokenHash = hashToken(refreshToken)
@@ -558,6 +584,153 @@ async function authRoutes(fastify, opts) {
     reply.clearCookie(REFRESH_TOKEN_NAME, getCookieOptions(request, 0))
     fastify.log.info({ userId, ip: request.ip }, 'Logout successful')
     return { success: true }
+  })
+
+  // ---------- Two-factor authentication (TOTP) ----------
+
+  fastify.post('/users/2fa/setup', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['password'],
+        properties: {
+          password: { type: 'string', maxLength: 128 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
+    const { rows } = await fastify.db.query('SELECT login, password_hash, totp_enabled FROM users WHERE id = $1', [userId])
+    const user = rows[0]
+    if (!user || !(await bcrypt.compare(request.body.password, user.password_hash))) {
+      reply.code(401)
+      return { error: t('auth.invalid_current_password', {}, lang) }
+    }
+    if (user.totp_enabled) {
+      reply.code(400)
+      return { error: t('errors.totp_already_enabled', {}, lang) }
+    }
+    const secret = authenticator.generateSecret()
+    await fastify.db.query('UPDATE users SET totp_secret = $1 WHERE id = $2', [encrypt(secret), userId])
+    const otpauthUrl = authenticator.keyuri(user.login || 'finapp', 'FinApp', secret)
+    const qr = await QRCode.toDataURL(otpauthUrl)
+    return { secret, otpauth_url: otpauthUrl, qr }
+  })
+
+  fastify.post('/users/2fa/enable', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['code'],
+        properties: {
+          code: { type: 'string', minLength: 6, maxLength: 8 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
+    const { rows } = await fastify.db.query('SELECT totp_secret FROM users WHERE id = $1', [userId])
+    const secret = decrypt(rows[0]?.totp_secret)
+    if (!secret) {
+      reply.code(400)
+      return { error: t('errors.totp_not_setup', {}, lang) }
+    }
+    if (!authenticator.verify({ token: String(request.body.code), secret })) {
+      reply.code(400)
+      return { error: t('auth.invalid_totp_code', {}, lang) }
+    }
+    await fastify.db.query('UPDATE users SET totp_enabled = true WHERE id = $1', [userId])
+    return { success: true }
+  })
+
+  fastify.post('/users/2fa/disable', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['password', 'code'],
+        properties: {
+          password: { type: 'string', maxLength: 128 },
+          code: { type: 'string', minLength: 6, maxLength: 8 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
+    const { rows } = await fastify.db.query('SELECT password_hash, totp_secret FROM users WHERE id = $1', [userId])
+    const user = rows[0]
+    if (!user || !(await bcrypt.compare(request.body.password, user.password_hash))) {
+      reply.code(401)
+      return { error: t('auth.invalid_current_password', {}, lang) }
+    }
+    const secret = decrypt(user.totp_secret)
+    if (!secret || !authenticator.verify({ token: String(request.body.code), secret })) {
+      reply.code(400)
+      return { error: t('auth.invalid_totp_code', {}, lang) }
+    }
+    await fastify.db.query('UPDATE users SET totp_enabled = false, totp_secret = NULL WHERE id = $1', [userId])
+    return { success: true }
+  })
+
+  // ---------- Shared read-only viewers ----------
+
+  fastify.post('/users/viewers', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['login', 'password'],
+        properties: {
+          login: { type: 'string', minLength: 3, maxLength: 64 },
+          password: { type: 'string', minLength: 8, maxLength: 128 }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const ownerId = request.user.userId
+    const { login, password } = request.body
+    const hash = await bcrypt.hash(password, 12)
+    // Viewers inherit the owner's language and base currency
+    const result = await fastify.db.query(
+      `INSERT INTO users (login, password_hash, language, base_currency, role, shared_owner_id)
+       SELECT $2, $3, u.language, u.base_currency, 'viewer', u.id FROM users u WHERE u.id = $1
+       RETURNING id, login, created_at`,
+      [ownerId, login, hash]
+    )
+    reply.code(201)
+    return result.rows[0]
+  })
+
+  fastify.get('/users/viewers', async (request, reply) => {
+    const ownerId = request.user.userId
+    const result = await fastify.db.query(
+      'SELECT id, login, created_at FROM users WHERE shared_owner_id = $1 ORDER BY created_at',
+      [ownerId]
+    )
+    return result.rows
+  })
+
+  fastify.delete('/users/viewers/:id', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      }
+    }
+  }, async (request, reply) => {
+    const ownerId = request.user.userId
+    const { id } = request.params
+    const check = await fastify.db.query('SELECT id FROM users WHERE id = $1 AND shared_owner_id = $2', [id, ownerId])
+    if (check.rows.length === 0) {
+      const lang = await getUserLang(fastify.db, ownerId)
+      reply.code(404)
+      return { error: t('errors.viewer_not_found', {}, lang) }
+    }
+    await fastify.db.query('DELETE FROM refresh_tokens WHERE user_id = $1', [id])
+    await fastify.db.query('DELETE FROM users WHERE id = $1 AND shared_owner_id = $2', [id, ownerId])
+    reply.code(204)
   })
 }
 

@@ -28,19 +28,23 @@ async function reportRoutes(fastify, opts) {
   // Aggregations happen in SQL (SUM/GROUP BY over at most one row per
   // currency×dimension) — previously every report pulled all matching
   // transaction rows into memory and summed them in JS.
+  // Flow totals (summary/trend/net-worth) count parent+regular rows and skip
+  // split children, which are bookkeeping rows with no balance effect.
   async function fetchTotalsByTypeCurrency(userId, whereClause, params) {
     const result = await fastify.db.query(`
       SELECT t.type, a.currency as account_currency, a.type as account_type,
              COALESCE(SUM(t.amount), 0) as sum, COUNT(*)::int as count
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-      WHERE t.user_id = $1 AND ${whereClause}
+      WHERE t.user_id = $1 AND t.parent_id IS NULL AND ${whereClause}
       GROUP BY t.type, a.currency, a.type
     `, [userId, ...params])
     return result.rows
   }
 
   async function fetchTotalsByCategory(userId, whereClause, params) {
+    // Category totals count split children (they carry the categories) and
+    // skip split parents, whose category is NULL.
     const result = await fastify.db.query(`
       SELECT t.category_id, c.name as category_name, c.color as category_color,
              t.type, a.currency as account_currency,
@@ -48,7 +52,7 @@ async function reportRoutes(fastify, opts) {
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
       LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = $1
-      WHERE t.user_id = $1 AND ${whereClause}
+      WHERE t.user_id = $1 AND NOT t.is_split AND ${whereClause}
       GROUP BY t.category_id, c.name, c.color, t.type, a.currency
     `, [userId, ...params])
     return result.rows
@@ -60,7 +64,7 @@ async function reportRoutes(fastify, opts) {
              COALESCE(SUM(t.amount), 0) as sum
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-      WHERE t.user_id = $1 AND ${whereClause}
+      WHERE t.user_id = $1 AND t.parent_id IS NULL AND ${whereClause}
       GROUP BY 1, t.type, a.currency
     `, [userId, ...params])
     return result.rows

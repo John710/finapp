@@ -20,16 +20,40 @@ async function budgetRoutes(fastify, opts) {
     const budgets = budgetsResult.rows
     if (budgets.length === 0) return []
 
+    // Attach tag targets (a budget matches its category OR any of its tags)
+    const tagsRes = await fastify.db.query(
+      `SELECT bt.budget_id, tg.id, tg.name, tg.color
+       FROM budget_tags bt
+       JOIN tags tg ON tg.id = bt.tag_id AND tg.user_id = $1
+       WHERE bt.budget_id = ANY($2)`,
+      [userId, budgets.map(b => b.id)]
+    )
+    const tagsByBudget = {}
+    for (const row of tagsRes.rows) {
+      if (!tagsByBudget[row.budget_id]) tagsByBudget[row.budget_id] = []
+      tagsByBudget[row.budget_id].push({ id: row.id, name: row.name, color: row.color })
+    }
+
     // Fetch all relevant transactions with their account currencies in one query.
     // The spending window always covers the CURRENT period (rolling), so a
     // budget created months ago still shows live progress instead of freezing
-    // after its first period elapsed.
+    // after its first period elapsed. Split children carry the categories;
+    // split parents are excluded to avoid double counting.
     const txResult = await fastify.db.query(`
       SELECT t.amount, a.currency as account_currency, b.id as budget_id, b.currency as budget_currency
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-      JOIN budgets b ON b.category_id = t.category_id AND b.user_id = $1
+      JOIN budgets b ON b.user_id = $1
+        AND (
+          (b.category_id IS NOT NULL AND b.category_id = t.category_id)
+          OR EXISTS (
+            SELECT 1 FROM budget_tags bt
+            JOIN transaction_tags tt ON tt.tag_id = bt.tag_id AND tt.user_id = t.user_id AND tt.transaction_id = t.id
+            WHERE bt.budget_id = b.id
+          )
+        )
       WHERE t.type = 'expense'
+        AND NOT t.is_split
         AND t.user_id = $1
         AND t.date >= CASE WHEN b.period = 'week' THEN date_trunc('week', CURRENT_DATE) ELSE date_trunc('month', CURRENT_DATE) END
         AND t.date < CASE WHEN b.period = 'week' THEN date_trunc('week', CURRENT_DATE) + INTERVAL '7 days' ELSE date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' END
@@ -51,6 +75,7 @@ async function budgetRoutes(fastify, opts) {
       const amount = new Decimal(b.amount)
       return {
         ...b,
+        tags: tagsByBudget[b.id] || [],
         spent: spent.toNumber(),
         progress: amount.gt(0) ? Math.round(spent.div(amount).times(100).toNumber()) : 0
       }
@@ -62,9 +87,10 @@ async function budgetRoutes(fastify, opts) {
     schema: {
       body: {
         type: 'object',
-        required: ['category_id', 'amount', 'period'],
+        required: ['amount', 'period'],
         properties: {
-          category_id: { type: 'integer' },
+          category_id: { type: ['integer', 'null'] },
+          tag_ids: { type: 'array', items: { type: 'integer' }, maxItems: 20 },
           amount: { type: 'number', exclusiveMinimum: 0, maximum: 1e12 },
           currency: { type: 'string', maxLength: 10 },
           period: { type: 'string', enum: ['month', 'week'] },
@@ -75,18 +101,47 @@ async function budgetRoutes(fastify, opts) {
   }, async (request, reply) => {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
-    const { category_id, amount, currency, period, start_date } = request.body
-    const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
-    if (catRes.rows.length === 0) {
-      reply.code(404)
-      return { error: t('errors.category_not_found', {}, lang) }
+    const { category_id, tag_ids, amount, currency, period, start_date } = request.body
+    if (!category_id && !(tag_ids && tag_ids.length)) {
+      reply.code(400)
+      return { error: t('errors.budget_target_required', {}, lang) }
     }
-    const result = await fastify.db.query(
-      'INSERT INTO budgets (user_id, category_id, amount, currency, period, start_date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [userId, category_id, amount, currency || 'USD', period, start_date || new Date().toISOString().split('T')[0]]
-    )
-    reply.code(201)
-    return result.rows[0]
+    const client = await fastify.db.connect()
+    try {
+      await client.query('BEGIN')
+      if (category_id) {
+        const catRes = await client.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
+        if (catRes.rows.length === 0) {
+          await client.query('ROLLBACK')
+          reply.code(404)
+          return { error: t('errors.category_not_found', {}, lang) }
+        }
+      }
+      if (tag_ids && tag_ids.length) {
+        const tagRes = await client.query('SELECT id FROM tags WHERE id = ANY($1) AND user_id = $2', [tag_ids, userId])
+        if (tagRes.rows.length !== tag_ids.length) {
+          await client.query('ROLLBACK')
+          reply.code(400)
+          return { error: t('errors.invalid_tags', {}, lang) }
+        }
+      }
+      const result = await client.query(
+        'INSERT INTO budgets (user_id, category_id, amount, currency, period, start_date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        [userId, category_id || null, amount, currency || 'USD', period, start_date || new Date().toISOString().split('T')[0]]
+      )
+      const budget = result.rows[0]
+      for (const tagId of tag_ids || []) {
+        await client.query('INSERT INTO budget_tags (budget_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [budget.id, tagId])
+      }
+      await client.query('COMMIT')
+      reply.code(201)
+      return budget
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
   })
 
   // Update
@@ -99,9 +154,10 @@ async function budgetRoutes(fastify, opts) {
       },
       body: {
         type: 'object',
-        required: ['category_id', 'amount', 'period'],
+        required: ['amount', 'period'],
         properties: {
-          category_id: { type: 'integer' },
+          category_id: { type: ['integer', 'null'] },
+          tag_ids: { type: 'array', items: { type: 'integer' }, maxItems: 20 },
           amount: { type: 'number', exclusiveMinimum: 0, maximum: 1e12 },
           currency: { type: 'string', maxLength: 10 },
           period: { type: 'string', enum: ['month', 'week'] },
@@ -114,21 +170,51 @@ async function budgetRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
-    const { category_id, amount, currency, period, start_date, is_active } = request.body
-    const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
-    if (catRes.rows.length === 0) {
-      reply.code(404)
-      return { error: t('errors.category_not_found', {}, lang) }
+    const { category_id, tag_ids, amount, currency, period, start_date, is_active } = request.body
+    if (!category_id && !(tag_ids && tag_ids.length)) {
+      reply.code(400)
+      return { error: t('errors.budget_target_required', {}, lang) }
     }
-    const result = await fastify.db.query(
-      'UPDATE budgets SET category_id = $1, amount = $2, currency = $3, period = $4, start_date = $5, is_active = $6 WHERE id = $7 AND user_id = $8 RETURNING *',
-      [category_id, amount, currency, period, start_date, is_active, id, userId]
-    )
-    if (result.rows.length === 0) {
-      reply.code(404)
-      return { error: t('errors.budget_not_found', {}, lang) }
+    const client = await fastify.db.connect()
+    try {
+      await client.query('BEGIN')
+      if (category_id) {
+        const catRes = await client.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
+        if (catRes.rows.length === 0) {
+          await client.query('ROLLBACK')
+          reply.code(404)
+          return { error: t('errors.category_not_found', {}, lang) }
+        }
+      }
+      if (tag_ids && tag_ids.length) {
+        const tagRes = await client.query('SELECT id FROM tags WHERE id = ANY($1) AND user_id = $2', [tag_ids, userId])
+        if (tagRes.rows.length !== tag_ids.length) {
+          await client.query('ROLLBACK')
+          reply.code(400)
+          return { error: t('errors.invalid_tags', {}, lang) }
+        }
+      }
+      const result = await client.query(
+        'UPDATE budgets SET category_id = $1, amount = $2, currency = $3, period = $4, start_date = $5, is_active = $6 WHERE id = $7 AND user_id = $8 RETURNING *',
+        [category_id || null, amount, currency, period, start_date, is_active, id, userId]
+      )
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK')
+        reply.code(404)
+        return { error: t('errors.budget_not_found', {}, lang) }
+      }
+      await client.query('DELETE FROM budget_tags WHERE budget_id = $1', [id])
+      for (const tagId of tag_ids || []) {
+        await client.query('INSERT INTO budget_tags (budget_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, tagId])
+      }
+      await client.query('COMMIT')
+      return result.rows[0]
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
     }
-    return result.rows[0]
   })
 
   // Delete

@@ -67,7 +67,7 @@ async function transactionRoutes(fastify, opts) {
     const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : ''
 
     const countResult = await fastify.db.query(
-      `SELECT COUNT(*) FROM transactions t ${whereClause}`,
+      `SELECT COUNT(*) FROM transactions t ${whereClause} AND t.parent_id IS NULL`,
       params
     )
 
@@ -77,7 +77,7 @@ async function transactionRoutes(fastify, opts) {
        LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
        LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = $1
        ${whereClause}
-       ORDER BY t.date DESC, t.created_at DESC
+       ORDER BY t.date DESC, t.parent_id NULLS FIRST, t.created_at DESC
        LIMIT $${idx++} OFFSET $${idx++}`,
       [...params, limit, offset]
     )
@@ -120,14 +120,27 @@ async function transactionRoutes(fastify, opts) {
           date: { type: 'string', format: 'date' },
           note: { type: 'string', maxLength: 1000 },
           transfer_to_account_id: { type: ['integer', 'null'] },
-          tags: { type: 'array', items: { type: 'integer' }, maxItems: 50 }
+          tags: { type: 'array', items: { type: 'integer' }, maxItems: 50 },
+          splits: {
+            type: 'array',
+            maxItems: 20,
+            items: {
+              type: 'object',
+              required: ['category_id', 'amount'],
+              properties: {
+                category_id: { type: 'integer' },
+                amount: { type: 'number', exclusiveMinimum: 0, maximum: 1e12 },
+                note: { type: 'string', maxLength: 1000 }
+              }
+            }
+          }
         }
       }
     }
   }, async (request, reply) => {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
-    const { account_id, category_id, amount, type, date, note, transfer_to_account_id, tags } = request.body
+    const { account_id, category_id, amount, type, date, note, transfer_to_account_id, tags, splits } = request.body
 
     const client = await fastify.db.connect()
     try {
@@ -145,6 +158,31 @@ async function transactionRoutes(fastify, opts) {
           await client.query('ROLLBACK')
           reply.code(400)
           return { error: t('errors.transfer_target_same', {}, lang) }
+        }
+      }
+
+      // Split transactions: the parent carries the full amount and the balance
+      // effect; children hold per-category amounts and are bookkeeping only.
+      const hasSplits = Array.isArray(splits) && splits.length > 0
+      if (hasSplits) {
+        if (type === 'transfer') {
+          await client.query('ROLLBACK')
+          reply.code(400)
+          return { error: t('errors.split_transfer', {}, lang) }
+        }
+        const splitSum = splits.reduce((s, sp) => s + sp.amount, 0)
+        if (Math.abs(splitSum - amount) > 0.005) {
+          await client.query('ROLLBACK')
+          reply.code(400)
+          return { error: t('errors.split_sum_mismatch', {}, lang) }
+        }
+        for (const sp of splits) {
+          const catRes = await client.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [sp.category_id, userId])
+          if (catRes.rows.length === 0) {
+            await client.query('ROLLBACK')
+            reply.code(404)
+            return { error: t('errors.category_not_found', {}, lang) }
+          }
         }
       }
 
@@ -200,6 +238,20 @@ async function transactionRoutes(fastify, opts) {
         'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
         [amount * sign, account_id, userId]
       )
+
+      // Split children: same account/date/type as the parent, no balance effect
+      if (hasSplits) {
+        await client.query(
+          'UPDATE transactions SET is_split = true, category_id = NULL WHERE id = $1 AND user_id = $2',
+          [transaction.id, userId]
+        )
+        for (const sp of splits) {
+          await client.query(
+            'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, parent_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+            [userId, account_id, sp.category_id, sp.amount, type, date, sp.note || null, transaction.id]
+          )
+        }
+      }
 
       if (type === 'transfer' && transfer_to_account_id) {
         const [srcRes, tgtRes] = await Promise.all([
@@ -415,6 +467,18 @@ async function transactionRoutes(fastify, opts) {
         return { error: t('errors.transfer_leg_edit', {}, lang) }
       }
 
+      // Splits are managed as a whole: delete and recreate (children cascade)
+      if (old.is_split) {
+        await client.query('ROLLBACK')
+        reply.code(400)
+        return { error: t('errors.split_edit', {}, lang) }
+      }
+      if (old.parent_id) {
+        await client.query('ROLLBACK')
+        reply.code(400)
+        return { error: t('errors.split_child_edit', {}, lang) }
+      }
+
       if (type === 'transfer') {
         if (!transfer_to_account_id) {
           await client.query('ROLLBACK')
@@ -586,6 +650,13 @@ async function transactionRoutes(fastify, opts) {
         await client.query('ROLLBACK')
         reply.code(400)
         return { error: t('errors.transfer_leg_delete', {}, lang) }
+      }
+
+      // Split children are removed together with their parent (FK cascade)
+      if (old.parent_id) {
+        await client.query('ROLLBACK')
+        reply.code(400)
+        return { error: t('errors.split_child_delete', {}, lang) }
       }
 
       // Revert old balance effects

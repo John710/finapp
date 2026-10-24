@@ -34,9 +34,11 @@
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1",
     "node-pg-migrate": "^9.0.0",
+    "otplib": "^13.5.0",
     "p-limit": "^7.3.0",
     "papaparse": "^5.5.3",
     "pg": "^8.21.0",
+    "qrcode": "^1.5.4",
     "web-push": "^3.6.7"
   },
   "devDependencies": {

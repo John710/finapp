@@ -27,6 +27,8 @@ import exportRoutes from './routes/export.js'
 import importRoutes from './routes/import.js'
 import notificationRoutes from './routes/notifications.js'
 import demodataRoutes from './routes/demodata.js'
+import tokenRoutes from './routes/tokens.js'
+import attachmentRoutes from './routes/attachments.js'
 import { sendPushToAll, createNotification } from './routes/notifications.js'
 import { notify } from './services/notify.js'
 import { t, getUserLang, getReqLang } from './services/i18n.js'
@@ -171,6 +173,8 @@ async function start() {
   await app.register(importRoutes, { prefix: '/api/v1' })
   await app.register(notificationRoutes, { prefix: '/api/v1' })
   await app.register(demodataRoutes, { prefix: '/api/v1' })
+  await app.register(tokenRoutes, { prefix: '/api/v1' })
+  await app.register(attachmentRoutes, { prefix: '/api/v1' })
 
   // Page access logging (skip API, static assets and healthcheck)
   app.addHook('onRequest', async (request, reply) => {

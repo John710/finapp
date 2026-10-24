@@ -121,6 +121,75 @@ async function categoryRoutes(fastify, opts) {
     }
     reply.code(204)
   })
+
+  // Merge: move all transactions, recurring rules and budgets from :id into
+  // the target category, then delete :id.
+  fastify.post('/categories/:id/merge', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      },
+      body: {
+        type: 'object',
+        required: ['target_id'],
+        properties: { target_id: { type: 'integer', minimum: 1 } }
+      }
+    }
+  }, async (request, reply) => {
+    const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
+    const { id } = request.params
+    const { target_id } = request.body
+
+    if (id === target_id) {
+      reply.code(400)
+      return { error: t('errors.merge_same_target', {}, lang) }
+    }
+
+    const client = await fastify.db.connect()
+    try {
+      await client.query('BEGIN')
+      const catRes = await client.query(
+        'SELECT id, type, name FROM categories WHERE id IN ($1, $2) AND user_id = $3',
+        [id, target_id, userId]
+      )
+      const source = catRes.rows.find(c => c.id === id)
+      const target = catRes.rows.find(c => c.id === target_id)
+      if (!source || !target) {
+        await client.query('ROLLBACK')
+        reply.code(404)
+        return { error: t('errors.category_not_found', {}, lang) }
+      }
+      if (source.type !== target.type) {
+        await client.query('ROLLBACK')
+        reply.code(400)
+        return { error: t('errors.merge_type_mismatch', {}, lang) }
+      }
+
+      // Drop source budgets that would clash with an existing target budget
+      // of the same period (unique constraint), then move the rest.
+      await client.query(
+        `DELETE FROM budgets b USING budgets tb
+         WHERE b.category_id = $1 AND b.user_id = $2
+           AND tb.user_id = $2 AND tb.category_id = $3 AND tb.period = b.period`,
+        [id, userId, target_id]
+      )
+      await client.query('UPDATE transactions SET category_id = $1 WHERE category_id = $2 AND user_id = $3', [target_id, id, userId])
+      await client.query('UPDATE recurring_rules SET category_id = $1 WHERE category_id = $2 AND user_id = $3', [target_id, id, userId])
+      await client.query('UPDATE budgets SET category_id = $1 WHERE category_id = $2 AND user_id = $3', [target_id, id, userId])
+      await client.query('DELETE FROM categories WHERE id = $1 AND user_id = $2', [id, userId])
+
+      await client.query('COMMIT')
+      reply.code(204)
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+  })
 }
 
 export default categoryRoutes
