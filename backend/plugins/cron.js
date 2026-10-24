@@ -137,8 +137,12 @@ async function cronPlugin(fastify, opts) {
         if (notifRule) {
           try {
             const { rule, createdCount } = notifRule
+            // rule.amount is a numeric string from pg — trim the trailing
+            // zeroes instead of pushing the raw "1500.000000000000" into the message
+            const amountNum = Number(rule.amount)
+            const amountText = Number.isFinite(amountNum) ? String(amountNum) : String(rule.amount)
             const title = t('notifications.recurring_created', {}, lang)
-            const message = t('notifications.recurring_created_body', { name: rule.note || rule.type, amount: rule.amount, currency: createdCount > 1 ? `×${createdCount}` : '' }, lang)
+            const message = t('notifications.recurring_created_body', { name: rule.note || rule.type, amount: amountText, currency: createdCount > 1 ? `×${createdCount}` : '' }, lang)
             await notify(fastify, userId, {
               type: 'recurring_created', title, message,
               data: { entity_id: rule.id, url: '/transactions' },

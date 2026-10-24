@@ -1,5 +1,6 @@
 import fiatCurrencies from '../data/fiatCurrencies.json' with { type: 'json' }
 import { decrypt } from '../services/crypto.js'
+import { t, getUserLang } from '../services/i18n.js'
 
 let cryptoListCache = null
 let cryptoListCacheTime = 0
@@ -118,8 +119,11 @@ async function updateExchangeRates(fastify, userId) {
   const userRes = await fastify.db.query('SELECT coingecko_api_key FROM users WHERE id = $1', [userId])
   const apiKey = decrypt(userRes.rows[0]?.coingecko_api_key) || process.env.COINGECKO_API_KEY
 
-  // Fetch crypto symbols actually used by any account, fallback to top list
-  const accountRes = await fastify.db.query("SELECT DISTINCT UPPER(currency) as currency FROM accounts WHERE type = 'crypto'")
+  // Fetch crypto symbols actually used by this user's accounts, fallback to top list.
+  // Scoped by user_id: other users' tickers must not influence this user's rate pool.
+  const accountRes = userId
+    ? await fastify.db.query("SELECT DISTINCT UPPER(currency) as currency FROM accounts WHERE type = 'crypto' AND user_id = $1", [userId])
+    : { rows: [] }
   const accountSymbols = accountRes.rows.map(r => r.currency.toLowerCase()).filter(Boolean)
   const symbols = accountSymbols.length ? accountSymbols.join(',') : FALLBACK_SYMBOLS
   fastify.log.info(`Updating crypto rates for symbols: ${symbols}`)
@@ -155,22 +159,23 @@ async function updateExchangeRates(fastify, userId) {
     fastify.log.warn('CoinGecko price update failed: ' + (priceRes.error || 'unknown'))
   }
 
-  // DB phase — a short transaction of plain inserts
+  // DB phase — a short transaction with one multi-row insert
   const client = await fastify.db.connect()
   let fiatUpdated = 0
   let cryptoUpdated = 0
   try {
     await client.query('BEGIN')
 
-    // Insert USD→fiat rates only for currencies in our hardcoded fiat list
+    // Collect all rates first, then insert them in a single statement instead
+    // of one INSERT per currency (~160 round trips inside the transaction).
+    const rows = []
+
+    // USD→fiat rates only for currencies in our hardcoded fiat list
     for (const code of FIAT_CODES) {
       const lower = code.toLowerCase()
       const rate = fiatData.usd[lower]
       if (typeof rate === 'number') {
-        await client.query(
-          'INSERT INTO exchange_rates (from_currency, to_currency, rate, source) VALUES ($1, $2, $3, $4)',
-          ['USD', code, rate, 'fawazahmed0']
-        )
+        rows.push(['USD', code, rate, 'fawazahmed0'])
         fiatUpdated++
       } else {
         fastify.log.warn(`Fawazahmed0 missing rate for ${code}`)
@@ -180,10 +185,7 @@ async function updateExchangeRates(fastify, userId) {
     if (priceRes.ok && priceRes.data && typeof priceRes.data === 'object' && !Array.isArray(priceRes.data)) {
       for (const [symbol, prices] of Object.entries(priceRes.data)) {
         if (prices && typeof prices === 'object' && typeof prices.usd === 'number') {
-          await client.query(
-            'INSERT INTO exchange_rates (from_currency, to_currency, rate, source) VALUES ($1, $2, $3, $4)',
-            [symbol.toUpperCase(), 'USD', prices.usd, 'coingecko']
-          )
+          rows.push([symbol.toUpperCase(), 'USD', prices.usd, 'coingecko'])
           cryptoUpdated++
         }
       }
@@ -192,13 +194,19 @@ async function updateExchangeRates(fastify, userId) {
     if (Array.isArray(marketsData)) {
       for (const coin of marketsData) {
         if (coin.current_price != null) {
-          await client.query(
-            'INSERT INTO exchange_rates (from_currency, to_currency, rate, source) VALUES ($1, $2, $3, $4)',
-            [coin.symbol.toUpperCase(), 'USD', coin.current_price, 'coingecko']
-          )
+          rows.push([coin.symbol.toUpperCase(), 'USD', coin.current_price, 'coingecko'])
           cryptoUpdated++
         }
       }
+    }
+
+    if (rows.length) {
+      const placeholders = rows.map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`).join(', ')
+      const params = rows.flat()
+      await client.query(
+        `INSERT INTO exchange_rates (from_currency, to_currency, rate, source) VALUES ${placeholders}`,
+        params
+      )
     }
 
     await client.query('COMMIT')
@@ -307,9 +315,10 @@ async function currencyRoutes(fastify, opts) {
       return result
     } catch (err) {
       fastify.log.warn({ err }, 'Exchange rates update failed')
+      const lang = await getUserLang(fastify.db, request.user?.userId)
       reply.code(502)
       reply.header('x-coingecko-rate-limited', 'true')
-      return { error: 'Failed to fetch rates' }
+      return { error: t('errors.failed_to_fetch_rates', {}, lang) }
     }
   })
 

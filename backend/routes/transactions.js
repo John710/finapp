@@ -126,6 +126,7 @@ async function transactionRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { account_id, category_id, amount, type, date, note, transfer_to_account_id, tags } = request.body
 
     const client = await fastify.db.connect()
@@ -138,12 +139,12 @@ async function transactionRoutes(fastify, opts) {
         if (!transfer_to_account_id) {
           await client.query('ROLLBACK')
           reply.code(400)
-          return { error: 'Transfer target account is required' }
+          return { error: t('errors.transfer_target_required', {}, lang) }
         }
         if (transfer_to_account_id === account_id) {
           await client.query('ROLLBACK')
           reply.code(400)
-          return { error: 'Transfer target cannot be the same as source account' }
+          return { error: t('errors.transfer_target_same', {}, lang) }
         }
       }
 
@@ -152,7 +153,7 @@ async function transactionRoutes(fastify, opts) {
       if (accRes.rows.length === 0) {
         await client.query('ROLLBACK')
         reply.code(404)
-        return { error: 'Account not found' }
+        return { error: t('errors.account_not_found', {}, lang) }
       }
 
       if (transfer_to_account_id) {
@@ -160,7 +161,7 @@ async function transactionRoutes(fastify, opts) {
         if (tgtRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
-          return { error: 'Transfer target account not found' }
+          return { error: t('errors.transfer_target_not_found', {}, lang) }
         }
       }
 
@@ -169,7 +170,7 @@ async function transactionRoutes(fastify, opts) {
         if (catRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
-          return { error: 'Category not found' }
+          return { error: t('errors.category_not_found', {}, lang) }
         }
       }
 
@@ -184,7 +185,7 @@ async function transactionRoutes(fastify, opts) {
         if (tagCheck.rows.length !== tags.length) {
           await client.query('ROLLBACK')
           reply.code(400)
-          return { error: 'Invalid tags' }
+          return { error: t('errors.invalid_tags', {}, lang) }
         }
         const values = tags.map((_, i) => `($1, $${2 * i + 2}, $${2 * i + 3})`).join(',')
         await client.query(
@@ -215,7 +216,7 @@ async function transactionRoutes(fastify, opts) {
           if (converted === null) {
             await client.query('ROLLBACK')
             reply.code(400)
-            return { error: 'exchange_rate_missing', message: `No exchange rate found for ${sourceCurrency} -> ${targetCurrency}` }
+            return { error: t('errors.exchange_rate_missing', { from: sourceCurrency, to: targetCurrency }, lang) }
           }
           targetAmount = converted
         }
@@ -387,6 +388,7 @@ async function transactionRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
     const { account_id, category_id, amount, type, date, note, transfer_to_account_id, tags } = request.body
 
@@ -403,26 +405,26 @@ async function transactionRoutes(fastify, opts) {
       if (oldRes.rows.length === 0) {
         await client.query('ROLLBACK')
         reply.code(404)
-        return { error: 'Transaction not found' }
+        return { error: t('errors.transaction_not_found', {}, lang) }
       }
       const old = oldRes.rows[0]
 
       if (old.transfer_pair_id && old.type === 'income') {
         await client.query('ROLLBACK')
         reply.code(400)
-        return { error: 'This is the incoming side of a transfer. Edit the outgoing transfer transaction instead.' }
+        return { error: t('errors.transfer_leg_edit', {}, lang) }
       }
 
       if (type === 'transfer') {
         if (!transfer_to_account_id) {
           await client.query('ROLLBACK')
           reply.code(400)
-          return { error: 'Transfer target account is required' }
+          return { error: t('errors.transfer_target_required', {}, lang) }
         }
         if (transfer_to_account_id === account_id) {
           await client.query('ROLLBACK')
           reply.code(400)
-          return { error: 'Transfer target cannot be the same as source account' }
+          return { error: t('errors.transfer_target_same', {}, lang) }
         }
       }
 
@@ -431,7 +433,7 @@ async function transactionRoutes(fastify, opts) {
       if (accRes.rows.length === 0) {
         await client.query('ROLLBACK')
         reply.code(404)
-        return { error: 'Account not found' }
+        return { error: t('errors.account_not_found', {}, lang) }
       }
 
       if (transfer_to_account_id) {
@@ -439,7 +441,7 @@ async function transactionRoutes(fastify, opts) {
         if (tgtRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
-          return { error: 'Transfer target account not found' }
+          return { error: t('errors.transfer_target_not_found', {}, lang) }
         }
       }
 
@@ -448,7 +450,7 @@ async function transactionRoutes(fastify, opts) {
         if (catRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
-          return { error: 'Category not found' }
+          return { error: t('errors.category_not_found', {}, lang) }
         }
       }
 
@@ -490,7 +492,7 @@ async function transactionRoutes(fastify, opts) {
         if (tagCheck.rows.length !== tags.length) {
           await client.query('ROLLBACK')
           reply.code(400)
-          return { error: 'Invalid tags' }
+          return { error: t('errors.invalid_tags', {}, lang) }
         }
         const values = tags.map((_, i) => `($1, $${2 * i + 2}, $${2 * i + 3})`).join(',')
         await client.query(
@@ -521,7 +523,7 @@ async function transactionRoutes(fastify, opts) {
           if (converted === null) {
             await client.query('ROLLBACK')
             reply.code(400)
-            return { error: 'exchange_rate_missing', message: `No exchange rate found for ${sourceCurrency} -> ${targetCurrency}` }
+            return { error: t('errors.exchange_rate_missing', { from: sourceCurrency, to: targetCurrency }, lang) }
           }
           targetAmount = converted
         }
@@ -562,6 +564,7 @@ async function transactionRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
 
     const client = await fastify.db.connect()
@@ -575,14 +578,14 @@ async function transactionRoutes(fastify, opts) {
       if (oldRes.rows.length === 0) {
         await client.query('ROLLBACK')
         reply.code(404)
-        return { error: 'Transaction not found' }
+        return { error: t('errors.transaction_not_found', {}, lang) }
       }
       const old = oldRes.rows[0]
 
       if (isPairedLeg(old)) {
         await client.query('ROLLBACK')
         reply.code(400)
-        return { error: 'This is the incoming side of a transfer. Delete the outgoing transfer transaction instead.' }
+        return { error: t('errors.transfer_leg_delete', {}, lang) }
       }
 
       // Revert old balance effects

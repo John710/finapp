@@ -1,3 +1,5 @@
+import { t, getUserLang } from '../services/i18n.js'
+
 async function recurringRoutes(fastify, opts) {
   // List
   fastify.get('/recurring', async (request, reply) => {
@@ -33,17 +35,18 @@ async function recurringRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { account_id, category_id, amount, currency, type, frequency, next_date, note } = request.body
     const accRes = await fastify.db.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
     if (accRes.rows.length === 0) {
       reply.code(404)
-      return { error: 'Account not found' }
+      return { error: t('errors.account_not_found', {}, lang) }
     }
     if (category_id) {
       const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
       if (catRes.rows.length === 0) {
         reply.code(404)
-        return { error: 'Category not found' }
+        return { error: t('errors.category_not_found', {}, lang) }
       }
     }
     const result = await fastify.db.query(
@@ -80,18 +83,19 @@ async function recurringRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
     const { account_id, category_id, amount, currency, type, frequency, next_date, note, is_active } = request.body
     const accRes = await fastify.db.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
     if (accRes.rows.length === 0) {
       reply.code(404)
-      return { error: 'Account not found' }
+      return { error: t('errors.account_not_found', {}, lang) }
     }
     if (category_id) {
       const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
       if (catRes.rows.length === 0) {
         reply.code(404)
-        return { error: 'Category not found' }
+        return { error: t('errors.category_not_found', {}, lang) }
       }
     }
     const result = await fastify.db.query(
@@ -100,7 +104,7 @@ async function recurringRoutes(fastify, opts) {
     )
     if (result.rows.length === 0) {
       reply.code(404)
-      return { error: 'Rule not found' }
+      return { error: t('errors.rule_not_found', {}, lang) }
     }
     return result.rows[0]
   })
@@ -116,8 +120,13 @@ async function recurringRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
-    await fastify.db.query('DELETE FROM recurring_rules WHERE id = $1 AND user_id = $2', [id, userId])
+    const result = await fastify.db.query('DELETE FROM recurring_rules WHERE id = $1 AND user_id = $2', [id, userId])
+    if (result.rowCount === 0) {
+      reply.code(404)
+      return { error: t('errors.rule_not_found', {}, lang) }
+    }
     reply.code(204)
   })
 }

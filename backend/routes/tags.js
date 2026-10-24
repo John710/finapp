@@ -1,3 +1,5 @@
+import { t, getUserLang } from '../services/i18n.js'
+
 async function tagRoutes(fastify, opts) {
   // List all tags
   fastify.get('/tags', async (request, reply) => {
@@ -56,6 +58,7 @@ async function tagRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
     const { name, color } = request.body
     const result = await fastify.db.query(
@@ -64,7 +67,7 @@ async function tagRoutes(fastify, opts) {
     )
     if (result.rows.length === 0) {
       reply.code(404)
-      return { error: 'Tag not found' }
+      return { error: t('errors.tag_not_found', {}, lang) }
     }
     return result.rows[0]
   })
@@ -80,8 +83,13 @@ async function tagRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
-    await fastify.db.query('DELETE FROM tags WHERE id = $1 AND user_id = $2', [id, userId])
+    const result = await fastify.db.query('DELETE FROM tags WHERE id = $1 AND user_id = $2', [id, userId])
+    if (result.rowCount === 0) {
+      reply.code(404)
+      return { error: t('errors.tag_not_found', {}, lang) }
+    }
     reply.code(204)
   })
 }

@@ -29,6 +29,7 @@ import notificationRoutes from './routes/notifications.js'
 import demodataRoutes from './routes/demodata.js'
 import { sendPushToAll, createNotification } from './routes/notifications.js'
 import { notify } from './services/notify.js'
+import { t, getUserLang, getReqLang } from './services/i18n.js'
 import multipart from '@fastify/multipart'
 import { validateEncryptionKey } from './services/crypto.js'
 
@@ -186,6 +187,40 @@ async function start() {
       return reply.code(404).send({ error: 'Not found' })
     }
     return reply.sendFile('index.html', staticPath)
+  })
+
+  // Unhandled errors (DB constraint violations, driver failures) must never
+  // leak err.message or stack traces to the client. Framework errors that
+  // already carry a status code (schema validation, rate limit, body parsing)
+  // keep Fastify's standard error body.
+  app.setErrorHandler(async (err, request, reply) => {
+    const lang = request.user?.userId
+      ? await getUserLang(request.server.db, request.user.userId)
+      : getReqLang(request)
+    const status = err.statusCode || err.status
+    if (status) {
+      return reply.code(status).send({
+        statusCode: status,
+        error: err.name || 'Error',
+        message: err.message
+      })
+    }
+    if (typeof err.code === 'string') {
+      if (err.code === '23505') {
+        request.log.warn({ err }, 'Unique constraint violation')
+        return reply.code(409).send({ error: t('errors.duplicate', {}, lang) })
+      }
+      if (err.code.startsWith('23')) {
+        request.log.warn({ err }, 'Constraint violation')
+        return reply.code(409).send({ error: t('errors.conflict', {}, lang) })
+      }
+      if (err.code.startsWith('22')) {
+        request.log.warn({ err }, 'Invalid data rejected by database')
+        return reply.code(400).send({ error: t('errors.bad_request', {}, lang) })
+      }
+    }
+    request.log.error({ err }, 'Unhandled error')
+    return reply.code(500).send({ error: t('errors.internal', {}, lang) })
   })
 
   try {

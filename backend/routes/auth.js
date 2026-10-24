@@ -273,6 +273,8 @@ async function authRoutes(fastify, opts) {
       }
     }
   }, async (request, reply) => {
+    const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     try {
       const { language, base_currency, coingecko_api_key, shoutrrr_url } = request.body
       const fields = []
@@ -283,22 +285,23 @@ async function authRoutes(fastify, opts) {
       // Masked previews sent back by the client mean "keep the stored value"
       if (coingecko_api_key !== undefined && !isMaskedSecret(coingecko_api_key)) { fields.push(`coingecko_api_key = $${idx++}`); values.push(encrypt((coingecko_api_key || '').trim() || null)) }
       if (shoutrrr_url !== undefined && !isMaskedSecret(shoutrrr_url)) { fields.push(`shoutrrr_url = $${idx++}`); values.push(encrypt((shoutrrr_url || '').trim() || null)) }
-      if (fields.length === 0) return { success: false, error: 'No fields to update' }
-      values.push(request.user.userId)
+      if (fields.length === 0) return { success: false, error: t('errors.no_fields_to_update', {}, lang) }
+      values.push(userId)
       await fastify.db.query(`UPDATE users SET ${fields.join(', ')} WHERE id = $${idx}`, values)
       return { success: true }
     } catch (err) {
       fastify.log.warn(err, 'Failed to update user settings')
       if (err.message?.includes('ENCRYPTION_KEY')) {
         reply.code(400)
-        return { error: 'Encryption key is not configured on the server' }
+        return { error: t('errors.encryption_key_missing', {}, lang) }
       }
       reply.code(500)
-      return { error: 'Failed to save settings' }
+      return { error: t('errors.failed_to_save_settings', {}, lang) }
     }
   })
 
   fastify.get('/users/me', async (request, reply) => {
+    const lang = await getUserLang(fastify.db, request.user.userId)
     const result = await fastify.db.query(
       `SELECT id, login, language, base_currency, coingecko_api_key,
               shoutrrr_url, vapid_public_key, vapid_subject
@@ -307,7 +310,7 @@ async function authRoutes(fastify, opts) {
     )
     if (result.rows.length === 0) {
       reply.code(404)
-      return { error: 'User not found' }
+      return { error: t('auth.user_not_found', {}, lang) }
     }
     const user = result.rows[0]
     return {
@@ -376,14 +379,25 @@ async function authRoutes(fastify, opts) {
     }
 
     const newHash = await bcrypt.hash(new_password, 12)
-    await fastify.db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, userId])
-    fastify.log.info({ userId, ip: request.ip }, 'Password changed')
-
     const currentHash = hashToken(currentRefresh)
-    await fastify.db.query(
-      'DELETE FROM refresh_tokens WHERE user_id = $1 AND token_hash != $2',
-      [userId, currentHash]
-    )
+    // Hash update and session revocation must land together: a crash between
+    // the two would leave orphaned sessions valid with the old password's authority.
+    const client = await fastify.db.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, userId])
+      await client.query(
+        'DELETE FROM refresh_tokens WHERE user_id = $1 AND token_hash != $2',
+        [userId, currentHash]
+      )
+      await client.query('COMMIT')
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+    fastify.log.info({ userId, ip: request.ip }, 'Password changed')
 
     return { success: true }
   })
@@ -466,6 +480,7 @@ async function authRoutes(fastify, opts) {
       }
     }
   }, async (request, reply) => {
+    const lang = await getUserLang(fastify.db, request.user.userId)
     let { coingecko_api_key } = request.body || {}
     // The UI shows a masked preview of the stored key; when the mask (or
     // nothing) comes back, test the STORED secret instead of the literal input.
@@ -474,7 +489,7 @@ async function authRoutes(fastify, opts) {
       coingecko_api_key = decrypt(rows[0]?.coingecko_api_key)
       if (!coingecko_api_key) {
         reply.code(400)
-        return { valid: false, error: 'No API key configured' }
+        return { valid: false, error: t('errors.no_api_key_configured', {}, lang) }
       }
     }
     try {
@@ -488,14 +503,14 @@ async function authRoutes(fastify, opts) {
       }
       if (res.status === 401 || res.status === 403) {
         reply.code(401)
-        return { valid: false, error: 'Invalid API key' }
+        return { valid: false, error: t('errors.invalid_api_key', {}, lang) }
       }
       reply.code(502)
-      return { valid: false, error: 'CoinGecko API error' }
+      return { valid: false, error: t('errors.coingecko_error', {}, lang) }
     } catch (err) {
       fastify.log.warn(err, 'CoinGecko key test failed')
       reply.code(502)
-      return { valid: false, error: 'Failed to reach CoinGecko' }
+      return { valid: false, error: t('errors.coingecko_unreachable', {}, lang) }
     }
   })
 

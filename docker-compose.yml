@@ -24,6 +24,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # init: node as PID 1 does not reap zombie children (the shoutrrr plugin
+    # spawns processes); tini forwards signals and collects them
+    init: true
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped

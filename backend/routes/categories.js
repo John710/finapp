@@ -1,4 +1,5 @@
 import { sanitizeSvg } from '../services/sanitizeSvg.js'
+import { t, getUserLang } from '../services/i18n.js'
 
 async function categoryRoutes(fastify, opts) {
   // List
@@ -29,12 +30,13 @@ async function categoryRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { name, type, color, icon, icon_custom, parent_id } = request.body
     if (parent_id) {
       const parentRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [parent_id, userId])
       if (parentRes.rows.length === 0) {
         reply.code(404)
-        return { error: 'Parent category not found' }
+        return { error: t('errors.parent_category_not_found', {}, lang) }
       }
     }
     const safeIconCustom = sanitizeSvg(icon_custom)
@@ -69,21 +71,22 @@ async function categoryRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
     const { name, type, color, icon, icon_custom, parent_id } = request.body
     if (parent_id) {
       if (parent_id === id) {
         reply.code(400)
-        return { error: 'Category cannot be its own parent' }
+        return { error: t('errors.category_self_parent', {}, lang) }
       }
       const parentRes = await fastify.db.query('SELECT id, parent_id FROM categories WHERE id = $1 AND user_id = $2', [parent_id, userId])
       if (parentRes.rows.length === 0) {
         reply.code(404)
-        return { error: 'Parent category not found' }
+        return { error: t('errors.parent_category_not_found', {}, lang) }
       }
       if (parentRes.rows[0].parent_id === id) {
         reply.code(400)
-        return { error: 'Category hierarchy cannot contain cycles' }
+        return { error: t('errors.category_cycle', {}, lang) }
       }
     }
     const safeIconCustom = sanitizeSvg(icon_custom)
@@ -93,7 +96,7 @@ async function categoryRoutes(fastify, opts) {
     )
     if (result.rows.length === 0) {
       reply.code(404)
-      return { error: 'Category not found' }
+      return { error: t('errors.category_not_found', {}, lang) }
     }
     return result.rows[0]
   })
@@ -109,8 +112,13 @@ async function categoryRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
-    await fastify.db.query('DELETE FROM categories WHERE id = $1 AND user_id = $2', [id, userId])
+    const result = await fastify.db.query('DELETE FROM categories WHERE id = $1 AND user_id = $2', [id, userId])
+    if (result.rowCount === 0) {
+      reply.code(404)
+      return { error: t('errors.category_not_found', {}, lang) }
+    }
     reply.code(204)
   })
 }

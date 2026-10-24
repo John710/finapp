@@ -250,15 +250,15 @@ export default async function (fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { rows } = await fastify.db.query(
       'SELECT vapid_public_key, vapid_private_key FROM users WHERE id = $1',
       [userId]
     )
     if (!rows[0]?.vapid_public_key || !rows[0]?.vapid_private_key) {
       reply.code(503)
-      return { error: 'Push notifications not configured' }
+      return { error: t('errors.push_not_configured', {}, lang) }
     }
-    const lang = await getUserLang(fastify.db, userId)
     const payload = JSON.stringify({
       title: t('notifications.push_test', {}, lang),
       body: request.body?.message || t('notifications.push_test_body', {}, lang),
@@ -307,6 +307,7 @@ export default async function (fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { rows } = await fastify.db.query(
       'SELECT shoutrrr_url FROM users WHERE id = $1',
       [userId]
@@ -314,9 +315,8 @@ export default async function (fastify, opts) {
     const encryptedShoutrrrUrl = rows[0]?.shoutrrr_url
     if (!encryptedShoutrrrUrl || !fastify.sendShoutrrr) {
       reply.code(503)
-      return { error: 'Shoutrrr not configured' }
+      return { error: t('errors.shoutrrr_not_configured', {}, lang) }
     }
-    const lang = await getUserLang(fastify.db, userId)
     await fastify.sendShoutrrr(encryptedShoutrrrUrl, {
       title: `FinApp: ${t('notifications.shoutrrr_test', {}, lang)}`,
       message: t('notifications.shoutrrr_test_body', {}, lang)

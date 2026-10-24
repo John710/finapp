@@ -1,4 +1,6 @@
-import { loadRates, convertAmount } from '../services/currency.js'
+import Decimal from 'decimal.js'
+import { loadRates, convertAmountDecimal } from '../services/currency.js'
+import { t, getUserLang } from '../services/i18n.js'
 
 async function budgetRoutes(fastify, opts) {
   // List with progress — spent is converted into the budget's currency using live rates
@@ -36,28 +38,21 @@ async function budgetRoutes(fastify, opts) {
 
     const spentByBudget = {}
     for (const tx of txResult.rows) {
-      const amount = parseFloat(tx.amount)
-      const fromCurrency = tx.account_currency
-      const toCurrency = tx.budget_currency
-      const converted = fromCurrency === toCurrency
-        ? amount
-        : convertAmount(amount, fromCurrency, toCurrency, rates)
-
+      const converted = convertAmountDecimal(tx.amount, tx.account_currency, tx.budget_currency, rates)
       if (converted === null) {
-        fastify.log.warn(`Budget spent conversion failed: ${fromCurrency} -> ${toCurrency} for budget ${tx.budget_id}`)
+        fastify.log.warn(`Budget spent conversion failed: ${tx.account_currency} -> ${tx.budget_currency} for budget ${tx.budget_id}`)
       }
-
-      const value = converted !== null ? converted : amount
-      spentByBudget[tx.budget_id] = (spentByBudget[tx.budget_id] || 0) + value
+      const value = converted !== null ? converted : new Decimal(tx.amount)
+      spentByBudget[tx.budget_id] = (spentByBudget[tx.budget_id] || new Decimal(0)).plus(value)
     }
 
     return budgets.map(b => {
-      const spent = spentByBudget[b.id] || 0
-      const amount = parseFloat(b.amount)
+      const spent = spentByBudget[b.id] || new Decimal(0)
+      const amount = new Decimal(b.amount)
       return {
         ...b,
-        spent,
-        progress: amount > 0 ? Math.round((spent / amount) * 100) : 0
+        spent: spent.toNumber(),
+        progress: amount.gt(0) ? Math.round(spent.div(amount).times(100).toNumber()) : 0
       }
     })
   })
@@ -79,11 +74,12 @@ async function budgetRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { category_id, amount, currency, period, start_date } = request.body
     const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
     if (catRes.rows.length === 0) {
       reply.code(404)
-      return { error: 'Category not found' }
+      return { error: t('errors.category_not_found', {}, lang) }
     }
     const result = await fastify.db.query(
       'INSERT INTO budgets (user_id, category_id, amount, currency, period, start_date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
@@ -116,12 +112,13 @@ async function budgetRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
     const { category_id, amount, currency, period, start_date, is_active } = request.body
     const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
     if (catRes.rows.length === 0) {
       reply.code(404)
-      return { error: 'Category not found' }
+      return { error: t('errors.category_not_found', {}, lang) }
     }
     const result = await fastify.db.query(
       'UPDATE budgets SET category_id = $1, amount = $2, currency = $3, period = $4, start_date = $5, is_active = $6 WHERE id = $7 AND user_id = $8 RETURNING *',
@@ -129,7 +126,7 @@ async function budgetRoutes(fastify, opts) {
     )
     if (result.rows.length === 0) {
       reply.code(404)
-      return { error: 'Budget not found' }
+      return { error: t('errors.budget_not_found', {}, lang) }
     }
     return result.rows[0]
   })
@@ -145,8 +142,13 @@ async function budgetRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
-    await fastify.db.query('DELETE FROM budgets WHERE id = $1 AND user_id = $2', [id, userId])
+    const result = await fastify.db.query('DELETE FROM budgets WHERE id = $1 AND user_id = $2', [id, userId])
+    if (result.rowCount === 0) {
+      reply.code(404)
+      return { error: t('errors.budget_not_found', {}, lang) }
+    }
     reply.code(204)
   })
 }

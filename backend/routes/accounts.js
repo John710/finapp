@@ -1,4 +1,4 @@
-import { findTransferLeg } from './transactions.js'
+import { t, getUserLang } from '../services/i18n.js'
 
 async function accountRoutes(fastify, opts) {
   // List
@@ -18,30 +18,43 @@ async function accountRoutes(fastify, opts) {
         type: 'object',
         required: ['name', 'type', 'currency'],
         properties: {
-          name: { type: 'string', minLength: 1 },
+          name: { type: 'string', minLength: 1, maxLength: 100 },
           type: { type: 'string', enum: ['card', 'cash', 'crypto', 'other', 'goal'] },
           currency: { type: 'string', minLength: 1, maxLength: 10 },
           target_amount: { type: 'number' },
           balance: { type: 'number' },
-          color: { type: 'string' },
-          icon: { type: 'string' }
+          color: { type: 'string', maxLength: 32 },
+          icon: { type: 'string', maxLength: 100000 }
         }
       }
     }
   }, async (request, reply) => {
     const userId = request.user.userId
     const { name, type, currency, balance, color, icon, target_amount } = request.body
-    const maxResult = await fastify.db.query(
-      'SELECT COALESCE(MAX(sort_order), 0) as max_order FROM accounts WHERE type = $1 AND user_id = $2',
-      [type, userId]
-    )
-    const sort_order = (parseInt(maxResult.rows[0].max_order) || 0) + 1
-    const result = await fastify.db.query(
-      'INSERT INTO accounts (user_id, name, type, currency, balance, color, icon, target_amount, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
-      [userId, name, type, currency, balance || 0, color, icon, target_amount || 0, sort_order]
-    )
-    reply.code(201)
-    return result.rows[0]
+    const client = await fastify.db.connect()
+    try {
+      await client.query('BEGIN')
+      // Serialize sort_order computation per user: two parallel POSTs would
+      // otherwise read the same MAX(sort_order) and get identical positions.
+      await client.query('SELECT pg_advisory_xact_lock($1)', [userId])
+      const maxResult = await client.query(
+        'SELECT COALESCE(MAX(sort_order), 0) as max_order FROM accounts WHERE type = $1 AND user_id = $2',
+        [type, userId]
+      )
+      const sort_order = (parseInt(maxResult.rows[0].max_order) || 0) + 1
+      const result = await client.query(
+        'INSERT INTO accounts (user_id, name, type, currency, balance, color, icon, target_amount, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
+        [userId, name, type, currency, balance || 0, color, icon, target_amount || 0, sort_order]
+      )
+      await client.query('COMMIT')
+      reply.code(201)
+      return result.rows[0]
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
   })
 
   // Update
@@ -69,6 +82,7 @@ async function accountRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
     const body = request.body
     // Build SET dynamically so omitted optional fields keep their stored values
@@ -84,7 +98,7 @@ async function accountRoutes(fastify, opts) {
     }
     if (fields.length === 0) {
       reply.code(400)
-      return { error: 'No fields to update' }
+      return { error: t('errors.no_fields_to_update', {}, lang) }
     }
     fields.push('updated_at = NOW()')
     values.push(id, userId)
@@ -94,7 +108,7 @@ async function accountRoutes(fastify, opts) {
     )
     if (result.rows.length === 0) {
       reply.code(404)
-      return { error: 'Account not found' }
+      return { error: t('errors.account_not_found', {}, lang) }
     }
     return result.rows[0]
   })
@@ -153,6 +167,7 @@ async function accountRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
     const client = await fastify.db.connect()
     try {
@@ -162,36 +177,52 @@ async function accountRoutes(fastify, opts) {
       if (accRes.rows.length === 0) {
         await client.query('ROLLBACK')
         reply.code(404)
-        return { error: 'Account not found' }
+        return { error: t('errors.account_not_found', {}, lang) }
       }
 
       // Transfers OUT of this account credited other accounts — take the
       // credited amount (the paired leg amount, in the TARGET currency) back.
-      const outgoing = await client.query(
-        "SELECT * FROM transactions WHERE account_id = $1 AND user_id = $2 AND type = 'transfer' AND transfer_to_account_id IS NOT NULL",
-        [id, userId]
-      )
-      for (const tx of outgoing.rows) {
-        const leg = await findTransferLeg(client, tx)
-        const credited = leg ? parseFloat(leg.amount) : parseFloat(tx.amount)
-        await client.query(
-          'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
-          [credited, tx.transfer_to_account_id, userId]
-        )
-      }
+      // Both statements mirror findTransferLeg() semantics: rows linked via
+      // transfer_pair_id are matched directly; legacy rows (pair id NULL) fall
+      // back to the latest matching income leg, or to the source amount when
+      // no leg exists. All arithmetic stays in SQL numeric — no float rounding.
+      await client.query(`
+        UPDATE accounts a
+        SET balance = a.balance - leg.amount
+        FROM transactions src
+        JOIN transactions leg ON leg.id = src.transfer_pair_id AND leg.user_id = src.user_id
+        WHERE src.account_id = $1 AND src.user_id = $2
+          AND src.type = 'transfer' AND src.transfer_to_account_id IS NOT NULL
+          AND a.id = src.transfer_to_account_id AND a.user_id = $2
+      `, [id, userId])
+      await client.query(`
+        UPDATE accounts a
+        SET balance = a.balance - COALESCE(leg.amount, src.amount)
+        FROM transactions src
+        LEFT JOIN LATERAL (
+          SELECT l.amount FROM transactions l
+          WHERE l.type = 'income' AND l.account_id = src.transfer_to_account_id
+            AND l.transfer_to_account_id = src.account_id AND l.user_id = src.user_id
+            AND l.transfer_pair_id IS NULL
+          ORDER BY l.created_at DESC, l.id DESC
+          LIMIT 1
+        ) leg ON true
+        WHERE src.account_id = $1 AND src.user_id = $2
+          AND src.type = 'transfer' AND src.transfer_to_account_id IS NOT NULL
+          AND src.transfer_pair_id IS NULL
+          AND a.id = src.transfer_to_account_id AND a.user_id = $2
+      `, [id, userId])
 
       // Transfers INTO this account deducted other accounts — give the money
       // back before their source rows are removed together with the account.
-      const incoming = await client.query(
-        "SELECT * FROM transactions WHERE transfer_to_account_id = $1 AND user_id = $2 AND account_id != $1 AND type = 'transfer'",
-        [id, userId]
-      )
-      for (const tx of incoming.rows) {
-        await client.query(
-          'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
-          [parseFloat(tx.amount), tx.account_id, userId]
-        )
-      }
+      await client.query(`
+        UPDATE accounts a
+        SET balance = a.balance + src.amount
+        FROM transactions src
+        WHERE src.transfer_to_account_id = $1 AND src.account_id <> $1
+          AND src.type = 'transfer' AND src.user_id = $2
+          AND a.id = src.account_id AND a.user_id = $2
+      `, [id, userId])
 
       // transaction_tags rows cascade via FK; remove every transaction that
       // lives on this account or references it as a transfer counterparty.

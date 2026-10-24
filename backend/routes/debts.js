@@ -1,14 +1,17 @@
 import { t, getUserLang } from '../services/i18n.js'
-import { loadRates, convertAmount } from '../services/currency.js'
+import Decimal from 'decimal.js'
+import { loadRates, convertAmount, convertAmountDecimal } from '../services/currency.js'
 import { notify, checkDuplicateNotification } from '../services/notify.js'
 
 async function debtRoutes(fastify, opts) {
   async function getDebtCategoryId(client, txType, userId) {
     const lang = await getUserLang(client, userId)
     const catName = t('debts.title', {}, lang)
+    // 'Title' is the fallback name persisted before the debts.title locale key
+    // existed — treat it as legacy so those categories are reused, not duplicated.
     const legacyNames = txType === 'income'
-      ? ['Debts (income)', 'Долги (доход)']
-      : ['Debts (expense)', 'Долги (расход)']
+      ? ['Debts (income)', 'Долги (доход)', 'Title']
+      : ['Debts (expense)', 'Долги (расход)', 'Title']
     let res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2 AND user_id = $3', [catName, txType, userId])
     if (res.rows.length) return res.rows[0].id
     for (const name of legacyNames) {
@@ -66,28 +69,26 @@ async function debtRoutes(fastify, opts) {
 
     return debts.map(d => {
       const debtCurrency = d.currency || 'USD'
-      const amount = parseFloat(d.amount)
       const payments = paymentsByDebt[d.id] || []
-      let paid = 0
+      let paid = new Decimal(0)
       for (const p of payments) {
-        const pAmount = parseFloat(p.amount)
         const pCurrency = p.currency || debtCurrency
         if (pCurrency === debtCurrency) {
-          paid += pAmount
+          paid = paid.plus(new Decimal(p.amount))
         } else {
-          const converted = convertAmount(pAmount, pCurrency, debtCurrency, rates)
+          const converted = convertAmountDecimal(p.amount, pCurrency, debtCurrency, rates)
           if (converted === null) {
             fastify.log.warn(`Debt payment conversion failed: ${pCurrency} -> ${debtCurrency} for payment ${p.id}`)
-            paid += pAmount
+            paid = paid.plus(new Decimal(p.amount))
           } else {
-            paid += converted
+            paid = paid.plus(converted)
           }
         }
       }
       return {
         ...d,
-        paid_amount: paid,
-        remaining: amount - paid
+        paid_amount: paid.toNumber(),
+        remaining: new Decimal(d.amount).minus(paid).toNumber()
       }
     })
   })
@@ -112,6 +113,7 @@ async function debtRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { name, counterparty, amount, currency, type, due_date, description, account_id } = request.body
     const debtCurrency = currency || 'USD'
     const client = await fastify.db.connect()
@@ -124,7 +126,7 @@ async function debtRoutes(fastify, opts) {
         if (accRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
-          return { error: 'Account not found' }
+          return { error: t('errors.account_not_found', {}, lang) }
         }
       }
 
@@ -187,13 +189,14 @@ async function debtRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
     const { name, counterparty, amount, currency, type, due_date, description, status, account_id } = request.body
     if (account_id) {
       const accRes = await fastify.db.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
       if (accRes.rows.length === 0) {
         reply.code(404)
-        return { error: 'Account not found' }
+        return { error: t('errors.account_not_found', {}, lang) }
       }
     }
     const result = await fastify.db.query(
@@ -202,7 +205,7 @@ async function debtRoutes(fastify, opts) {
     )
     if (result.rows.length === 0) {
       reply.code(404)
-      return { error: 'Debt not found' }
+      return { error: t('errors.debt_not_found', {}, lang) }
     }
     return result.rows[0]
   })
@@ -228,6 +231,7 @@ async function debtRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
     const { amount, currency, note, account_id } = request.body
     const client = await fastify.db.connect()
@@ -242,7 +246,7 @@ async function debtRoutes(fastify, opts) {
       if (!debt) {
         await client.query('ROLLBACK')
         reply.code(404)
-        return { error: 'Debt not found' }
+        return { error: t('errors.debt_not_found', {}, lang) }
       }
       const debtCurrency = debt.currency || 'USD'
       const paymentCurrency = currency || debtCurrency
@@ -252,7 +256,7 @@ async function debtRoutes(fastify, opts) {
         if (accRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
-          return { error: 'Account not found' }
+          return { error: t('errors.account_not_found', {}, lang) }
         }
       }
 
@@ -278,23 +282,22 @@ async function debtRoutes(fastify, opts) {
       }
 
       const paymentsRes = await client.query('SELECT amount, currency FROM debt_payments WHERE debt_id = $1 AND user_id = $2', [id, userId])
-      let paid = 0
+      let paid = new Decimal(0)
       for (const p of paymentsRes.rows) {
-        const pAmount = parseFloat(p.amount)
         const pCurrency = p.currency || debtCurrency
         if (pCurrency === debtCurrency) {
-          paid += pAmount
+          paid = paid.plus(new Decimal(p.amount))
         } else {
-          const converted = convertAmount(pAmount, pCurrency, debtCurrency, rates)
+          const converted = convertAmountDecimal(p.amount, pCurrency, debtCurrency, rates)
           if (converted === null) {
             fastify.log.warn(`Debt payment conversion failed on full-paid check: ${pCurrency} -> ${debtCurrency}`)
-            paid += pAmount
+            paid = paid.plus(new Decimal(p.amount))
           } else {
-            paid += converted
+            paid = paid.plus(converted)
           }
         }
       }
-      if (paid >= parseFloat(debt.amount)) {
+      if (paid.gte(new Decimal(debt.amount))) {
         await client.query('UPDATE debts SET status = $1 WHERE id = $2 AND user_id = $3', ['paid', id, userId])
         debtFullyPaid = debt
       }
@@ -358,8 +361,13 @@ async function debtRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
-    await fastify.db.query('DELETE FROM debts WHERE id = $1 AND user_id = $2', [id, userId])
+    const result = await fastify.db.query('DELETE FROM debts WHERE id = $1 AND user_id = $2', [id, userId])
+    if (result.rowCount === 0) {
+      reply.code(404)
+      return { error: t('errors.debt_not_found', {}, lang) }
+    }
     reply.code(204)
   })
 }

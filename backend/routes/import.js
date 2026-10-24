@@ -1,5 +1,9 @@
 import Papa from 'papaparse'
+import { t, getUserLang } from '../services/i18n.js'
 
+// Profile mappings reference literal CSV column headers produced by the bank
+// (e.g. Tinkoff exports Russian headers) — these are data format identifiers,
+// not translatable UI strings.
 const PROFILES = {
   default: {
     name: 'Default',
@@ -42,10 +46,11 @@ async function importRoutes(fastify, opts) {
 
   fastify.post('/import/csv', async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
     const data = await request.file()
     if (!data) {
       reply.code(400)
-      return { error: 'No file uploaded' }
+      return { error: t('errors.no_file_uploaded', {}, lang) }
     }
 
     const rawOptions = request.body?.options?.value || '{}'
@@ -54,11 +59,11 @@ async function importRoutes(fastify, opts) {
       options = JSON.parse(rawOptions)
     } catch (err) {
       reply.code(400)
-      return { error: 'Invalid options JSON' }
+      return { error: t('errors.invalid_options_json', {}, lang) }
     }
     if (typeof options !== 'object' || options === null || Array.isArray(options)) {
       reply.code(400)
-      return { error: 'Options must be an object' }
+      return { error: t('errors.options_not_object', {}, lang) }
     }
     const profileKey = options.profile || 'default'
     const profile = PROFILES[profileKey] || PROFILES.default
@@ -155,7 +160,7 @@ async function importRoutes(fastify, opts) {
             currency = accountsRes.rows[0].currency
           }
           if (!accountId) {
-            stats.errors.push({ row: row[mapping.date] || '?', error: 'No account found' })
+            stats.errors.push({ row: row[mapping.date] || '?', error: t('errors.import_row_no_account', {}, lang) })
             continue
           }
 
@@ -192,7 +197,7 @@ async function importRoutes(fastify, opts) {
           stats.created++
         } catch {
           // Don't leak internal error text (DB details) into the response
-          stats.errors.push({ row: row[mapping.date] || '?', error: 'Failed to import row' })
+          stats.errors.push({ row: row[mapping.date] || '?', error: t('errors.import_row_failed', {}, lang) })
         }
       }
 

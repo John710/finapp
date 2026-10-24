@@ -1,4 +1,5 @@
 import { loadRates, convertAmount } from '../services/currency.js'
+import { t, getUserLang } from '../services/i18n.js'
 
 async function demodataRoutes(fastify, opts) {
   // Clear all data for current user (except users)
@@ -31,6 +32,7 @@ async function demodataRoutes(fastify, opts) {
   // Load demo data for current user
   fastify.post('/admin/load-demo', async (request, reply) => {
     const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
 
     const client = await fastify.db.connect()
     try {
@@ -42,7 +44,7 @@ async function demodataRoutes(fastify, opts) {
       if (accountsResult.rows.length > 0) {
         await client.query('ROLLBACK')
         reply.code(400)
-        return { error: 'Database already has data for this user. Clear it first.' }
+        return { error: t('errors.demodata_exists', {}, lang) }
       }
 
       // --- Accounts ---
