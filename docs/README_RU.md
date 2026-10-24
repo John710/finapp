@@ -106,7 +106,62 @@ docker compose up -d
 ### HTTPS / Reverse Proxy
 
 Приложение **не** принудительно использует HTTPS и не отправляет заголовки HSTS. Для production-развёртываний разместите FinApp за reverse proxy (Traefik, Nginx, Caddy и т.п.) и настройте TLS и HSTS на его стороне. Это позволяет без проблем работать по HTTP при локальной разработке.
- 
+
+Пример — Caddy:
+
+```
+fin.example.com {
+    reverse_proxy 127.0.0.1:6253
+}
+```
+
+Пример — Nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name fin.example.com;
+    # ssl_certificate ...; ssl_certificate_key ...;
+
+    location / {
+        proxy_pass http://127.0.0.1:6253;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Если приложение за прокси, укажите в `TRUSTED_PROXIES` IP/подсеть прокси — тогда приложение будет брать реальный IP клиента из `X-Forwarded-For` (используется в rate-limit и охранных уведомлениях).
+
+> ⚠️ **Смените дефолтный `POSTGRES_PASSWORD`** (и `POSTGRES_USER`/`POSTGRES_DB`), если порт PostgreSQL доступен с других машин или контейнер `db` общий. Значения по умолчанию — только для локального использования.
+
+### Резервные копии
+
+Все данные хранятся в базе — делайте бэкапы регулярно. Compose-файл хранит её в томе `finapp_db_data`.
+
+```bash
+# Бэкап (скорректируйте имя контейнера при необходимости)
+docker exec finapp-db pg_dump -U finapp -d finapp > finapp_$(date +%F).sql
+
+# Восстановление
+cat finapp_2026-01-01.sql | docker exec -i finapp-db psql -U finapp -d finapp
+```
+
+Пример ежедневного cron: `0 3 * * * docker exec finapp-db pg_dump -U finapp -d finapp | gzip > /backups/finapp_$(date +\%F).sql.gz`
+
+CSV-экспорт (`Настройки → Экспорт`) — удобный снимок транзакций, но не полноценный бэкап базы.
+
+### Обновление
+
+Подтяните новый образ и пересоздайте контейнер; миграции базы выполняются автоматически при старте:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Эндпоинт `/health` возвращает HTTP 503 при потере соединения с базой — подходит для uptime-мониторинга.
+
 ---
  
 ## ⚙️ Переменные окружения
@@ -117,6 +172,7 @@ docker compose up -d
 | `POSTGRES_USER` | Пользователь PostgreSQL (сервис db) | `finapp` |
 | `POSTGRES_PASSWORD` | Пароль PostgreSQL (сервис db) | `finapp` |
 | `POSTGRES_DB` | База PostgreSQL (сервис db) | `finapp` |
+| `DATABASE_URL` | Полная строка подключения — только для внешней базы (compose собирает её из `POSTGRES_*` автоматически) | — |
 | `JWT_SECRET` | Секрет для подписи JWT | — |
 | `JWT_ACCESS_TTL` | Время жизни access токена | `15m` |
 | `JWT_REFRESH_TTL` | Время жизни refresh токена | `30d` |
@@ -221,6 +277,10 @@ cd frontend && npm install && npm run dev
 ```
  
 Требования: Node.js 24+, PostgreSQL 15+
+
+Линтинг: `cd backend && npm run lint` / `cd frontend && npm run lint` (конфигурации ESLint и Prettier включены).
+
+> ⚠️ **`npm run migrate:down` деструктивен.** Некоторые down-миграции удаляют колонки с данными пользователей (например, миграция 15 удаляет `user_id` из основных таблиц). Перед любым откатом обязательно делайте резервную копию через `pg_dump`.
  
 ---
  

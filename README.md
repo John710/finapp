@@ -106,7 +106,62 @@ Open `http://localhost:6253` and complete the initial setup.
 ### HTTPS / Reverse Proxy
 
 The application does **not** enforce HTTPS or send HSTS headers itself. For production deployments, place FinApp behind a reverse proxy (Traefik, Nginx, Caddy, etc.) and configure TLS and HSTS there. This keeps plain HTTP access working for local development without breaking the app.
- 
+
+Example — Caddy:
+
+```
+fin.example.com {
+    reverse_proxy 127.0.0.1:6253
+}
+```
+
+Example — Nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name fin.example.com;
+    # ssl_certificate ...; ssl_certificate_key ...;
+
+    location / {
+        proxy_pass http://127.0.0.1:6253;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+When running behind a proxy, set `TRUSTED_PROXIES` to the proxy IP/CIDR so the app reads the real client IP from `X-Forwarded-For` (used by rate limiting and security notifications).
+
+> ⚠️ **Change the default `POSTGRES_PASSWORD`** (and `POSTGRES_USER`/`POSTGRES_DB`) if the PostgreSQL port is reachable from other machines, or if the `db` container is shared. The bundled defaults are for local use only.
+
+### Backups
+
+The database holds all your data — back it up regularly. The included compose file stores it in the `finapp_db_data` volume.
+
+```bash
+# Backup (adjust the container name if yours differs)
+docker exec finapp-db pg_dump -U finapp -d finapp > finapp_$(date +%F).sql
+
+# Restore
+cat finapp_2026-01-01.sql | docker exec -i finapp-db psql -U finapp -d finapp
+```
+
+A daily cron example: `0 3 * * * docker exec finapp-db pg_dump -U finapp -d finapp | gzip > /backups/finapp_$(date +\%F).sql.gz`
+
+CSV export (`Settings → Export`) is a convenience snapshot of transactions, not a full database backup.
+
+### Upgrades
+
+Pull the new image and recreate the container; database migrations run automatically on container start:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+The `/health` endpoint returns HTTP 503 when the database connection is lost — suitable for uptime monitoring.
+
 ---
  
 ## ⚙️ Environment Variables
@@ -117,6 +172,7 @@ The application does **not** enforce HTTPS or send HSTS headers itself. For prod
 | `POSTGRES_USER` | PostgreSQL user (db service) | `finapp` |
 | `POSTGRES_PASSWORD` | PostgreSQL password (db service) | `finapp` |
 | `POSTGRES_DB` | PostgreSQL database (db service) | `finapp` |
+| `DATABASE_URL` | Full PostgreSQL URL — only for an external database instance (compose builds it from `POSTGRES_*` automatically) | — |
 | `JWT_SECRET` | JWT signing secret | — |
 | `JWT_ACCESS_TTL` | Access token lifetime | `15m` |
 | `JWT_REFRESH_TTL` | Refresh token lifetime | `30d` |
@@ -221,7 +277,11 @@ cd frontend && npm install && npm run dev
 ```
  
 Requirements: Node.js 24+, PostgreSQL 15+
- 
+
+Linting: `cd backend && npm run lint` / `cd frontend && npm run lint` (ESLint + Prettier configs are included).
+
+> ⚠️ **`npm run migrate:down` is destructive.** Several down-migrations drop columns with user data (e.g. migration 15 removes `user_id` from core tables). Always take a `pg_dump` backup before rolling anything back.
+
 ---
  
 ## 📄 License
