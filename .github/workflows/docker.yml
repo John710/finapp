@@ -80,6 +80,10 @@ jobs:
       - name: Blackbox API tests
         run: docker exec finapp node scripts/blackbox-test.mjs
 
+      - name: Dump server logs
+        if: failure()
+        run: docker logs finapp 2>&1 | tail -120
+
       - name: Scan image (Trivy, report-only)
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
