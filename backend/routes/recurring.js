@@ -22,18 +22,30 @@ async function recurringRoutes(fastify, opts) {
         properties: {
           account_id: { type: 'integer' },
           category_id: { type: ['integer', 'null'] },
-          amount: { type: 'number', minimum: 0 },
-          currency: { type: 'string' },
+          amount: { type: 'number', exclusiveMinimum: 0, maximum: 1e12 },
+          currency: { type: 'string', maxLength: 10 },
           type: { type: 'string', enum: ['income', 'expense'] },
           frequency: { type: 'string', enum: ['daily', 'weekly', 'biweekly', 'monthly', 'yearly'] },
-          next_date: { type: 'string' },
-          note: { type: 'string' }
+          next_date: { type: 'string', format: 'date' },
+          note: { type: 'string', maxLength: 1000 }
         }
       }
     }
   }, async (request, reply) => {
     const userId = request.user.userId
     const { account_id, category_id, amount, currency, type, frequency, next_date, note } = request.body
+    const accRes = await fastify.db.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
+    if (accRes.rows.length === 0) {
+      reply.code(404)
+      return { error: 'Account not found' }
+    }
+    if (category_id) {
+      const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
+      if (catRes.rows.length === 0) {
+        reply.code(404)
+        return { error: 'Category not found' }
+      }
+    }
     const result = await fastify.db.query(
       'INSERT INTO recurring_rules (user_id, account_id, category_id, amount, currency, type, frequency, next_date, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
       [userId, account_id, category_id, amount, currency || 'USD', type, frequency, next_date, note]
@@ -45,18 +57,23 @@ async function recurringRoutes(fastify, opts) {
   // Update
   fastify.put('/recurring/:id', {
     schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      },
       body: {
         type: 'object',
         required: ['account_id', 'amount', 'type', 'frequency', 'next_date'],
         properties: {
           account_id: { type: 'integer' },
           category_id: { type: ['integer', 'null'] },
-          amount: { type: 'number', minimum: 0 },
-          currency: { type: 'string' },
+          amount: { type: 'number', exclusiveMinimum: 0, maximum: 1e12 },
+          currency: { type: 'string', maxLength: 10 },
           type: { type: 'string', enum: ['income', 'expense'] },
           frequency: { type: 'string', enum: ['daily', 'weekly', 'biweekly', 'monthly', 'yearly'] },
-          next_date: { type: 'string' },
-          note: { type: 'string' },
+          next_date: { type: 'string', format: 'date' },
+          note: { type: 'string', maxLength: 1000 },
           is_active: { type: 'boolean' }
         }
       }
@@ -65,6 +82,18 @@ async function recurringRoutes(fastify, opts) {
     const userId = request.user.userId
     const { id } = request.params
     const { account_id, category_id, amount, currency, type, frequency, next_date, note, is_active } = request.body
+    const accRes = await fastify.db.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
+    if (accRes.rows.length === 0) {
+      reply.code(404)
+      return { error: 'Account not found' }
+    }
+    if (category_id) {
+      const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
+      if (catRes.rows.length === 0) {
+        reply.code(404)
+        return { error: 'Category not found' }
+      }
+    }
     const result = await fastify.db.query(
       'UPDATE recurring_rules SET account_id = $1, category_id = $2, amount = $3, currency = $4, type = $5, frequency = $6, next_date = $7, note = $8, is_active = $9 WHERE id = $10 AND user_id = $11 RETURNING *',
       [account_id, category_id, amount, currency, type, frequency, next_date, note, is_active, id, userId]
@@ -77,7 +106,15 @@ async function recurringRoutes(fastify, opts) {
   })
 
   // Delete
-  fastify.delete('/recurring/:id', async (request, reply) => {
+  fastify.delete('/recurring/:id', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      }
+    }
+  }, async (request, reply) => {
     const userId = request.user.userId
     const { id } = request.params
     await fastify.db.query('DELETE FROM recurring_rules WHERE id = $1 AND user_id = $2', [id, userId])

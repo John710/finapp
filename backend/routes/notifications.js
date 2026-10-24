@@ -141,10 +141,22 @@ export default async function (fastify, opts) {
   })
 
   // In-app notifications
-  fastify.get('/notifications', async (request, reply) => {
+  fastify.get('/notifications', {
+    schema: {
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+          offset: { type: 'integer', minimum: 0, default: 0 },
+          type: { type: 'string', maxLength: 64 }
+        }
+      }
+    }
+  }, async (request, reply) => {
     const userId = request.user.userId
-    const limit = parseInt(request.query.limit) || 20
-    const offset = parseInt(request.query.offset) || 0
+    const limit = request.query.limit ?? 20
+    const offset = request.query.offset ?? 0
     const type = request.query.type
     const client = await fastify.db.connect()
     try {
@@ -176,7 +188,15 @@ export default async function (fastify, opts) {
     }
   })
 
-  fastify.patch('/notifications/:id/read', async (request, reply) => {
+  fastify.patch('/notifications/:id/read', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      }
+    }
+  }, async (request, reply) => {
     const { id } = request.params
     const userId = request.user.userId
     const client = await fastify.db.connect()
@@ -188,7 +208,15 @@ export default async function (fastify, opts) {
     }
   })
 
-  fastify.delete('/notifications/:id', async (request, reply) => {
+  fastify.delete('/notifications/:id', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      }
+    }
+  }, async (request, reply) => {
     const { id } = request.params
     const userId = request.user.userId
     const client = await fastify.db.connect()
@@ -298,59 +326,62 @@ export default async function (fastify, opts) {
 }
 
 export async function sendPushToAll(fastify, userId, payload) {
-  const client = await fastify.db.connect()
-  try {
-    const { rows: userRows } = await client.query(
-      'SELECT vapid_public_key, vapid_private_key, vapid_subject FROM users WHERE id = $1',
-      [userId]
-    )
-    const user = userRows[0]
-    if (!user?.vapid_public_key || !user?.vapid_private_key) {
-      fastify.log.warn({ userId }, 'sendPushToAll skipped: VAPID keys not configured')
-      return { sent: 0, failed: 0 }
-    }
-
-    const privateKey = decrypt(user.vapid_private_key)
-    const { rows } = await client.query(
-      'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1',
-      [userId]
-    )
-    fastify.log.info({ userId, subscriptions: rows.length }, 'Sending push notifications')
-    let sent = 0, failed = 0
-    const PUSH_TIMEOUT = parseInt(process.env.PUSH_SEND_TIMEOUT || '10000', 10)
-    for (const sub of rows) {
-      try {
-        await Promise.race([
-          webpush.sendNotification(
-            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-            payload,
-            {
-              vapidDetails: {
-                subject: user.vapid_subject || 'mailto:admin@localhost',
-                publicKey: user.vapid_public_key,
-                privateKey
-              }
-            }
-          ),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Push send timeout')), PUSH_TIMEOUT))
-        ])
-        sent++
-      } catch (err) {
-        fastify.log.warn({ endpoint: sub.endpoint, statusCode: err.statusCode, message: err.message }, 'Push send failed')
-        if (err.statusCode === 410 || err.statusCode === 404) {
-          try {
-            await fastify.db.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint])
-          } catch (delErr) {
-            fastify.log.error({ err: delErr }, 'Failed to delete stale push subscription')
-          }
-        }
-        failed++
-      }
-    }
-    return { sent, failed }
-  } finally {
-    client.release()
+  // Read everything needed from the DB first and give the pooled client back
+  // BEFORE any network I/O — a single push send can take up to PUSH_SEND_TIMEOUT.
+  const { rows: userRows } = await fastify.db.query(
+    'SELECT vapid_public_key, vapid_private_key, vapid_subject FROM users WHERE id = $1',
+    [userId]
+  )
+  const user = userRows[0]
+  if (!user?.vapid_public_key || !user?.vapid_private_key) {
+    fastify.log.warn({ userId }, 'sendPushToAll skipped: VAPID keys not configured')
+    return { sent: 0, failed: 0 }
   }
+
+  const privateKey = decrypt(user.vapid_private_key)
+  const { rows } = await fastify.db.query(
+    'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1',
+    [userId]
+  )
+  fastify.log.info({ userId, subscriptions: rows.length }, 'Sending push notifications')
+
+  let sent = 0, failed = 0
+  const PUSH_TIMEOUT = parseInt(process.env.PUSH_SEND_TIMEOUT || '10000', 10)
+  await Promise.all(rows.map(sub => fastify.pushLimit(async () => {
+    let timer = null
+    try {
+      await Promise.race([
+        webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          payload,
+          {
+            vapidDetails: {
+              subject: user.vapid_subject || 'mailto:admin@localhost',
+              publicKey: user.vapid_public_key,
+              privateKey
+            }
+          }
+        ),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Push send timeout')), PUSH_TIMEOUT)
+        })
+      ])
+      sent++
+    } catch (err) {
+      fastify.log.warn({ endpoint: sub.endpoint, statusCode: err.statusCode, message: err.message }, 'Push send failed')
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        try {
+          await fastify.db.query('DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id = $2', [sub.endpoint, userId])
+        } catch (delErr) {
+          fastify.log.error({ err: delErr }, 'Failed to delete stale push subscription')
+        }
+      }
+      failed++
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  })))
+  return { sent, failed }
 }
 
 export async function createNotification(fastify, { userId, type, title, message, data = {} }) {

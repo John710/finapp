@@ -1,7 +1,29 @@
 import Papa from 'papaparse'
 
+// Guard against CSV formula injection: a note/category that begins with
+// =, +, -, @ (or a tab/CR) would be executed as a formula when the export is
+// opened in Excel/LibreOffice. Prefix such values with a single quote.
+function csvSafe(value) {
+  if (value === null || value === undefined) return ''
+  const s = String(value)
+  return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s
+}
+
 async function exportRoutes(fastify, opts) {
-  fastify.get('/export/csv', async (request, reply) => {
+  fastify.get('/export/csv', {
+    schema: {
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          from: { type: 'string', format: 'date' },
+          to: { type: 'string', format: 'date' },
+          account_id: { type: 'integer' },
+          category_id: { type: 'integer' }
+        }
+      }
+    }
+  }, async (request, reply) => {
     const userId = request.user.userId
     const { from, to, account_id, category_id } = request.query
     let where = ['t.user_id = $1']
@@ -33,12 +55,12 @@ async function exportRoutes(fastify, opts) {
 
     const rows = result.rows.map(r => ({
       Date: r.date,
-      Account: r.account_name || '',
+      Account: csvSafe(r.account_name),
       Type: r.type,
-      Category: r.category_name || '',
+      Category: csvSafe(r.category_name),
       Amount: r.amount,
       Currency: r.currency,
-      Note: r.note || ''
+      Note: csvSafe(r.note)
     }))
 
     const csv = Papa.unparse(rows, {

@@ -75,11 +75,18 @@ async function importRoutes(fastify, opts) {
       delimiter
     })
 
-    const rows = parseResult.data
+    let rows = parseResult.data
     const preview = rows.slice(0, 5)
 
     if (options.previewOnly) {
       return { preview, headers: parseResult.meta.fields }
+    }
+
+    // Bound the size of a single import transaction (multipart caps the file at 5MB,
+    // but row counts can still be huge with minified CSVs)
+    const MAX_IMPORT_ROWS = 20000
+    if (rows.length > MAX_IMPORT_ROWS) {
+      rows = rows.slice(0, MAX_IMPORT_ROWS)
     }
 
     const client = await fastify.db.connect()
@@ -88,7 +95,9 @@ async function importRoutes(fastify, opts) {
     try {
       await client.query('BEGIN')
 
-      const accountsRes = await client.query('SELECT id, name, currency FROM accounts WHERE user_id = $1', [userId])
+      // Deterministic order so the "account not specified" fallback below always
+      // picks the same (oldest) account instead of a random one.
+      const accountsRes = await client.query('SELECT id, name, currency FROM accounts WHERE user_id = $1 ORDER BY id', [userId])
       const accountsMap = new Map(accountsRes.rows.map(a => [a.name.toLowerCase(), a]))
 
       const categoriesRes = await client.query('SELECT id, name, type FROM categories WHERE user_id = $1', [userId])
@@ -181,8 +190,9 @@ async function importRoutes(fastify, opts) {
           )
 
           stats.created++
-        } catch (err) {
-          stats.errors.push({ row: row[mapping.date] || '?', error: err.message })
+        } catch {
+          // Don't leak internal error text (DB details) into the response
+          stats.errors.push({ row: row[mapping.date] || '?', error: 'Failed to import row' })
         }
       }
 

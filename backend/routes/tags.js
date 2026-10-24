@@ -21,8 +21,8 @@ async function tagRoutes(fastify, opts) {
         type: 'object',
         required: ['name'],
         properties: {
-          name: { type: 'string', minLength: 1 },
-          color: { type: 'string' }
+          name: { type: 'string', minLength: 1, maxLength: 100 },
+          color: { type: 'string', maxLength: 32 }
         }
       }
     }
@@ -40,12 +40,17 @@ async function tagRoutes(fastify, opts) {
   // Update
   fastify.put('/tags/:id', {
     schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      },
       body: {
         type: 'object',
         required: ['name'],
         properties: {
-          name: { type: 'string', minLength: 1 },
-          color: { type: 'string' }
+          name: { type: 'string', minLength: 1, maxLength: 100 },
+          color: { type: 'string', maxLength: 32 }
         }
       }
     }
@@ -65,7 +70,15 @@ async function tagRoutes(fastify, opts) {
   })
 
   // Delete
-  fastify.delete('/tags/:id', async (request, reply) => {
+  fastify.delete('/tags/:id', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      }
+    }
+  }, async (request, reply) => {
     const userId = request.user.userId
     const { id } = request.params
     await fastify.db.query('DELETE FROM tags WHERE id = $1 AND user_id = $2', [id, userId])

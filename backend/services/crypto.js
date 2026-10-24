@@ -33,11 +33,18 @@ export function decrypt(encrypted) {
     // Not encrypted (legacy plaintext value)
     return encrypted
   }
-  const key = getKey()
-  const [ivHex, authTagHex, ciphertextHex] = encrypted.split(':')
-  const decipher = crypto.createDecipheriv(ALGO, key, Buffer.from(ivHex, 'hex'))
-  decipher.setAuthTag(Buffer.from(authTagHex, 'hex'))
-  return Buffer.concat([decipher.update(Buffer.from(ciphertextHex, 'hex')), decipher.final()]).toString('utf8')
+  try {
+    const key = getKey()
+    const [ivHex, authTagHex, ciphertextHex] = encrypted.split(':')
+    const decipher = crypto.createDecipheriv(ALGO, key, Buffer.from(ivHex, 'hex'))
+    decipher.setAuthTag(Buffer.from(authTagHex, 'hex'))
+    return Buffer.concat([decipher.update(Buffer.from(ciphertextHex, 'hex')), decipher.final()]).toString('utf8')
+  } catch {
+    // Corrupted ciphertext or a key mismatch (e.g. ENCRYPTION_KEY rotated
+    // without re-encryption): treat the value as absent instead of failing
+    // the whole request.
+    return null
+  }
 }
 
 export function isEncrypted(value) {

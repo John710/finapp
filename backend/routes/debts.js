@@ -99,13 +99,13 @@ async function debtRoutes(fastify, opts) {
         type: 'object',
         required: ['name', 'counterparty', 'amount', 'type'],
         properties: {
-          name: { type: 'string', minLength: 1 },
-          counterparty: { type: 'string', minLength: 1 },
-          amount: { type: 'number', minimum: 0 },
-          currency: { type: 'string' },
+          name: { type: 'string', minLength: 1, maxLength: 200 },
+          counterparty: { type: 'string', minLength: 1, maxLength: 200 },
+          amount: { type: 'number', exclusiveMinimum: 0, maximum: 1e12 },
+          currency: { type: 'string', maxLength: 10 },
           type: { type: 'string', enum: ['lend', 'borrow'] },
-          due_date: { type: 'string' },
-          description: { type: 'string' },
+          due_date: { type: 'string', format: 'date' },
+          description: { type: 'string', maxLength: 2000 },
           account_id: { type: ['integer', 'null'] }
         }
       }
@@ -118,6 +118,15 @@ async function debtRoutes(fastify, opts) {
     try {
       await client.query('BEGIN')
       const rates = await loadRates(client)
+
+      if (account_id) {
+        const accRes = await client.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
+        if (accRes.rows.length === 0) {
+          await client.query('ROLLBACK')
+          reply.code(404)
+          return { error: 'Account not found' }
+        }
+      }
 
       const result = await client.query(
         'INSERT INTO debts (user_id, name, counterparty, amount, currency, type, due_date, description, account_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
@@ -155,17 +164,22 @@ async function debtRoutes(fastify, opts) {
   // Update
   fastify.put('/debts/:id', {
     schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      },
       body: {
         type: 'object',
         required: ['name', 'counterparty', 'amount', 'type'],
         properties: {
-          name: { type: 'string', minLength: 1 },
-          counterparty: { type: 'string', minLength: 1 },
-          amount: { type: 'number', minimum: 0 },
-          currency: { type: 'string' },
+          name: { type: 'string', minLength: 1, maxLength: 200 },
+          counterparty: { type: 'string', minLength: 1, maxLength: 200 },
+          amount: { type: 'number', exclusiveMinimum: 0, maximum: 1e12 },
+          currency: { type: 'string', maxLength: 10 },
           type: { type: 'string', enum: ['lend', 'borrow'] },
-          due_date: { type: 'string' },
-          description: { type: 'string' },
+          due_date: { type: 'string', format: 'date' },
+          description: { type: 'string', maxLength: 2000 },
           status: { type: 'string', enum: ['active', 'paid'] },
           account_id: { type: ['integer', 'null'] }
         }
@@ -175,6 +189,13 @@ async function debtRoutes(fastify, opts) {
     const userId = request.user.userId
     const { id } = request.params
     const { name, counterparty, amount, currency, type, due_date, description, status, account_id } = request.body
+    if (account_id) {
+      const accRes = await fastify.db.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
+      if (accRes.rows.length === 0) {
+        reply.code(404)
+        return { error: 'Account not found' }
+      }
+    }
     const result = await fastify.db.query(
       'UPDATE debts SET name = $1, counterparty = $2, amount = $3, currency = $4, type = $5, due_date = $6, description = $7, status = $8, account_id = $9, updated_at = NOW() WHERE id = $10 AND user_id = $11 RETURNING *',
       [name, counterparty, amount, currency, type, due_date, description, status, account_id, id, userId]
@@ -189,13 +210,18 @@ async function debtRoutes(fastify, opts) {
   // Add payment
   fastify.post('/debts/:id/payments', {
     schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      },
       body: {
         type: 'object',
         required: ['amount'],
         properties: {
-          amount: { type: 'number', minimum: 0 },
-          currency: { type: 'string' },
-          note: { type: 'string' },
+          amount: { type: 'number', exclusiveMinimum: 0, maximum: 1e12 },
+          currency: { type: 'string', maxLength: 10 },
+          note: { type: 'string', maxLength: 1000 },
           account_id: { type: ['integer', 'null'] }
         }
       }
@@ -205,6 +231,8 @@ async function debtRoutes(fastify, opts) {
     const { id } = request.params
     const { amount, currency, note, account_id } = request.body
     const client = await fastify.db.connect()
+    let debtFullyPaid = null
+    let created = null
     try {
       await client.query('BEGIN')
       const rates = await loadRates(client)
@@ -212,11 +240,21 @@ async function debtRoutes(fastify, opts) {
       const debtRes = await client.query('SELECT amount, currency, type, name FROM debts WHERE id = $1 AND user_id = $2', [id, userId])
       const debt = debtRes.rows[0]
       if (!debt) {
+        await client.query('ROLLBACK')
         reply.code(404)
         return { error: 'Debt not found' }
       }
       const debtCurrency = debt.currency || 'USD'
       const paymentCurrency = currency || debtCurrency
+
+      if (account_id) {
+        const accRes = await client.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId])
+        if (accRes.rows.length === 0) {
+          await client.query('ROLLBACK')
+          reply.code(404)
+          return { error: 'Account not found' }
+        }
+      }
 
       const result = await client.query(
         'INSERT INTO debt_payments (user_id, debt_id, amount, currency, note, account_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
@@ -258,33 +296,48 @@ async function debtRoutes(fastify, opts) {
       }
       if (paid >= parseFloat(debt.amount)) {
         await client.query('UPDATE debts SET status = $1 WHERE id = $2 AND user_id = $3', ['paid', id, userId])
-        try {
-          const lang = await getUserLang(fastify.db, userId)
-          const title = t('notifications.debt_paid', {}, lang)
-          const message = t('notifications.debt_paid_body', { name: debt.name }, lang)
-          await notify(fastify, userId, {
-            type: 'debt_paid', title, message,
-            data: { entity_id: id, url: '/debts' },
-            channels: ['bell', 'push', 'shoutrrr']
-          })
-        } catch (notifErr) {
-          fastify.log.warn(notifErr, 'Debt paid notification failed')
-        }
+        debtFullyPaid = debt
       }
 
       await client.query('COMMIT')
       reply.code(201)
-      return result.rows[0]
+      created = result.rows[0]
     } catch (err) {
       await client.query('ROLLBACK')
       throw err
     } finally {
       client.release()
     }
+
+    // Notifications (network: push/shoutrrr) run only AFTER the DB transaction
+    // has committed — they must never hold the transaction or the pooled client.
+    if (debtFullyPaid) {
+      try {
+        const lang = await getUserLang(fastify.db, userId)
+        const title = t('notifications.debt_paid', {}, lang)
+        const message = t('notifications.debt_paid_body', { name: debtFullyPaid.name }, lang)
+        await notify(fastify, userId, {
+          type: 'debt_paid', title, message,
+          data: { entity_id: id, url: '/debts' },
+          channels: ['bell', 'push', 'shoutrrr']
+        })
+      } catch (notifErr) {
+        fastify.log.warn(notifErr, 'Debt paid notification failed')
+      }
+    }
+    return created
   })
 
   // Get payments
-  fastify.get('/debts/:id/payments', async (request, reply) => {
+  fastify.get('/debts/:id/payments', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      }
+    }
+  }, async (request, reply) => {
     const userId = request.user.userId
     const { id } = request.params
     const result = await fastify.db.query(
@@ -295,7 +348,15 @@ async function debtRoutes(fastify, opts) {
   })
 
   // Delete
-  fastify.delete('/debts/:id', async (request, reply) => {
+  fastify.delete('/debts/:id', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      }
+    }
+  }, async (request, reply) => {
     const userId = request.user.userId
     const { id } = request.params
     await fastify.db.query('DELETE FROM debts WHERE id = $1 AND user_id = $2', [id, userId])

@@ -1,5 +1,27 @@
 import { loadRates, convertAmount } from '../services/currency.js'
 
+// Grouping by calendar month must not depend on the server timezone: node-pg
+// parses DATE columns as local midnight, so toISOString() can shift the value
+// into the previous month. Use local components for Date, plain slice for strings.
+function monthKey(date) {
+  if (typeof date === 'string') return date.slice(0, 7)
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  return `${y}-${m}`
+}
+
+const dateRangeSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    from: { type: 'string', format: 'date' },
+    to: { type: 'string', format: 'date' },
+    account_id: { type: 'integer' },
+    type: { type: 'string', enum: ['income', 'expense', 'transfer'] },
+    base_currency: { type: 'string', pattern: '^[A-Z]{3}$', default: 'USD' }
+  }
+}
+
 async function reportRoutes(fastify, opts) {
   function getReportValue(tx, baseCurrency, rates) {
     const amount = parseFloat(tx.amount)
@@ -29,7 +51,7 @@ async function reportRoutes(fastify, opts) {
     return result.rows
   }
 
-  fastify.get('/reports/summary', async (request, reply) => {
+  fastify.get('/reports/summary', { schema: { querystring: dateRangeSchema } }, async (request, reply) => {
     const userId = request.user.userId
     const { from, to, account_id, base_currency = 'USD' } = request.query
     let where = []
@@ -82,7 +104,7 @@ async function reportRoutes(fastify, opts) {
     }
   })
 
-  fastify.get('/reports/by-category', async (request, reply) => {
+  fastify.get('/reports/by-category', { schema: { querystring: dateRangeSchema } }, async (request, reply) => {
     const userId = request.user.userId
     const { from, to, type, base_currency = 'USD' } = request.query
     let where = []
@@ -106,7 +128,9 @@ async function reportRoutes(fastify, opts) {
 
     for (const tx of txs) {
       const val = getReportValue(tx, base_currency, rates)
-      grandTotal += val
+      // Transfers are not spending/income — including them in grandTotal skews
+      // every category percentage.
+      if (tx.type !== 'transfer') grandTotal += val
 
       const key = tx.category_id || 'uncategorized'
       if (!categoryMap.has(key)) {
@@ -135,7 +159,7 @@ async function reportRoutes(fastify, opts) {
     return rows
   })
 
-  fastify.get('/reports/trend', async (request, reply) => {
+  fastify.get('/reports/trend', { schema: { querystring: dateRangeSchema } }, async (request, reply) => {
     const userId = request.user.userId
     const { from, to, base_currency = 'USD' } = request.query
     let where = []
@@ -153,7 +177,7 @@ async function reportRoutes(fastify, opts) {
     const monthMap = new Map()
 
     for (const tx of txs) {
-      const month = typeof tx.date === 'string' ? tx.date.slice(0, 7) : tx.date.toISOString().slice(0, 7)
+      const month = monthKey(tx.date)
       const val = getReportValue(tx, base_currency, rates)
 
       if (!monthMap.has(month)) {
@@ -178,61 +202,93 @@ async function reportRoutes(fastify, opts) {
     return rows
   })
 
-  fastify.get('/reports/net-worth', async (request, reply) => {
+  fastify.get('/reports/net-worth', {
+    schema: {
+      querystring: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          months: { type: 'integer', minimum: 1, maximum: 120, default: 12 },
+          base_currency: { type: 'string', pattern: '^[A-Z]{3}$', default: 'USD' }
+        }
+      }
+    }
+  }, async (request, reply) => {
     const userId = request.user.userId
-    const { months = 12, base_currency = 'USD' } = request.query
-    const monthsInt = parseInt(months, 10) || 12
+    const { months: monthsInt = 12, base_currency = 'USD' } = request.query
 
     const rates = await loadRates(fastify.db)
 
+    // Anchor the series to the CURRENT account balances: they already include
+    // initial balances and manual adjustments that have no transaction rows.
+    // Monthly values are reconstructed backwards from the signed transaction
+    // flow, so months before the first transaction still show real balances.
+    const accountsRes = await fastify.db.query(
+      'SELECT balance, currency FROM accounts WHERE user_id = $1',
+      [userId]
+    )
+    let currentTotal = 0
+    for (const acc of accountsRes.rows) {
+      const amount = parseFloat(acc.balance)
+      if (!acc.currency || acc.currency === base_currency) {
+        currentTotal += amount
+        continue
+      }
+      const converted = convertAmount(amount, acc.currency, base_currency, rates)
+      if (converted !== null) currentTotal += converted
+      else {
+        fastify.log.warn(`Net-worth conversion failed for ${acc.currency} -> ${base_currency}, using raw amount`)
+        currentTotal += amount
+      }
+    }
+
     const allTxs = await fastify.db.query(`
-      SELECT t.amount, t.type, t.date, a.currency as account_currency, a.type as account_type
+      SELECT t.amount, t.type, t.date, a.currency as account_currency
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
       ORDER BY t.date ASC
     `, [userId])
 
-    const monthlyData = new Map()
-    let runningBalance = 0
-
-    const now = new Date()
-    const startDate = new Date(now.getFullYear(), now.getMonth() - monthsInt + 1, 1)
-
+    // Signed monthly flow: income adds (the paired leg of a transfer is an
+    // income row, so incoming transfers count too), expense/transfer-out subtract.
+    const flowByMonth = new Map()
     for (const tx of allTxs.rows) {
       const val = getReportValue(tx, base_currency, rates)
       const sign = tx.type === 'income' ? 1 : -1
-      runningBalance += val * sign
-
-      const month = typeof tx.date === 'string' ? tx.date.slice(0, 7) : tx.date.toISOString().slice(0, 7)
-      if (!monthlyData.has(month)) {
-        monthlyData.set(month, { change: 0, balance: runningBalance })
-      }
-      const m = monthlyData.get(month)
-      m.change += val * sign
-      m.balance = runningBalance
+      const month = monthKey(tx.date)
+      flowByMonth.set(month, (flowByMonth.get(month) || 0) + val * sign)
     }
 
-    const output = []
-    let lastBalance = 0
-    for (let d = new Date(startDate); d <= now; d.setMonth(d.getMonth() + 1)) {
-      const month = d.toISOString().slice(0, 7)
-      const data = monthlyData.get(month)
-      if (data) {
-        lastBalance = data.balance
-        output.push({
-          month,
-          change: parseFloat(data.change.toFixed(2)),
-          balance: parseFloat(data.balance.toFixed(2))
-        })
-      } else {
-        output.push({ month, change: 0, balance: parseFloat(lastBalance.toFixed(2)) })
-      }
+    const now = new Date()
+    const start = new Date(now.getFullYear(), now.getMonth() - monthsInt + 1, 1)
+    const monthsList = []
+    for (let d = new Date(start); d <= now; d.setMonth(d.getMonth() + 1)) {
+      monthsList.push(monthKey(d))
     }
 
-    return output
+    // Flows after the window still differ from the anchor; subtract them first.
+    const lastMonth = monthsList[monthsList.length - 1]
+    let suffixFlow = 0
+    for (const [m, f] of flowByMonth) {
+      if (m > lastMonth) suffixFlow += f
+    }
+
+    // Walk backwards: balance(end of month i-1) = balance(end of month i) - flow(i)
+    const balances = new Array(monthsList.length)
+    let bal = currentTotal - suffixFlow
+    for (let i = monthsList.length - 1; i >= 0; i--) {
+      balances[i] = bal
+      bal -= flowByMonth.get(monthsList[i]) || 0
+    }
+
+    return monthsList.map((month, i) => ({
+      month,
+      change: parseFloat((flowByMonth.get(month) || 0).toFixed(2)),
+      balance: parseFloat(balances[i].toFixed(2))
+    }))
   })
 
-  fastify.get('/reports/savings-rate', async (request, reply) => {
+  fastify.get('/reports/savings-rate', { schema: { querystring: dateRangeSchema } }, async (request, reply) => {
     const userId = request.user.userId
     const { from, to, base_currency = 'USD' } = request.query
     let where = []

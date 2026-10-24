@@ -2,6 +2,7 @@
   "auth": {
     "invalid_credentials": "Неверный логин или пароль",
     "user_already_exists": "Пользователь уже существует",
+    "registration_closed": "Регистрация закрыта: у этого экземпляра уже есть владелец",
     "user_not_found": "Пользователь не найден",
     "no_refresh_token": "Отсутствует refresh токен",
     "invalid_refresh_token": "Недействительный refresh токен",

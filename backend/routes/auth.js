@@ -23,6 +23,18 @@ function hashToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex')
 }
 
+// Secrets (shoutrrr urls embed tokens, coingecko keys are paid) are never
+// returned to the client in full — only a masked preview plus a *_set flag.
+const MASK = '\u2022\u2022\u2022\u2022'
+function maskSecret(value) {
+  if (!value) return null
+  const str = String(value)
+  return str.length <= 4 ? MASK : MASK + str.slice(-4)
+}
+function isMaskedSecret(value) {
+  return typeof value === 'string' && value.startsWith(MASK)
+}
+
 async function authRoutes(fastify, opts) {
   fastify.get('/auth/setup-required', { config: { public: true } }, async (request, reply) => {
     const result = await fastify.db.query('SELECT 1 FROM users LIMIT 1')
@@ -36,8 +48,8 @@ async function authRoutes(fastify, opts) {
         type: 'object',
         required: ['login', 'password'],
         properties: {
-          login: { type: 'string', minLength: 3 },
-          password: { type: 'string', minLength: 6 },
+          login: { type: 'string', minLength: 3, maxLength: 64 },
+          password: { type: 'string', minLength: 8, maxLength: 128 },
           language: { type: 'string', default: 'en' }
         }
       }
@@ -51,9 +63,10 @@ async function authRoutes(fastify, opts) {
       await client.query('SELECT pg_advisory_xact_lock(123456)')
       const existing = await client.query('SELECT 1 FROM users LIMIT 1')
       if (existing.rows.length > 0) {
+        // Registration is only open until the first user exists (initial setup).
         await client.query('ROLLBACK')
         reply.code(400)
-        return { error: t('auth.user_already_exists', {}, language || process.env.DEFAULT_LANG || 'en') }
+        return { error: t('auth.registration_closed', {}, language || process.env.DEFAULT_LANG || 'en') }
       }
 
       const hash = await bcrypt.hash(password, 12)
@@ -78,8 +91,8 @@ async function authRoutes(fastify, opts) {
         type: 'object',
         required: ['login', 'password'],
         properties: {
-          login: { type: 'string' },
-          password: { type: 'string' },
+          login: { type: 'string', maxLength: 64 },
+          password: { type: 'string', maxLength: 128 },
           language: { type: 'string', default: 'en' }
         }
       }
@@ -144,8 +157,10 @@ async function authRoutes(fastify, opts) {
         login: user.login,
         language: user.language,
         base_currency: user.base_currency,
-        coingecko_api_key: decrypt(user.coingecko_api_key),
-        shoutrrr_url: decrypt(user.shoutrrr_url),
+        coingecko_api_key: maskSecret(decrypt(user.coingecko_api_key)),
+        coingecko_api_key_set: Boolean(user.coingecko_api_key),
+        shoutrrr_url: maskSecret(decrypt(user.shoutrrr_url)),
+        shoutrrr_url_set: Boolean(user.shoutrrr_url),
         vapid_public_key: user.vapid_public_key,
         vapid_subject: user.vapid_subject
       }
@@ -164,17 +179,6 @@ async function authRoutes(fastify, opts) {
     try {
       const payload = fastify.verifyRefreshToken(refreshToken)
       const tokenHash = hashToken(refreshToken)
-      const tokenRes = await fastify.db.query(
-        'SELECT * FROM refresh_tokens WHERE user_id = $1 AND token_hash = $2 AND expires_at > NOW()',
-        [payload.userId, tokenHash]
-      )
-      if (tokenRes.rows.length === 0) {
-        await fastify.db.query('DELETE FROM refresh_tokens WHERE user_id = $1', [payload.userId])
-        fastify.log.warn({ userId: payload.userId, ip: request.ip, reason: 'invalid_refresh_token' }, 'Refresh failed')
-        reply.code(401)
-        return { error: t('auth.invalid_refresh_token', {}, lang) }
-      }
-
       const result = await fastify.db.query('SELECT * FROM users WHERE id = $1', [payload.userId])
       if (result.rows.length === 0) {
         fastify.log.warn({ userId: payload.userId, ip: request.ip, reason: 'user_not_found' }, 'Refresh failed')
@@ -183,23 +187,38 @@ async function authRoutes(fastify, opts) {
       }
 
       const user = result.rows[0]
-      fastify.log.info({ userId: user.id, ip: request.ip }, 'Token refreshed')
 
-      // Rotate refresh token atomically
       const newAccessToken = fastify.signAccessToken({ userId: user.id, login: user.login })
       const newRefreshToken = fastify.signRefreshToken({ userId: user.id })
       const newRefreshTokenHash = hashToken(newRefreshToken)
       const refreshExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 
+      // Rotate the refresh token atomically: check, consume and replace happen in
+      // one transaction. The DELETE ... RETURNING guard means a token that was
+      // already consumed by a concurrent request (theft/replay) is detected here
+      // instead of silently issuing a second replacement.
+      let rotated = false
       const client = await fastify.db.connect()
       try {
         await client.query('BEGIN')
-        await client.query('DELETE FROM refresh_tokens WHERE id = $1', [tokenRes.rows[0].id])
-        await client.query(
-          'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
-          [user.id, newRefreshTokenHash, refreshExpires]
+        const tokenRes = await client.query(
+          'SELECT id FROM refresh_tokens WHERE user_id = $1 AND token_hash = $2 AND expires_at > NOW()',
+          [payload.userId, tokenHash]
         )
-        await client.query('COMMIT')
+        if (tokenRes.rows.length > 0) {
+          const consumed = await client.query(
+            'DELETE FROM refresh_tokens WHERE id = $1 AND user_id = $2 RETURNING id',
+            [tokenRes.rows[0].id, payload.userId]
+          )
+          if (consumed.rowCount > 0) {
+            await client.query(
+              'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+              [user.id, newRefreshTokenHash, refreshExpires]
+            )
+            rotated = true
+          }
+        }
+        await client.query(rotated ? 'COMMIT' : 'ROLLBACK')
       } catch (err) {
         await client.query('ROLLBACK')
         throw err
@@ -207,6 +226,16 @@ async function authRoutes(fastify, opts) {
         client.release()
       }
 
+      if (!rotated) {
+        // The presented token was already used or is unknown → possible replay:
+        // revoke every session of this user.
+        await fastify.db.query('DELETE FROM refresh_tokens WHERE user_id = $1', [payload.userId])
+        fastify.log.warn({ userId: payload.userId, ip: request.ip, reason: 'invalid_refresh_token' }, 'Refresh failed')
+        reply.code(401)
+        return { error: t('auth.invalid_refresh_token', {}, lang) }
+      }
+
+      fastify.log.info({ userId: user.id, ip: request.ip }, 'Token refreshed')
       reply.setCookie(ACCESS_TOKEN_NAME, newAccessToken, getCookieOptions(request, 15 * 60 * 1000))
       reply.setCookie(REFRESH_TOKEN_NAME, newRefreshToken, getCookieOptions(request, 30 * 24 * 60 * 60 * 1000))
 
@@ -216,8 +245,10 @@ async function authRoutes(fastify, opts) {
           login: user.login,
           language: user.language,
           base_currency: user.base_currency,
-          coingecko_api_key: decrypt(user.coingecko_api_key),
-          shoutrrr_url: decrypt(user.shoutrrr_url),
+          coingecko_api_key: maskSecret(decrypt(user.coingecko_api_key)),
+          coingecko_api_key_set: Boolean(user.coingecko_api_key),
+          shoutrrr_url: maskSecret(decrypt(user.shoutrrr_url)),
+          shoutrrr_url_set: Boolean(user.shoutrrr_url),
           vapid_public_key: user.vapid_public_key,
           vapid_subject: user.vapid_subject
         }
@@ -249,8 +280,9 @@ async function authRoutes(fastify, opts) {
       let idx = 1
       if (language !== undefined) { fields.push(`language = $${idx++}`); values.push(language) }
       if (base_currency !== undefined) { fields.push(`base_currency = $${idx++}`); values.push(base_currency) }
-      if (coingecko_api_key !== undefined) { fields.push(`coingecko_api_key = $${idx++}`); values.push(encrypt((coingecko_api_key || '').trim() || null)) }
-      if (shoutrrr_url !== undefined) { fields.push(`shoutrrr_url = $${idx++}`); values.push(encrypt((shoutrrr_url || '').trim() || null)) }
+      // Masked previews sent back by the client mean "keep the stored value"
+      if (coingecko_api_key !== undefined && !isMaskedSecret(coingecko_api_key)) { fields.push(`coingecko_api_key = $${idx++}`); values.push(encrypt((coingecko_api_key || '').trim() || null)) }
+      if (shoutrrr_url !== undefined && !isMaskedSecret(shoutrrr_url)) { fields.push(`shoutrrr_url = $${idx++}`); values.push(encrypt((shoutrrr_url || '').trim() || null)) }
       if (fields.length === 0) return { success: false, error: 'No fields to update' }
       values.push(request.user.userId)
       await fastify.db.query(`UPDATE users SET ${fields.join(', ')} WHERE id = $${idx}`, values)
@@ -278,9 +310,18 @@ async function authRoutes(fastify, opts) {
       return { error: 'User not found' }
     }
     const user = result.rows[0]
-    user.shoutrrr_url = decrypt(user.shoutrrr_url)
-    user.coingecko_api_key = decrypt(user.coingecko_api_key)
-    return user
+    return {
+      id: user.id,
+      login: user.login,
+      language: user.language,
+      base_currency: user.base_currency,
+      coingecko_api_key: maskSecret(decrypt(user.coingecko_api_key)),
+      coingecko_api_key_set: Boolean(user.coingecko_api_key),
+      shoutrrr_url: maskSecret(decrypt(user.shoutrrr_url)),
+      shoutrrr_url_set: Boolean(user.shoutrrr_url),
+      vapid_public_key: user.vapid_public_key,
+      vapid_subject: user.vapid_subject
+    }
   })
 
   fastify.patch('/users/language', {
@@ -305,8 +346,8 @@ async function authRoutes(fastify, opts) {
         type: 'object',
         required: ['current_password', 'new_password'],
         properties: {
-          current_password: { type: 'string' },
-          new_password: { type: 'string', minLength: 6 }
+          current_password: { type: 'string', maxLength: 128 },
+          new_password: { type: 'string', minLength: 8, maxLength: 128 }
         }
       }
     }
@@ -325,16 +366,19 @@ async function authRoutes(fastify, opts) {
       reply.code(401)
       return { error: t('auth.invalid_current_password', {}, lang) }
     }
-    const newHash = await bcrypt.hash(new_password, 12)
-    await fastify.db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, userId])
-    fastify.log.info({ userId, ip: request.ip }, 'Password changed')
 
-    // Require a browser session to keep current session
+    // Validate the browser session BEFORE mutating anything: without a refresh
+    // cookie we cannot keep this session alive, and the password must not change.
     const currentRefresh = request.cookies?.refreshToken
     if (!currentRefresh) {
       reply.code(400)
       return { error: t('auth.session_required_for_password_change', {}, lang) }
     }
+
+    const newHash = await bcrypt.hash(new_password, 12)
+    await fastify.db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, userId])
+    fastify.log.info({ userId, ip: request.ip }, 'Password changed')
+
     const currentHash = hashToken(currentRefresh)
     await fastify.db.query(
       'DELETE FROM refresh_tokens WHERE user_id = $1 AND token_hash != $2',
@@ -416,18 +460,28 @@ async function authRoutes(fastify, opts) {
     schema: {
       body: {
         type: 'object',
-        required: ['coingecko_api_key'],
         properties: {
-          coingecko_api_key: { type: 'string', minLength: 1 }
+          coingecko_api_key: { type: 'string', maxLength: 255 }
         }
       }
     }
   }, async (request, reply) => {
-    const { coingecko_api_key } = request.body
+    let { coingecko_api_key } = request.body || {}
+    // The UI shows a masked preview of the stored key; when the mask (or
+    // nothing) comes back, test the STORED secret instead of the literal input.
+    if (!coingecko_api_key || isMaskedSecret(coingecko_api_key)) {
+      const { rows } = await fastify.db.query('SELECT coingecko_api_key FROM users WHERE id = $1', [request.user.userId])
+      coingecko_api_key = decrypt(rows[0]?.coingecko_api_key)
+      if (!coingecko_api_key) {
+        reply.code(400)
+        return { valid: false, error: 'No API key configured' }
+      }
+    }
     try {
+      // The key travels in a header, not in the URL (URLs end up in proxy logs)
       const res = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&x_cg_demo_api_key=${encodeURIComponent(coingecko_api_key)}`,
-        { method: 'GET' }
+        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd',
+        { method: 'GET', headers: { 'x-cg-demo-api-key': coingecko_api_key }, signal: AbortSignal.timeout(10000) }
       )
       if (res.ok) {
         return { valid: true }

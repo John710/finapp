@@ -98,16 +98,20 @@ async function start() {
   })
 
   // Rate limit
+  // NOTE: Fastify 5 removed `req.routerPath` — it silently evaluates to undefined,
+  // which used to make allowList() return true for every request (no limiting at all).
+  // `req.routeOptions.url` (available in the onRequest hook for matched routes) is the
+  // correct property; unmatched routes (404) stay unlimited.
   await app.register(rateLimit, {
     max: async (req, key) => {
-      if (req.routerPath?.startsWith('/api/v1/auth')) return 10
+      if (req.routeOptions?.url?.startsWith('/api/v1/auth')) return 10
       if (req.method === 'GET') return 100
       return 30
     },
     timeWindow: '1 minute',
     keyGenerator: (req) => req.ip,
     allowList: (req, key) => {
-      if (!req.routerPath?.startsWith('/api/v1')) return true
+      if (!req.routeOptions?.url?.startsWith('/api/v1')) return true
       return false
     }
   })
@@ -145,6 +149,10 @@ async function start() {
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } })
 
   // API routes
+  // /health is also exposed at the root: the Docker/compose healthchecks hit
+  // http://localhost:PORT/health, and without this route they only ever saw
+  // the SPA fallback (HTTP 200) and never verified the database connection.
+  await app.register(healthRoutes)
   await app.register(healthRoutes, { prefix: '/api/v1' })
   await app.register(configRoutes, { prefix: '/api/v1' })
   await app.register(authRoutes, { prefix: '/api/v1' })

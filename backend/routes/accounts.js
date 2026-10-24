@@ -1,3 +1,5 @@
+import { findTransferLeg } from './transactions.js'
+
 async function accountRoutes(fastify, opts) {
   // List
   fastify.get('/accounts', async (request, reply) => {
@@ -45,16 +47,21 @@ async function accountRoutes(fastify, opts) {
   // Update
   fastify.put('/accounts/:id', {
     schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      },
       body: {
         type: 'object',
         required: ['name', 'type', 'currency'],
         properties: {
-          name: { type: 'string', minLength: 1 },
+          name: { type: 'string', minLength: 1, maxLength: 100 },
           type: { type: 'string', enum: ['card', 'cash', 'crypto', 'other', 'goal'] },
           currency: { type: 'string', minLength: 1, maxLength: 10 },
           balance: { type: 'number' },
-          color: { type: 'string' },
-          icon: { type: 'string' },
+          color: { type: 'string', maxLength: 32 },
+          icon: { type: 'string', maxLength: 100000 },
           is_archived: { type: 'boolean' },
           target_amount: { type: 'number' }
         }
@@ -63,10 +70,27 @@ async function accountRoutes(fastify, opts) {
   }, async (request, reply) => {
     const userId = request.user.userId
     const { id } = request.params
-    const { name, type, currency, balance, color, icon, is_archived, target_amount } = request.body
+    const body = request.body
+    // Build SET dynamically so omitted optional fields keep their stored values
+    // instead of being overwritten with NULL.
+    const fields = []
+    const values = []
+    let idx = 1
+    for (const key of ['name', 'type', 'currency', 'balance', 'color', 'icon', 'is_archived', 'target_amount']) {
+      if (body[key] !== undefined) {
+        fields.push(`${key} = $${idx++}`)
+        values.push(body[key])
+      }
+    }
+    if (fields.length === 0) {
+      reply.code(400)
+      return { error: 'No fields to update' }
+    }
+    fields.push('updated_at = NOW()')
+    values.push(id, userId)
     const result = await fastify.db.query(
-      'UPDATE accounts SET name = $1, type = $2, currency = $3, balance = $4, color = $5, icon = $6, is_archived = $7, target_amount = $8, updated_at = NOW() WHERE id = $9 AND user_id = $10 RETURNING *',
-      [name, type, currency, balance, color, icon, is_archived, target_amount, id, userId]
+      `UPDATE accounts SET ${fields.join(', ')} WHERE id = $${idx++} AND user_id = $${idx} RETURNING *`,
+      values
     )
     if (result.rows.length === 0) {
       reply.code(404)
@@ -119,34 +143,62 @@ async function accountRoutes(fastify, opts) {
   })
 
   // Delete
-  fastify.delete('/accounts/:id', async (request, reply) => {
+  fastify.delete('/accounts/:id', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      }
+    }
+  }, async (request, reply) => {
     const userId = request.user.userId
     const { id } = request.params
     const client = await fastify.db.connect()
     try {
       await client.query('BEGIN')
 
-      // Revert balances from all transactions involving this account
-      const txRes = await client.query(
-        'SELECT * FROM transactions WHERE (account_id = $1 OR transfer_to_account_id = $1) AND user_id = $2',
-        [id, userId]
-      )
-      for (const tx of txRes.rows) {
-        const sign = tx.type === 'income' ? 1 : -1
-        await client.query(
-          'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
-          [parseFloat(tx.amount) * sign, tx.account_id, userId]
-        )
-        if (tx.type === 'transfer' && tx.transfer_to_account_id) {
-          await client.query(
-            'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
-            [parseFloat(tx.amount), tx.transfer_to_account_id, userId]
-          )
-        }
+      const accRes = await client.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [id, userId])
+      if (accRes.rows.length === 0) {
+        await client.query('ROLLBACK')
+        reply.code(404)
+        return { error: 'Account not found' }
       }
 
-      await client.query('DELETE FROM transaction_tags WHERE transaction_id IN (SELECT id FROM transactions WHERE (account_id = $1 OR transfer_to_account_id = $1) AND user_id = $2)', [id, userId])
-      await client.query('DELETE FROM transactions WHERE (account_id = $1 OR transfer_to_account_id = $1) AND user_id = $2', [id, userId])
+      // Transfers OUT of this account credited other accounts — take the
+      // credited amount (the paired leg amount, in the TARGET currency) back.
+      const outgoing = await client.query(
+        "SELECT * FROM transactions WHERE account_id = $1 AND user_id = $2 AND type = 'transfer' AND transfer_to_account_id IS NOT NULL",
+        [id, userId]
+      )
+      for (const tx of outgoing.rows) {
+        const leg = await findTransferLeg(client, tx)
+        const credited = leg ? parseFloat(leg.amount) : parseFloat(tx.amount)
+        await client.query(
+          'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
+          [credited, tx.transfer_to_account_id, userId]
+        )
+      }
+
+      // Transfers INTO this account deducted other accounts — give the money
+      // back before their source rows are removed together with the account.
+      const incoming = await client.query(
+        "SELECT * FROM transactions WHERE transfer_to_account_id = $1 AND user_id = $2 AND account_id != $1 AND type = 'transfer'",
+        [id, userId]
+      )
+      for (const tx of incoming.rows) {
+        await client.query(
+          'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
+          [parseFloat(tx.amount), tx.account_id, userId]
+        )
+      }
+
+      // transaction_tags rows cascade via FK; remove every transaction that
+      // lives on this account or references it as a transfer counterparty.
+      await client.query(
+        'DELETE FROM transactions WHERE (account_id = $1 OR transfer_to_account_id = $1) AND user_id = $2',
+        [id, userId]
+      )
       await client.query('DELETE FROM accounts WHERE id = $1 AND user_id = $2', [id, userId])
 
       await client.query('COMMIT')

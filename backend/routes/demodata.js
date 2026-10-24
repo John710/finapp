@@ -32,15 +32,18 @@ async function demodataRoutes(fastify, opts) {
   fastify.post('/admin/load-demo', async (request, reply) => {
     const userId = request.user.userId
 
-    const accountsResult = await fastify.db.query('SELECT 1 FROM accounts WHERE user_id = $1 LIMIT 1', [userId])
-    if (accountsResult.rows.length > 0) {
-      reply.code(400)
-      return { error: 'Database already has data for this user. Clear it first.' }
-    }
-
     const client = await fastify.db.connect()
     try {
       await client.query('BEGIN')
+      // Serialize concurrent demo loads: two parallel requests must not both
+      // pass the "no data yet" check and double-insert.
+      await client.query('SELECT pg_advisory_xact_lock(654321)')
+      const accountsResult = await client.query('SELECT 1 FROM accounts WHERE user_id = $1 LIMIT 1', [userId])
+      if (accountsResult.rows.length > 0) {
+        await client.query('ROLLBACK')
+        reply.code(400)
+        return { error: 'Database already has data for this user. Clear it first.' }
+      }
 
       // --- Accounts ---
       const accounts = [
@@ -107,10 +110,10 @@ async function demodataRoutes(fastify, opts) {
       const today = new Date()
       const transactions = []
 
-      async function createTransaction(txData) {
+      async function createTransaction(txData, pairId = null) {
         const result = await client.query(
-          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, transfer_to_account_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
-          [userId, txData.account_id, txData.category_id, txData.amount, txData.type, txData.date, txData.note, txData.transfer_to_account_id]
+          'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, transfer_to_account_id, transfer_pair_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id',
+          [userId, txData.account_id, txData.category_id, txData.amount, txData.type, txData.date, txData.note, txData.transfer_to_account_id, pairId]
         )
         const txId = result.rows[0].id
 
@@ -199,8 +202,9 @@ async function demodataRoutes(fastify, opts) {
             date: dateStr,
             note: null,
             transfer_to_account_id: accountIds[0]
-          })
+          }, txId)
           transactionIds.push(pairedTxId)
+          await client.query('UPDATE transactions SET transfer_pair_id = $1 WHERE id = $2', [pairedTxId, txId])
         }
 
         if (Math.random() > 0.9) {
@@ -235,8 +239,9 @@ async function demodataRoutes(fastify, opts) {
             date: dateStr,
             note: null,
             transfer_to_account_id: accountIds[0]
-          })
+          }, txId)
           transactionIds.push(pairedTxId)
+          await client.query('UPDATE transactions SET transfer_pair_id = $1 WHERE id = $2', [pairedTxId, txId])
         }
 
         if (Math.random() > 0.92) {

@@ -61,7 +61,7 @@ async function coingeckoFetch(fastify, path, apiKey, opts = {}) {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const res = await fetch(url, { headers: buildHeaders(apiKey) })
+      const res = await fetch(url, { headers: buildHeaders(apiKey), signal: AbortSignal.timeout(15000) })
       const data = await res.json()
 
       if (isCoinGeckoError(data)) {
@@ -100,8 +100,12 @@ async function coingeckoFetch(fastify, path, apiKey, opts = {}) {
 }
 
 async function updateExchangeRates(fastify, userId) {
+  // All external HTTP calls happen BEFORE a DB client is checked out: with
+  // retries they can take a minute or more, and holding a pooled client (and an
+  // open transaction) for that long starves the rest of the app.
   const fiatRes = await fetch(FAWAZAHMED0_URL, {
-    headers: { 'Accept': 'application/json', 'User-Agent': 'FinApp/1.0' }
+    headers: { 'Accept': 'application/json', 'User-Agent': 'FinApp/1.0' },
+    signal: AbortSignal.timeout(15000)
   })
   if (!fiatRes.ok) {
     throw new Error(`Fawazahmed0 HTTP ${fiatRes.status}`)
@@ -111,6 +115,47 @@ async function updateExchangeRates(fastify, userId) {
     throw new Error('Invalid Fawazahmed0 response')
   }
 
+  const userRes = await fastify.db.query('SELECT coingecko_api_key FROM users WHERE id = $1', [userId])
+  const apiKey = decrypt(userRes.rows[0]?.coingecko_api_key) || process.env.COINGECKO_API_KEY
+
+  // Fetch crypto symbols actually used by any account, fallback to top list
+  const accountRes = await fastify.db.query("SELECT DISTINCT UPPER(currency) as currency FROM accounts WHERE type = 'crypto'")
+  const accountSymbols = accountRes.rows.map(r => r.currency.toLowerCase()).filter(Boolean)
+  const symbols = accountSymbols.length ? accountSymbols.join(',') : FALLBACK_SYMBOLS
+  fastify.log.info(`Updating crypto rates for symbols: ${symbols}`)
+
+  const priceRes = await coingeckoFetch(
+    fastify,
+    `/simple/price?vs_currencies=usd&symbols=${encodeURIComponent(symbols)}`,
+    apiKey,
+    { maxAttempts: 3, baseDelay: 10000 }
+  )
+  fastify.log.info(`CoinGecko /simple/price response: ok=${priceRes.ok}, status=${priceRes.status || 'n/a'}, keys=${priceRes.data ? Object.keys(priceRes.data).length : 'n/a'}`)
+
+  // Fallback to /coins/markets for symbols missing from /simple/price (e.g. newer coins on demo plan)
+  let marketsData = null
+  const missingSymbols = priceRes.ok && priceRes.data && !Array.isArray(priceRes.data)
+    ? accountSymbols.filter(s => !priceRes.data[s])
+    : []
+  if (missingSymbols.length) {
+    fastify.log.info(`CoinGecko /simple/price missing symbols: ${missingSymbols.join(',')}, trying /coins/markets fallback`)
+    const marketsRes = await coingeckoFetch(
+      fastify,
+      `/coins/markets?vs_currency=usd&symbols=${encodeURIComponent(missingSymbols.join(','))}&per_page=250`,
+      apiKey,
+      { maxAttempts: 2, baseDelay: 10000 }
+    )
+    if (marketsRes.ok && Array.isArray(marketsRes.data)) {
+      marketsData = marketsRes.data
+    } else {
+      fastify.log.warn(`CoinGecko /coins/markets fallback failed for missing symbols: ${marketsRes.error || 'unknown'}`)
+    }
+  }
+  if (!priceRes.ok) {
+    fastify.log.warn('CoinGecko price update failed: ' + (priceRes.error || 'unknown'))
+  }
+
+  // DB phase — a short transaction of plain inserts
   const client = await fastify.db.connect()
   let fiatUpdated = 0
   let cryptoUpdated = 0
@@ -132,64 +177,28 @@ async function updateExchangeRates(fastify, userId) {
       }
     }
 
-    try {
-      const userRes = await fastify.db.query('SELECT coingecko_api_key FROM users WHERE id = $1', [userId])
-      const apiKey = decrypt(userRes.rows[0]?.coingecko_api_key) || process.env.COINGECKO_API_KEY
-
-      // Fetch crypto symbols actually used by any account, fallback to top list
-      const accountRes = await fastify.db.query("SELECT DISTINCT UPPER(currency) as currency FROM accounts WHERE type = 'crypto'")
-      const accountSymbols = accountRes.rows.map(r => r.currency.toLowerCase()).filter(Boolean)
-      const symbols = accountSymbols.length ? accountSymbols.join(',') : FALLBACK_SYMBOLS
-      fastify.log.info(`Updating crypto rates for symbols: ${symbols}`)
-
-      const priceRes = await coingeckoFetch(
-        fastify,
-        `/simple/price?vs_currencies=usd&symbols=${symbols}`,
-        apiKey,
-        { maxAttempts: 3, baseDelay: 10000 }
-      )
-      fastify.log.info(`CoinGecko /simple/price response: ok=${priceRes.ok}, status=${priceRes.status || 'n/a'}, keys=${priceRes.data ? Object.keys(priceRes.data).length : 'n/a'}`)
-
-      if (priceRes.ok && priceRes.data && typeof priceRes.data === 'object' && !Array.isArray(priceRes.data)) {
-        for (const [symbol, prices] of Object.entries(priceRes.data)) {
-          if (prices && typeof prices === 'object' && typeof prices.usd === 'number') {
-            await client.query(
-              'INSERT INTO exchange_rates (from_currency, to_currency, rate, source) VALUES ($1, $2, $3, $4)',
-              [symbol.toUpperCase(), 'USD', prices.usd, 'coingecko']
-            )
-            cryptoUpdated++
-          }
-        }
-
-        // Fallback to /coins/markets for symbols missing from /simple/price (e.g. newer coins on demo plan)
-        const missingSymbols = accountSymbols.filter(s => !priceRes.data[s])
-        if (missingSymbols.length) {
-          fastify.log.info(`CoinGecko /simple/price missing symbols: ${missingSymbols.join(',')}, trying /coins/markets fallback`)
-          const marketsRes = await coingeckoFetch(
-            fastify,
-            `/coins/markets?vs_currency=usd&symbols=${missingSymbols.join(',')}&per_page=250`,
-            apiKey,
-            { maxAttempts: 2, baseDelay: 10000 }
+    if (priceRes.ok && priceRes.data && typeof priceRes.data === 'object' && !Array.isArray(priceRes.data)) {
+      for (const [symbol, prices] of Object.entries(priceRes.data)) {
+        if (prices && typeof prices === 'object' && typeof prices.usd === 'number') {
+          await client.query(
+            'INSERT INTO exchange_rates (from_currency, to_currency, rate, source) VALUES ($1, $2, $3, $4)',
+            [symbol.toUpperCase(), 'USD', prices.usd, 'coingecko']
           )
-          if (marketsRes.ok && Array.isArray(marketsRes.data)) {
-            for (const coin of marketsRes.data) {
-              if (coin.current_price != null) {
-                await client.query(
-                  'INSERT INTO exchange_rates (from_currency, to_currency, rate, source) VALUES ($1, $2, $3, $4)',
-                  [coin.symbol.toUpperCase(), 'USD', coin.current_price, 'coingecko']
-                )
-                cryptoUpdated++
-              }
-            }
-          } else {
-            fastify.log.warn(`CoinGecko /coins/markets fallback failed for missing symbols: ${marketsRes.error || 'unknown'}`)
-          }
+          cryptoUpdated++
         }
-      } else {
-        fastify.log.warn('CoinGecko price update failed: ' + (priceRes.error || 'unknown'))
       }
-    } catch (cryptoErr) {
-      fastify.log.warn({ err: cryptoErr }, 'Crypto rates fetch failed, saving fiat only: ' + (cryptoErr?.message || String(cryptoErr)))
+    }
+
+    if (Array.isArray(marketsData)) {
+      for (const coin of marketsData) {
+        if (coin.current_price != null) {
+          await client.query(
+            'INSERT INTO exchange_rates (from_currency, to_currency, rate, source) VALUES ($1, $2, $3, $4)',
+            [coin.symbol.toUpperCase(), 'USD', coin.current_price, 'coingecko']
+          )
+          cryptoUpdated++
+        }
+      }
     }
 
     await client.query('COMMIT')
@@ -297,9 +306,10 @@ async function currencyRoutes(fastify, opts) {
       }
       return result
     } catch (err) {
-      reply.code(500)
+      fastify.log.warn({ err }, 'Exchange rates update failed')
+      reply.code(502)
       reply.header('x-coingecko-rate-limited', 'true')
-      return { error: 'Failed to fetch rates', message: err.message }
+      return { error: 'Failed to fetch rates' }
     }
   })
 
