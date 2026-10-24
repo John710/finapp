@@ -1,8 +1,11 @@
 /**
  * Currency conversion helpers.
- * All monetary calculations use parseFloat on PostgreSQL numeric strings
- * and rely on numeric(24,12) columns for precision.
+ * All conversions run through decimal.js: intermediate float chains like
+ * amount * rate * usdToTarget accumulate rounding error on numeric(24,12)
+ * values. convertAmount() returns a plain number for route/SQL callers;
+ * convertAmountDecimal() returns the exact Decimal for aggregation code.
  */
+import Decimal from 'decimal.js'
 
 export async function loadRates(db) {
   const result = await db.query(`
@@ -14,55 +17,57 @@ export async function loadRates(db) {
   return result.rows
 }
 
-export function convertAmount(amount, fromCurrency, toCurrency, rates) {
-  if (fromCurrency === toCurrency) return amount
+export function convertAmountDecimal(amount, fromCurrency, toCurrency, rates) {
+  if (fromCurrency === toCurrency) return new Decimal(amount)
   if (!rates || rates.length === 0) return null
 
+  const value = new Decimal(amount)
+  const rateOf = (from, to) => {
+    const r = rates.find(r => r.from_currency === from && r.to_currency === to)
+    return r ? new Decimal(r.rate) : null
+  }
+
   // Direct rate
-  const direct = rates.find(r => r.from_currency === fromCurrency && r.to_currency === toCurrency)
+  const direct = rateOf(fromCurrency, toCurrency)
   if (direct) {
-    return amount * parseFloat(direct.rate)
+    return value.times(direct)
   }
 
   // Via USD
-  const fromToUsd = rates.find(r => r.from_currency === fromCurrency && r.to_currency === 'USD')
+  const fromToUsd = rateOf(fromCurrency, 'USD')
 
-  let usdToTargetRate = null
+  let usdToTarget = null
   if (toCurrency === 'USD') {
-    usdToTargetRate = 1
+    usdToTarget = new Decimal(1)
   } else {
-    const usdToTarget = rates.find(r => r.from_currency === 'USD' && r.to_currency === toCurrency)
-    if (usdToTarget) {
-      usdToTargetRate = parseFloat(usdToTarget.rate)
-    } else {
+    usdToTarget = rateOf('USD', toCurrency)
+    if (!usdToTarget) {
       // Check if we have target->USD, then inverse it (for crypto)
-      const targetToUsd = rates.find(r => r.from_currency === toCurrency && r.to_currency === 'USD')
+      const targetToUsd = rateOf(toCurrency, 'USD')
       if (targetToUsd) {
-        usdToTargetRate = 1 / parseFloat(targetToUsd.rate)
+        usdToTarget = new Decimal(1).div(targetToUsd)
       }
     }
   }
 
-  if (fromToUsd && usdToTargetRate !== null) {
-    return amount * parseFloat(fromToUsd.rate) * usdToTargetRate
+  if (fromToUsd && usdToTarget) {
+    return value.times(fromToUsd).times(usdToTarget)
   }
 
   // Inverse via USD (e.g. RUB -> USD -> EUR)
-  let usdToFromRate = null
-  const usdToFrom = rates.find(r => r.from_currency === 'USD' && r.to_currency === fromCurrency)
-  if (usdToFrom) {
-    usdToFromRate = parseFloat(usdToFrom.rate)
-  } else {
-    // Check if we have from->USD, then inverse it (for crypto)
-    const fromToUsdInverse = rates.find(r => r.from_currency === fromCurrency && r.to_currency === 'USD')
-    if (fromToUsdInverse) {
-      usdToFromRate = 1 / parseFloat(fromToUsdInverse.rate)
-    }
+  let usdToFrom = rateOf('USD', fromCurrency)
+  if (!usdToFrom && fromToUsd) {
+    usdToFrom = new Decimal(1).div(fromToUsd)
   }
 
-  if (usdToFromRate !== null && usdToTargetRate !== null) {
-    return (amount / usdToFromRate) * usdToTargetRate
+  if (usdToFrom && usdToTarget) {
+    return value.div(usdToFrom).times(usdToTarget)
   }
 
   return null
+}
+
+export function convertAmount(amount, fromCurrency, toCurrency, rates) {
+  const converted = convertAmountDecimal(amount, fromCurrency, toCurrency, rates)
+  return converted === null ? null : converted.toNumber()
 }

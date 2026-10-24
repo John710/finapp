@@ -4,9 +4,15 @@
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.17.0",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
     "migrate": "node-pg-migrate",
     "migrate:up": "node-pg-migrate up",
     "migrate:down": "node-pg-migrate down",
@@ -21,6 +27,7 @@
     "@fastify/static": "^10.1.7",
     "bcryptjs": "^3.0.3",
     "currency-codes": "^2.2.0",
+    "decimal.js": "^10.6.0",
     "dotenv": "^16.4.0",
     "fastify": "^5.8.5",
     "isomorphic-dompurify": "^3.16.0",
@@ -31,5 +38,12 @@
     "papaparse": "^5.5.3",
     "pg": "^8.21.0",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10"
   }
 }

@@ -1,14 +1,5 @@
-import { loadRates, convertAmount } from '../services/currency.js'
-
-// Grouping by calendar month must not depend on the server timezone: node-pg
-// parses DATE columns as local midnight, so toISOString() can shift the value
-// into the previous month. Use local components for Date, plain slice for strings.
-function monthKey(date) {
-  if (typeof date === 'string') return date.slice(0, 7)
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  return `${y}-${m}`
-}
+import Decimal from 'decimal.js'
+import { loadRates, convertAmountDecimal } from '../services/currency.js'
 
 const dateRangeSchema = {
   type: 'object',
@@ -23,30 +14,54 @@ const dateRangeSchema = {
 }
 
 async function reportRoutes(fastify, opts) {
-  function getReportValue(tx, baseCurrency, rates) {
-    const amount = parseFloat(tx.amount)
-    if (!tx.account_currency || tx.account_currency === baseCurrency) return amount
-    const converted = convertAmount(amount, tx.account_currency, baseCurrency, rates)
+  // Convert a grouped SQL sum into the base currency as an exact Decimal.
+  // When no rate exists the raw amount is used (and logged) so the report
+  // degrades gracefully instead of hiding the money.
+  function sumInBase(amount, accountCurrency, baseCurrency, rates) {
+    if (!accountCurrency || accountCurrency === baseCurrency) return new Decimal(amount)
+    const converted = convertAmountDecimal(amount, accountCurrency, baseCurrency, rates)
     if (converted !== null) return converted
-    fastify.log.warn(`Report conversion failed for ${tx.account_currency} -> ${baseCurrency}, using raw amount ${tx.amount}`)
-    return amount
+    fastify.log.warn(`Report conversion failed for ${accountCurrency} -> ${baseCurrency}, using raw amount ${amount}`)
+    return new Decimal(amount)
   }
 
-  async function fetchTransactionsWithAccounts(userId, whereClause, params) {
+  // Aggregations happen in SQL (SUM/GROUP BY over at most one row per
+  // currency×dimension) — previously every report pulled all matching
+  // transaction rows into memory and summed them in JS.
+  async function fetchTotalsByTypeCurrency(userId, whereClause, params) {
     const result = await fastify.db.query(`
-      SELECT
-        t.amount,
-        t.type,
-        t.date,
-        t.category_id,
-        a.currency as account_currency,
-        a.type as account_type,
-        c.name as category_name,
-        c.color as category_color
+      SELECT t.type, a.currency as account_currency, a.type as account_type,
+             COALESCE(SUM(t.amount), 0) as sum, COUNT(*)::int as count
+      FROM transactions t
+      JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
+      WHERE t.user_id = $1 AND ${whereClause}
+      GROUP BY t.type, a.currency, a.type
+    `, [userId, ...params])
+    return result.rows
+  }
+
+  async function fetchTotalsByCategory(userId, whereClause, params) {
+    const result = await fastify.db.query(`
+      SELECT t.category_id, c.name as category_name, c.color as category_color,
+             t.type, a.currency as account_currency,
+             COALESCE(SUM(t.amount), 0) as sum, COUNT(*)::int as count
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
       LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = $1
       WHERE t.user_id = $1 AND ${whereClause}
+      GROUP BY t.category_id, c.name, c.color, t.type, a.currency
+    `, [userId, ...params])
+    return result.rows
+  }
+
+  async function fetchTotalsByMonth(userId, whereClause, params) {
+    const result = await fastify.db.query(`
+      SELECT to_char(t.date, 'YYYY-MM') as month, t.type, a.currency as account_currency,
+             COALESCE(SUM(t.amount), 0) as sum
+      FROM transactions t
+      JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
+      WHERE t.user_id = $1 AND ${whereClause}
+      GROUP BY 1, t.type, a.currency
     `, [userId, ...params])
     return result.rows
   }
@@ -62,43 +77,35 @@ async function reportRoutes(fastify, opts) {
     if (to) { where.push(`t.date <= $${idx++}`); params.push(to) }
     if (account_id) { where.push(`t.account_id = $${idx++}`); params.push(account_id) }
 
-    const [txs, rates] = await Promise.all([
-      fetchTransactionsWithAccounts(userId, where.length ? where.join(' AND ') : '1=1', params),
+    const [groups, rates] = await Promise.all([
+      fetchTotalsByTypeCurrency(userId, where.length ? where.join(' AND ') : '1=1', params),
       loadRates(fastify.db)
     ])
 
-    let totalIncome = 0
-    let totalExpense = 0
-    let totalTransfer = 0
-    let net = 0
-    let convertedCount = 0
+    let totalIncome = new Decimal(0)
+    let totalExpense = new Decimal(0)
+    let totalTransfer = new Decimal(0)
+    let count = 0
     let unconvertedCount = 0
 
-    for (const tx of txs) {
-      const val = getReportValue(tx, base_currency, rates)
-      if (tx.account_type === 'crypto') {
-        const converted = convertAmount(parseFloat(tx.amount), tx.account_currency, base_currency, rates)
-        if (converted !== null) convertedCount++
-        else unconvertedCount++
+    for (const g of groups) {
+      count += g.count
+      const val = sumInBase(g.sum, g.account_currency, base_currency, rates)
+      if (g.account_type === 'crypto' && g.account_currency && g.account_currency !== base_currency) {
+        const converted = convertAmountDecimal(g.sum, g.account_currency, base_currency, rates)
+        if (converted === null) unconvertedCount += g.count
       }
-
-      if (tx.type === 'income') {
-        totalIncome += val
-        net += val
-      } else if (tx.type === 'expense') {
-        totalExpense += val
-        net -= val
-      } else if (tx.type === 'transfer') {
-        totalTransfer += val
-      }
+      if (g.type === 'income') totalIncome = totalIncome.plus(val)
+      else if (g.type === 'expense') totalExpense = totalExpense.plus(val)
+      else if (g.type === 'transfer') totalTransfer = totalTransfer.plus(val)
     }
 
     return {
-      total_income: totalIncome,
-      total_expense: totalExpense,
-      total_transfer: totalTransfer,
-      net,
-      count: txs.length,
+      total_income: totalIncome.toNumber(),
+      total_expense: totalExpense.toNumber(),
+      total_transfer: totalTransfer.toNumber(),
+      net: totalIncome.minus(totalExpense).toNumber(),
+      count,
       unconverted_count: unconvertedCount,
       base_currency
     }
@@ -118,42 +125,46 @@ async function reportRoutes(fastify, opts) {
     if (from) { where.push(`t.date >= $${idx++}`); params.push(from) }
     if (to) { where.push(`t.date <= $${idx++}`); params.push(to) }
 
-    const [txs, rates] = await Promise.all([
-      fetchTransactionsWithAccounts(userId, where.length ? where.join(' AND ') : '1=1', params),
+    const [groups, rates] = await Promise.all([
+      fetchTotalsByCategory(userId, where.length ? where.join(' AND ') : '1=1', params),
       loadRates(fastify.db)
     ])
 
     const categoryMap = new Map()
-    let grandTotal = 0
+    let grandTotal = new Decimal(0)
 
-    for (const tx of txs) {
-      const val = getReportValue(tx, base_currency, rates)
+    for (const g of groups) {
+      const val = sumInBase(g.sum, g.account_currency, base_currency, rates)
       // Transfers are not spending/income — including them in grandTotal skews
       // every category percentage.
-      if (tx.type !== 'transfer') grandTotal += val
+      if (g.type !== 'transfer') grandTotal = grandTotal.plus(val)
 
-      const key = tx.category_id || 'uncategorized'
+      const key = g.category_id || 'uncategorized'
       if (!categoryMap.has(key)) {
         categoryMap.set(key, {
-          id: tx.category_id,
-          name: tx.category_name,
-          color: tx.category_color || '#94a3b8',
-          total: 0,
+          id: g.category_id,
+          name: g.category_name,
+          color: g.category_color || '#94a3b8',
+          total: new Decimal(0),
           count: 0,
-          type: tx.type
+          type: g.type
         })
       }
       const cat = categoryMap.get(key)
-      cat.total += val
-      cat.count++
+      cat.total = cat.total.plus(val)
+      cat.count += g.count
     }
 
+    const grand = grandTotal.toNumber()
     const rows = Array.from(categoryMap.values())
-      .map(r => ({
-        ...r,
-        total: parseFloat(r.total.toFixed(2)),
-        percentage: grandTotal > 0 ? parseFloat(((r.total / grandTotal) * 100).toFixed(1)) : 0
-      }))
+      .map(r => {
+        const total = r.total.toNumber()
+        return {
+          ...r,
+          total: parseFloat(total.toFixed(2)),
+          percentage: grand > 0 ? parseFloat(((total / grand) * 100).toFixed(1)) : 0
+        }
+      })
       .sort((a, b) => b.total - a.total)
 
     return rows
@@ -169,37 +180,37 @@ async function reportRoutes(fastify, opts) {
     if (from) { where.push(`t.date >= $${idx++}`); params.push(from) }
     if (to) { where.push(`t.date <= $${idx++}`); params.push(to) }
 
-    const [txs, rates] = await Promise.all([
-      fetchTransactionsWithAccounts(userId, where.length ? where.join(' AND ') : '1=1', params),
+    const [groups, rates] = await Promise.all([
+      fetchTotalsByMonth(userId, where.length ? where.join(' AND ') : '1=1', params),
       loadRates(fastify.db)
     ])
 
     const monthMap = new Map()
 
-    for (const tx of txs) {
-      const month = monthKey(tx.date)
-      const val = getReportValue(tx, base_currency, rates)
-
-      if (!monthMap.has(month)) {
-        monthMap.set(month, { month, income: 0, expense: 0, transfer: 0 })
+    for (const g of groups) {
+      if (!monthMap.has(g.month)) {
+        monthMap.set(g.month, { month: g.month, income: new Decimal(0), expense: new Decimal(0), transfer: new Decimal(0) })
       }
-      const m = monthMap.get(month)
-      if (tx.type === 'income') m.income += val
-      else if (tx.type === 'expense') m.expense += val
-      else if (tx.type === 'transfer') m.transfer += val
+      const m = monthMap.get(g.month)
+      const val = sumInBase(g.sum, g.account_currency, base_currency, rates)
+      if (g.type === 'income') m.income = m.income.plus(val)
+      else if (g.type === 'expense') m.expense = m.expense.plus(val)
+      else if (g.type === 'transfer') m.transfer = m.transfer.plus(val)
     }
 
-    const rows = Array.from(monthMap.values())
+    return Array.from(monthMap.values())
       .sort((a, b) => a.month.localeCompare(b.month))
-      .map(r => ({
-        month: r.month,
-        income: parseFloat(r.income.toFixed(2)),
-        expense: parseFloat(r.expense.toFixed(2)),
-        transfer: parseFloat(r.transfer.toFixed(2)),
-        net: parseFloat((r.income - r.expense).toFixed(2))
-      }))
-
-    return rows
+      .map(r => {
+        const income = r.income.toNumber()
+        const expense = r.expense.toNumber()
+        return {
+          month: r.month,
+          income: parseFloat(income.toFixed(2)),
+          expense: parseFloat(expense.toFixed(2)),
+          transfer: parseFloat(r.transfer.toNumber().toFixed(2)),
+          net: parseFloat((income - expense).toFixed(2))
+        }
+      })
   })
 
   fastify.get('/reports/net-worth', {
@@ -227,64 +238,51 @@ async function reportRoutes(fastify, opts) {
       'SELECT balance, currency FROM accounts WHERE user_id = $1',
       [userId]
     )
-    let currentTotal = 0
+    let currentTotal = new Decimal(0)
     for (const acc of accountsRes.rows) {
-      const amount = parseFloat(acc.balance)
-      if (!acc.currency || acc.currency === base_currency) {
-        currentTotal += amount
-        continue
-      }
-      const converted = convertAmount(amount, acc.currency, base_currency, rates)
-      if (converted !== null) currentTotal += converted
-      else {
-        fastify.log.warn(`Net-worth conversion failed for ${acc.currency} -> ${base_currency}, using raw amount`)
-        currentTotal += amount
-      }
+      currentTotal = currentTotal.plus(sumInBase(acc.balance, acc.currency, base_currency, rates))
     }
 
-    const allTxs = await fastify.db.query(`
-      SELECT t.amount, t.type, t.date, a.currency as account_currency
-      FROM transactions t
-      JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-      ORDER BY t.date ASC
-    `, [userId])
-
-    // Signed monthly flow: income adds (the paired leg of a transfer is an
-    // income row, so incoming transfers count too), expense/transfer-out subtract.
+    // Signed monthly flow aggregated in SQL: income adds (the paired leg of a
+    // transfer is an income row, so incoming transfers count too),
+    // expense/transfer-out subtract.
+    const flowGroups = await fetchTotalsByMonth(userId, '1=1', [])
     const flowByMonth = new Map()
-    for (const tx of allTxs.rows) {
-      const val = getReportValue(tx, base_currency, rates)
-      const sign = tx.type === 'income' ? 1 : -1
-      const month = monthKey(tx.date)
-      flowByMonth.set(month, (flowByMonth.get(month) || 0) + val * sign)
+    for (const g of flowGroups) {
+      const val = sumInBase(g.sum, g.account_currency, base_currency, rates)
+      const sign = g.type === 'income' ? 1 : -1
+      const month = g.month
+      flowByMonth.set(month, (flowByMonth.get(month) || new Decimal(0)).plus(val.times(sign)))
     }
 
     const now = new Date()
     const start = new Date(now.getFullYear(), now.getMonth() - monthsInt + 1, 1)
     const monthsList = []
     for (let d = new Date(start); d <= now; d.setMonth(d.getMonth() + 1)) {
-      monthsList.push(monthKey(d))
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      monthsList.push(`${y}-${m}`)
     }
 
     // Flows after the window still differ from the anchor; subtract them first.
     const lastMonth = monthsList[monthsList.length - 1]
-    let suffixFlow = 0
+    let suffixFlow = new Decimal(0)
     for (const [m, f] of flowByMonth) {
-      if (m > lastMonth) suffixFlow += f
+      if (m > lastMonth) suffixFlow = suffixFlow.plus(f)
     }
 
     // Walk backwards: balance(end of month i-1) = balance(end of month i) - flow(i)
     const balances = new Array(monthsList.length)
-    let bal = currentTotal - suffixFlow
+    let bal = currentTotal.minus(suffixFlow)
     for (let i = monthsList.length - 1; i >= 0; i--) {
       balances[i] = bal
-      bal -= flowByMonth.get(monthsList[i]) || 0
+      bal = bal.minus(flowByMonth.get(monthsList[i]) || new Decimal(0))
     }
 
     return monthsList.map((month, i) => ({
       month,
-      change: parseFloat((flowByMonth.get(month) || 0).toFixed(2)),
-      balance: parseFloat(balances[i].toFixed(2))
+      change: parseFloat((flowByMonth.get(month) || new Decimal(0)).toNumber().toFixed(2)),
+      balance: parseFloat(balances[i].toNumber().toFixed(2))
     }))
   })
 
@@ -298,27 +296,27 @@ async function reportRoutes(fastify, opts) {
     if (from) { where.push(`t.date >= $${idx++}`); params.push(from) }
     if (to) { where.push(`t.date <= $${idx++}`); params.push(to) }
 
-    const [txs, rates] = await Promise.all([
-      fetchTransactionsWithAccounts(userId, where.length ? where.join(' AND ') : '1=1', params),
+    const [groups, rates] = await Promise.all([
+      fetchTotalsByTypeCurrency(userId, where.length ? where.join(' AND ') : '1=1', params),
       loadRates(fastify.db)
     ])
 
-    let income = 0
-    let expense = 0
+    let income = new Decimal(0)
+    let expense = new Decimal(0)
 
-    for (const tx of txs) {
-      const val = getReportValue(tx, base_currency, rates)
-      if (tx.type === 'income') income += val
-      else if (tx.type === 'expense') expense += val
+    for (const g of groups) {
+      const val = sumInBase(g.sum, g.account_currency, base_currency, rates)
+      if (g.type === 'income') income = income.plus(val)
+      else if (g.type === 'expense') expense = expense.plus(val)
     }
 
-    const savings = income - expense
-    const rate = income > 0 ? (savings / income) * 100 : 0
+    const savings = income.minus(expense)
+    const rate = income.gt(0) ? savings.div(income).times(100) : new Decimal(0)
     return {
-      income: parseFloat(income.toFixed(2)),
-      expense: parseFloat(expense.toFixed(2)),
-      savings: parseFloat(savings.toFixed(2)),
-      rate: parseFloat(rate.toFixed(2)),
+      income: parseFloat(income.toNumber().toFixed(2)),
+      expense: parseFloat(expense.toNumber().toFixed(2)),
+      savings: parseFloat(savings.toNumber().toFixed(2)),
+      rate: parseFloat(rate.toNumber().toFixed(2)),
       base_currency
     }
   })
