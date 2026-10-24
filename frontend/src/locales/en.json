@@ -323,7 +323,7 @@
     "avatar_desc": "PNG, JPEG, WebP or GIF — automatically resized to 256px",
     "avatar_upload": "Upload",
     "avatar_remove": "Remove",
-    "avatar_invalid": "Avatar must be a PNG, JPEG, WebP or GIF image"
+    "avatar_invalid": "Could not process the image — use a PNG, JPEG, WebP or GIF file"
   },
   "common": {
     "save": "Save",

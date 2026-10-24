@@ -7,7 +7,7 @@
     <div class="p-5 flex items-center gap-4">
       <div class="w-16 h-16 rounded-full overflow-hidden bg-primary-500 text-white text-xl font-semibold flex items-center justify-center shadow-card select-none flex-shrink-0">
         <img v-if="auth.user?.avatar_set" :src="avatarUrl" :alt="$t('settings.avatar')" class="w-full h-full object-cover" />
-        <template v-else>{{ initial }}</template>
+        <template v-else>{{ initials }}</template>
       </div>
       <div class="min-w-0">
         <p class="font-medium">{{ $t('settings.avatar') }}</p>
@@ -30,7 +30,7 @@
           </button>
         </div>
       </div>
-      <input ref="avatarFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="onAvatarChange" />
+      <input ref="avatarFileInput" type="file" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" class="hidden" @change="onAvatarChange" />
     </div>
     <div class="p-5 flex items-center justify-between">
       <div>
@@ -108,36 +108,59 @@ const avatarFileInput = ref(null)
 const avatarLoading = ref(false)
 const avatarBust = ref(Date.now())
 const avatarUrl = computed(() => `/api/v1/users/me/avatar?v=${avatarBust.value}`)
-const initial = computed(() => (auth.user?.login || 'F').slice(0, 1).toUpperCase())
+// Same convention as the header avatar
+const initials = computed(() => (auth.user?.login || 'F').slice(0, 2).toUpperCase())
 
-function resizeImage(file, max) {
+// Decode via createImageBitmap first (handles EXIF orientation), fall back to
+// an <img> + object URL. Both failures reject with a sentinel that the caller
+// maps to a localized message.
+class AvatarDecodeError extends Error {}
+
+async function decodeFile(file) {
+  if ('createImageBitmap' in window) {
+    try {
+      return await createImageBitmap(file)
+    } catch {
+      // fall through to the <img> path
+    }
+  }
   return new Promise((resolve, reject) => {
     const img = new Image()
     const url = URL.createObjectURL(file)
     img.onload = () => {
       URL.revokeObjectURL(url)
-      const scale = Math.min(1, max / Math.max(img.width, img.height))
-      const w = Math.max(1, Math.round(img.width * scale))
-      const h = Math.max(1, Math.round(img.height * scale))
-      const canvas = document.createElement('canvas')
-      canvas.width = w
-      canvas.height = h
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h)
-      const webp = canvas.toDataURL('image/webp', 0.9)
-      resolve(webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/jpeg', 0.9))
+      resolve(img)
     }
     img.onerror = () => {
       URL.revokeObjectURL(url)
-      reject(new Error('invalid image'))
+      reject(new AvatarDecodeError('image decode failed'))
     }
     img.src = url
   })
 }
 
+async function resizeImage(file, max) {
+  const source = await decodeFile(file)
+  const sw = source.width || source.naturalWidth
+  const sh = source.height || source.naturalHeight
+  if (!sw || !sh) throw new AvatarDecodeError('image has no dimensions')
+  const scale = Math.min(1, max / Math.max(sw, sh))
+  const w = Math.max(1, Math.round(sw * scale))
+  const h = Math.max(1, Math.round(sh * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  canvas.getContext('2d').drawImage(source, 0, 0, w, h)
+  if (source.close) source.close()
+  const webp = canvas.toDataURL('image/webp', 0.9)
+  return webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/jpeg', 0.9)
+}
+
 async function onAvatarChange(e) {
   const file = e.target.files?.[0]
   if (!file) return
-  if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) {
+  // Supported avatar formats: jpg, jpeg, png, webp, gif
+  if (!/^image\/(png|jpe?g|webp|gif)$/.test(file.type)) {
     window.$toast?.error(t('settings.avatar_invalid'))
     e.target.value = ''
     return
@@ -151,7 +174,9 @@ async function onAvatarChange(e) {
     window.$toast?.success(t('common.saved'))
   } catch (err) {
     logger.error('Failed to upload avatar', err)
-    window.$toast?.error(err.message || t('common.error'))
+    // Never leak raw error text (it is English) — decode failures and
+    // rejected formats get the same localized, actionable message
+    window.$toast?.error(err instanceof AvatarDecodeError ? t('settings.avatar_invalid') : t('common.error'))
   } finally {
     avatarLoading.value = false
     if (avatarFileInput.value) avatarFileInput.value.value = ''

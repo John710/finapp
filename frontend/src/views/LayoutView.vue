@@ -156,14 +156,6 @@
               <div v-if="showAvatarMenu" class="absolute right-0 mt-3 w-72 bg-white dark:bg-slate-900 rounded-3xl shadow-float z-50 p-5 space-y-4">
                 <p class="font-semibold truncate">{{ auth.user?.login }}</p>
                 <div class="flex items-center justify-between">
-                  <span class="text-sm text-slate-600 dark:text-slate-300">{{ $t('settings.theme') }}</span>
-                  <select v-model="quickTheme" @change="onQuickTheme" class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
-                    <option value="auto">{{ $t('settings.theme_auto') }}</option>
-                    <option value="light">{{ $t('settings.theme_light') }}</option>
-                    <option value="dark">{{ $t('settings.theme_dark') }}</option>
-                  </select>
-                </div>
-                <div class="flex items-center justify-between">
                   <span class="text-sm text-slate-600 dark:text-slate-300">{{ $t('settings.language') }}</span>
                   <select v-model="quickLocale" @change="onQuickLocale" class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
                     <option value="ru">{{ $t('settings.lang_ru') }}</option>
@@ -246,7 +238,7 @@ const showCommandPalette = ref(false)
 const showHelp = ref(false)
 const confirmModalRef = ref(null)
 
-const { isDark, toggleTheme, setTheme } = useTheme()
+const { isDark, toggleTheme } = useTheme()
 const showNotifs = ref(false)
 const showGithubMenu = ref(false)
 const isHoveringIssue = ref(false)
@@ -254,10 +246,9 @@ const isHoveringStar = ref(false)
 const notifDropdownRef = ref(null)
 const githubDropdownRef = ref(null)
 
-// Avatar quick-settings dropdown (profile section controls)
+// Avatar quick-settings dropdown (language + logout)
 const showAvatarMenu = ref(false)
 const avatarDropdownRef = ref(null)
-const quickTheme = ref(localStorage.getItem('theme') || 'auto')
 const quickLocale = ref(locale.value)
 // Bust the avatar URL whenever the user object is refreshed (e.g. after an
 // avatar upload in settings) so the <img> refetches instead of showing a
@@ -265,11 +256,6 @@ const quickLocale = ref(locale.value)
 const avatarBust = ref(Date.now())
 watch(() => auth.user, () => { avatarBust.value = Date.now() })
 const avatarUrl = computed(() => `/api/v1/users/me/avatar?v=${avatarBust.value}`)
-
-function onQuickTheme() {
-  setTheme(quickTheme.value)
-  window.$toast?.success(t('common.saved'))
-}
 
 async function onQuickLocale() {
   locale.value = quickLocale.value

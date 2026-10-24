@@ -323,7 +323,7 @@
     "avatar_desc": "PNG, JPEG, WebP или GIF — автоматически уменьшается до 256px",
     "avatar_upload": "Загрузить",
     "avatar_remove": "Удалить",
-    "avatar_invalid": "Аватар должен быть изображением PNG, JPEG, WebP или GIF"
+    "avatar_invalid": "Не удалось обработать изображение — используйте файл PNG, JPEG, WebP или GIF"
   },
   "common": {
     "save": "Сохранить",

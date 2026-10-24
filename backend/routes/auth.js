@@ -288,7 +288,7 @@ async function authRoutes(fastify, opts) {
       // rejected on purpose: stored SVG can execute script in some contexts.
       if (avatar !== undefined) {
         const valid = avatar === null
-          || (/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(avatar) && avatar.length <= 700000)
+          || (/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(avatar) && avatar.length <= 700000)
         if (!valid) {
           reply.code(400)
           return { error: t('errors.avatar_invalid', {}, lang) }
