@@ -11,18 +11,22 @@ function near(a, b, eps = 0.02) { return Math.abs(parseFloat(a) - parseFloat(b))
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 // Rolling-window pacing for non-auth requests: the report burst would
 // otherwise exceed the 100/min GET limit and fail assertions with 429s.
-const reqTimes = []
-async function pace(path) {
+const windows = { get: [], post: [] }
+const LIMITS = { get: 80, post: 25 }
+async function pace(method, path) {
   if (path.startsWith('/auth/')) return
+  const bucket = method === 'GET' ? 'get' : 'post'
+  const times = windows[bucket]
+  const limit = LIMITS[bucket]
   const now = Date.now()
-  while (reqTimes.length && now - reqTimes[0] > 60000) reqTimes.shift()
-  if (reqTimes.length >= 80) {
-    const wait = 60000 - (now - reqTimes[0]) + 1000
-    console.log(`  ...pacing (${reqTimes.length}/min), waiting ${Math.ceil(wait / 1000)}s`)
+  while (times.length && now - times[0] > 60000) times.shift()
+  if (times.length >= limit) {
+    const wait = 60000 - (now - times[0]) + 1000
+    console.log(`  ...pacing (${times.length} ${bucket}/min), waiting ${Math.ceil(wait / 1000)}s`)
     await sleep(wait)
-    return pace(path)
+    return pace(method, path)
   }
-  reqTimes.push(Date.now())
+  times.push(Date.now())
 }
 // reqRetry kept for existing call sites (429s are no longer retried)
 async function reqRetry(method, path, opts = {}) { return req(method, path, opts) }
@@ -37,7 +41,7 @@ async function req(method, path, { body, auth = true, rawCookie = null } = {}) {
       cookies.refreshToken ? `refreshToken=${cookies.refreshToken}` : ''
     ].filter(Boolean).join('; ')
   }
-  await pace(path)
+  await pace(method, path)
   const res = await fetch(`${BASE}${path}`, {
     method, headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
