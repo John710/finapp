@@ -40,18 +40,18 @@ async function dashboardRoutes(fastify, opts) {
         `SELECT t.type, a.currency, COALESCE(SUM(t.amount), 0) as sum
          FROM transactions t
          JOIN accounts a ON a.id = t.account_id
-         WHERE t.account_id = ANY($4) AND t.parent_id IS NULL AND t.date >= $2 AND t.date <= $3
+         WHERE t.account_id = ANY($1) AND t.parent_id IS NULL AND t.date >= $2 AND t.date <= $3
          GROUP BY t.type, a.currency`,
-        [userId, monthStart, today, visible]
+        [visible, monthStart, today]
       ),
       // Monthly trend
       fastify.db.query(
         `SELECT to_char(t.date, 'YYYY-MM') as month, t.type, a.currency, COALESCE(SUM(t.amount), 0) as sum
          FROM transactions t
          JOIN accounts a ON a.id = t.account_id
-         WHERE t.account_id = ANY($4) AND t.parent_id IS NULL AND t.date >= $2 AND t.date <= $3
+         WHERE t.account_id = ANY($1) AND t.parent_id IS NULL AND t.date >= $2 AND t.date <= $3
          GROUP BY 1, t.type, a.currency`,
-        [userId, trendStart, today, visible]
+        [visible, trendStart, today]
       ),
       fastify.db.query(
         `SELECT a.id, a.name, a.type, a.currency, a.balance, a.color, a.icon, a.is_archived,
@@ -74,10 +74,10 @@ async function dashboardRoutes(fastify, opts) {
          LEFT JOIN accounts a ON a.id = t.account_id
          LEFT JOIN categories c ON c.id = t.category_id
          LEFT JOIN users ou ON ou.id = t.user_id
-         WHERE t.account_id = ANY($3)
+         WHERE t.account_id = ANY($1)
          ORDER BY t.date DESC, t.created_at DESC
          LIMIT $2`,
-        [userId, recent_limit, visible]
+        [visible, recent_limit]
       ),
       fastify.db.query(
         `SELECT r.*, a.name as account_name, c.name as category_name,
@@ -139,9 +139,9 @@ async function dashboardRoutes(fastify, opts) {
       `SELECT to_char(t.date, 'YYYY-MM') as month, t.type, a.currency, COALESCE(SUM(t.amount), 0) as sum
        FROM transactions t
        JOIN accounts a ON a.id = t.account_id
-       WHERE t.account_id = ANY($2) AND t.parent_id IS NULL
+       WHERE t.account_id = ANY($1) AND t.parent_id IS NULL
        GROUP BY 1, t.type, a.currency`,
-      [userId, visible]
+      [visible]
     )
     for (const g of allFlowGroups.rows) {
       const val = toBase(g.sum, g.currency).times(g.type === 'income' ? 1 : -1)
