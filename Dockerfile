@@ -2,9 +2,9 @@
 # FinApp multi-stage Dockerfile
 # ─────────────────────────────────────────────────────────────────────────────
 
-ARG NODE_VERSION=22.16.0
-ARG ALPINE_VERSION=3.22
-ARG NODE_IMAGE=node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:41e4389f3d988d2ed55392df4db1420ad048ae53324a8e2b7c6d19508288107e
+ARG NODE_VERSION=24.22.1
+ARG ALPINE_VERSION=3.23
+ARG NODE_IMAGE=node:${NODE_VERSION}-alpine${ALPINE_VERSION}@sha256:47019ffab12a48f49795a8279603f87e91a64de017fb9aa874e64f489b686079
 
 # ─── Stage 1: Backend dependencies (built on native build platform) ────
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS backend-builder
@@ -53,8 +53,10 @@ RUN apk add --no-cache --virtual .build-deps wget \
     && shoutrrr --version \
     && apk del .build-deps
 
-COPY --from=backend-builder /app ./
-COPY --from=frontend-builder /app/frontend/dist ./public
+# --chown for the default PUID/PGID (1000) so the runtime entrypoint usually
+# skips its recursive chown of /app (which costs ~45s on every container start)
+COPY --from=backend-builder --chown=1000:1000 /app ./
+COPY --from=frontend-builder --chown=1000:1000 /app/frontend/dist ./public
 
 COPY docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

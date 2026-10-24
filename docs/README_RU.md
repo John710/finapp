@@ -123,6 +123,7 @@ docker compose up -d
 | `TZ` | Часовой пояс | `UTC` |
 | `ALLOWED_ORIGINS` | Разрешённые CORS источники (через запятую) | — |
 | `TRUSTED_PROXIES` | Доверенные reverse proxies (через запятую) | — |
+| `SHOUTRRR_BLOCK_PRIVATE_TARGETS` | Запрещать Shoutrrr-вебхуки на приватные/loopback-адреса (защита от SSRF для multi-user хостов) | `false` |
 | `DATABASE_SSL` | Включить SSL/TLS для подключения к PostgreSQL | `false` |
 | `DATABASE_SSL_REJECT_UNAUTHORIZED` | Отклонять самоподписанные SSL-сертификаты | `true` |
 | `PUID` | ID пользователя для Docker контейнера | `1000` (используется `node` из базового образа) |
@@ -219,7 +220,7 @@ cd backend && npm install && npm run dev
 cd frontend && npm install && npm run dev
 ```
  
-Требования: Node.js 22+, PostgreSQL 15+
+Требования: Node.js 24+, PostgreSQL 15+
  
 ---
  

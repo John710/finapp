@@ -123,6 +123,7 @@ The application does **not** enforce HTTPS or send HSTS headers itself. For prod
 | `TZ` | Timezone | `UTC` |
 | `ALLOWED_ORIGINS` | Allowed CORS origins (comma-separated) | — |
 | `TRUSTED_PROXIES` | Trusted reverse proxies (comma-separated) | — |
+| `SHOUTRRR_BLOCK_PRIVATE_TARGETS` | Reject Shoutrrr webhooks aimed at private/loopback addresses (SSRF protection for multi-user hosts) | `false` |
 | `DATABASE_SSL` | Enable SSL/TLS for PostgreSQL connection | `false` |
 | `DATABASE_SSL_REJECT_UNAUTHORIZED` | Reject unauthorized SSL certificates | `true` |
 | `PUID` | Docker container user ID | `1000` (reuses base image `node` user) |
@@ -219,7 +220,7 @@ cd backend && npm install && npm run dev
 cd frontend && npm install && npm run dev
 ```
  
-Requirements: Node.js 22+, PostgreSQL 15+
+Requirements: Node.js 24+, PostgreSQL 15+
  
 ---
  
