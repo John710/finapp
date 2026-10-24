@@ -4,7 +4,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import DOMPurify from 'dompurify'
+import { sanitizeSvg } from '../utils/sanitizeSvg.js'
 
 const props = defineProps({
   svg: {
@@ -13,8 +13,5 @@ const props = defineProps({
   }
 })
 
-const safeSvg = computed(() => {
-  if (!props.svg) return ''
-  return DOMPurify.sanitize(props.svg, { USE_PROFILES: { svg: true, svgFilters: true } })
-})
+const safeSvg = computed(() => sanitizeSvg(props.svg))
 </script>

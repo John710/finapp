@@ -35,8 +35,10 @@ export const useAuthStore = defineStore('auth', () => {
       if (data.user?.language) {
         localStorage.setItem('lang', data.user.language)
       }
-    } catch {
-      user.value = null
+    } catch (e) {
+      // A network failure is not a logout: fetch rejects with TypeError, while
+      // a real auth rejection comes back as a parsed API error.
+      if (!(e instanceof TypeError)) user.value = null
     }
   }
 
@@ -85,6 +87,11 @@ export const useAuthStore = defineStore('auth', () => {
       await api('/users/logout', { method: 'POST' })
     } finally {
       user.value = null
+      // Drop user-scoped preferences so a different account on this browser
+      // starts clean instead of inheriting lang/currency from the previous one.
+      localStorage.removeItem('lang')
+      localStorage.removeItem('base_currency')
+      localStorage.removeItem('coingecko_rate_limit_toast')
       window.location.href = '/login'
     }
   }

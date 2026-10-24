@@ -11,22 +11,31 @@ function showCoingeckoRateLimitToast() {
   const now = Date.now()
   if (now - lastShown < COINGECKO_TOAST_COOLDOWN) return
   localStorage.setItem(COINGECKO_TOAST_KEY, String(now))
-  window.$toast?.warning?.(
-    t('settings.coingecko_rate_limited'),
-    { duration: 8000 }
-  )
+  window.$toast?.warning?.(t('settings.coingecko_rate_limited'), 8000)
 }
 
+let refreshPromise = null
+
 async function refreshSession() {
-  const res = await fetch(`${API_URL}/auth/refresh`, {
-    method: 'POST',
-    credentials: 'include'
-  })
-  if (!res.ok) {
-    window.location.href = '/login'
-    throw new Error('Session expired')
+  // Deduplicate: many parallel requests can hit 401 at once (dashboard load),
+  // but the refresh cookie is one-time use — a second concurrent refresh with
+  // the already-consumed cookie would falsely log the user out and trip the
+  // backend's replay protection.
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const res = await fetch(`${API_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include'
+      })
+      if (!res.ok) {
+        throw new Error('Session expired')
+      }
+      return res.json()
+    })().finally(() => {
+      refreshPromise = null
+    })
   }
-  return res.json()
+  return refreshPromise
 }
 
 export async function api(path, options = {}) {
@@ -44,7 +53,12 @@ export async function api(path, options = {}) {
   })
 
   if (res.status === 401 && !path.startsWith('/auth/')) {
-    await refreshSession()
+    try {
+      await refreshSession()
+    } catch {
+      window.location.href = '/login'
+      throw new Error('Session expired')
+    }
     res = await fetch(url, {
       ...options,
       headers,

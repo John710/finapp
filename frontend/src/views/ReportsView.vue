@@ -682,7 +682,7 @@ const sankeyChartOption = computed(() => {
       ])
     } catch (e) {
       logger.error(e)
-      window.$toast?.showToast(e.message || 'Request failed', 'error')
+      window.$toast?.error(e.message || 'Request failed')
     } finally {
       loading.value = false
     }

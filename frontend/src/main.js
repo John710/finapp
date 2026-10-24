@@ -13,7 +13,9 @@ useTheme()
 
 async function fetchServerDefaultLanguage() {
   try {
-    const res = await fetch('/api/v1/config/public')
+    // Bounded wait: bootstrap blocks the first render, so a hanging backend
+    // must not keep the user on a blank page.
+    const res = await fetch('/api/v1/config/public', { signal: AbortSignal.timeout(3000) })
     if (res.ok) {
       const cfg = await res.json()
       return cfg.defaultLanguage

@@ -52,13 +52,13 @@ export function usePush() {
 
   async function requestNotificationPermission() {
     if (Notification.permission === 'denied') {
-      window.$toast?.showToast(t('notifications.push_denied'), 'error')
+      window.$toast?.error(t('notifications.push_denied'))
       return 'denied'
     }
     if (Notification.permission !== 'granted') {
       const permission = await Notification.requestPermission()
       if (permission !== 'granted') {
-        window.$toast?.showToast(t('notifications.push_not_granted'), 'error')
+        window.$toast?.error(t('notifications.push_not_granted'))
         return permission
       }
     }
@@ -67,7 +67,7 @@ export function usePush() {
 
   async function subscribe() {
     if (!isSupported) {
-      window.$toast?.showToast(t('notifications.push_require_https'), 'error')
+      window.$toast?.error(t('notifications.push_require_https'))
       return
     }
     const permission = await requestNotificationPermission()
@@ -82,7 +82,7 @@ export function usePush() {
       const publicKey = data.publicKey
       serverConfigured.value = !!publicKey
       if (!publicKey) {
-        window.$toast?.showToast(t('notifications.push_not_configured_msg'), 'error')
+        window.$toast?.error(t('notifications.push_not_configured_msg'))
         logger.warn('[push] Cannot subscribe: VAPID public key missing')
         return
       }
@@ -101,7 +101,7 @@ export function usePush() {
     } catch (err) {
       logger.error('[push] subscribe failed:', err)
       const msg = err?.message || t('notifications.push_enable_failed')
-      window.$toast?.showToast(msg, 'error')
+      window.$toast?.error(msg)
     } finally {
       loading.value = false
     }
@@ -112,13 +112,15 @@ export function usePush() {
     loading.value = true
     try {
       const sub = subscription.value
-      await sub.unsubscribe()
+      // Tell the server first: if the browser unsubscribes but the server call
+      // then fails, a dead subscription would keep receiving push attempts.
       await api('/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint: sub.endpoint }) })
+      await sub.unsubscribe().catch(() => {})
       subscription.value = null
       window.$toast?.success(t('notifications.push_disabled'))
     } catch (err) {
       logger.error('[push] unsubscribe failed:', err)
-      window.$toast?.showToast(t('notifications.push_disable_failed'), 'error')
+      window.$toast?.error(t('notifications.push_disable_failed'))
     } finally {
       loading.value = false
     }

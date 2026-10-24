@@ -176,7 +176,7 @@ async function upload(opts) {
 
   const data = await res.json()
   if (!res.ok) {
-    window.$toast?.showToast(data.error || 'Import failed', 'error')
+    window.$toast?.error(data.error || 'Import failed')
     return
   }
 

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../utils/api'
 import { getUserLocale } from '../utils/locale'
+import { logger } from '../utils/logger.js'
 
 export const useRatesStore = defineStore('rates', () => {
   const rates = ref([])
@@ -44,7 +45,10 @@ export const useRatesStore = defineStore('rates', () => {
   function convert(amount, from, to) {
     if (from === to) return amount
     const rate = getRate(from, to)
-    return rate !== null ? amount * rate : null
+    if (rate === null) return null
+    // Round to 6 decimals: enough precision for crypto amounts, while stopping
+    // binary-float noise (0.1 + 0.2 style) from accumulating in aggregates.
+    return Math.round(amount * rate * 1e6) / 1e6
   }
 
   function format(amount, currency) {

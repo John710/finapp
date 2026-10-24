@@ -33,12 +33,13 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 
 const { t } = useI18n()
 
+const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const form = reactive({ login: '', password: '' })
@@ -48,9 +49,13 @@ async function handleLogin() {
   loading.value = true
   try {
     await auth.login(form.login, form.password)
-    router.push('/')
+    // Return the user to the page they were trying to open (set by the router guard)
+    const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
+      ? route.query.redirect
+      : '/'
+    router.push(redirect)
   } catch (e) {
-    window.$toast?.showToast(t('auth.invalid_credentials'), 'error')
+    window.$toast?.error(t('auth.invalid_credentials'))
   } finally {
     loading.value = false
   }

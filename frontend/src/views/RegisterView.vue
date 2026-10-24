@@ -101,7 +101,7 @@ onMounted(async () => {
 
 async function handleRegister() {
   if (form.password !== form.confirmPassword) {
-    window.$toast?.showToast(t('auth.password_mismatch'), 'error')
+    window.$toast?.error(t('auth.password_mismatch'))
     return
   }
   loading.value = true
@@ -122,7 +122,7 @@ async function handleRegister() {
     window.$toast?.success(t('auth.account_created'))
     router.push('/login')
   } catch (e) {
-    window.$toast?.showToast(e.message || t('common.error'), 'error')
+    window.$toast?.error(e.message || t('common.error'))
   } finally {
     loading.value = false
   }

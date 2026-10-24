@@ -73,7 +73,8 @@ router.beforeEach(async (to, from, next) => {
   }
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    next('/login')
+    // Remember where the user was heading so login can return them there
+    next(`/login?redirect=${encodeURIComponent(to.fullPath)}`)
   } else {
     next()
   }

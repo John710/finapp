@@ -156,7 +156,6 @@
 
     <CommandPalette v-model="showCommandPalette" />
     <HelpModal v-model="showHelp" />
-    <ToastContainer />
     <ConfirmModal ref="confirmModalRef" />
   </div>
 </template>
@@ -169,13 +168,11 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { useNotificationsStore } from '../stores/notifications'
 import { useUndo } from '@/composables/useUndo'
-import { useToast } from '@/composables/useToast'
 import { useTheme } from '@/composables/useTheme'
 import { useClickOutside } from '@/composables/useClickOutside'
 import { formatNotifDate } from '@/utils/format'
 import CommandPalette from '@/components/CommandPalette.vue'
 import HelpModal from '@/components/HelpModal.vue'
-import ToastContainer from '@/components/ToastContainer.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import packageJson from '../../package.json'
 
@@ -208,10 +205,8 @@ useClickOutside([notifDropdownRef, githubDropdownRef], () => {
   showGithubMenu.value = false
 })
 
-// Global toast & confirm for views
-const toast = useToast()
+// Global confirm for views (toasts are initialized app-wide in App.vue)
 if (typeof window !== 'undefined') {
-  window.$toast = toast
   window.$confirm = (opts) => confirmModalRef.value?.open(opts)
 }
 

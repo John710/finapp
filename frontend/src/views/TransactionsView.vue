@@ -84,7 +84,8 @@
               </td>
               <td class="px-5 py-3 text-right font-medium" :class="amountClass(t.type)">{{ formatAmount(t) }}</td>
               <td class="px-5 py-3">
-                <button @click="deleteTransaction(t.id)" class="text-slate-400 hover:text-danger-500 transition-colors">
+                <!-- Incoming transfer legs are managed through their source transfer row -->
+                <button v-if="!(t.type === 'income' && t.transfer_to_account_id)" @click="deleteTransaction(t.id)" class="text-slate-400 hover:text-danger-500 transition-colors">
                   <Icon name="delete" class="w-4 h-4" />
                 </button>
               </td>
