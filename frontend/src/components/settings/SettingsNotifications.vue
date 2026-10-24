@@ -32,17 +32,17 @@
         </div>
         <div class="flex items-center gap-2">
           <button
-            @click="generateVapidKeys"
             :disabled="vapidLoading || vapidDeleteLoading || !vapidEmail"
             class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+            @click="generateVapidKeys"
           >
             {{ vapidLoading ? $t('common.loading') : (auth.user?.vapid_public_key ? $t('settings.vapid_regenerate') : $t('settings.vapid_generate')) }}
           </button>
           <button
             v-if="auth.user?.vapid_public_key"
-            @click="deleteVapidKeys"
             :disabled="vapidLoading || vapidDeleteLoading"
             class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+            @click="deleteVapidKeys"
           >
             {{ vapidDeleteLoading ? $t('common.loading') : $t('settings.vapid_delete') }}
           </button>
@@ -59,16 +59,16 @@
       <div v-if="!push.isSupported" class="text-sm text-slate-400">{{ $t('settings.push_unsupported') }}</div>
       <div v-else-if="push.subscription.value" class="flex items-center gap-2">
         <button
-          @click="sendTestPush()"
           :disabled="testLoading"
           class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+          @click="sendTestPush()"
         >
           {{ testLoading ? $t('common.loading') : $t('settings.push_test') }}
         </button>
         <button
-          @click="push.unsubscribe()"
           :disabled="push.loading.value"
           class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+          @click="push.unsubscribe()"
         >
           {{ push.loading.value ? $t('common.loading') : $t('settings.push_unsubscribe') }}
         </button>
@@ -76,9 +76,9 @@
       <div v-else-if="!push.serverConfigured.value" class="text-sm text-amber-600 dark:text-amber-400">{{ $t('settings.push_not_configured') }}</div>
       <button
         v-else
-        @click="push.subscribe()"
         :disabled="push.loading.value"
         class="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+        @click="push.subscribe()"
       >
         {{ push.loading.value ? $t('common.loading') : $t('settings.push_subscribe') }}
       </button>

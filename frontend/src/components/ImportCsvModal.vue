@@ -1,12 +1,12 @@
 <template>
-  <BaseModal :modelValue="modelValue" @update:modelValue="$emit('update:modelValue', $event)" widthClass="max-w-2xl" zClass="z-50">
+  <BaseModal :model-value="modelValue" width-class="max-w-2xl" z-class="z-50" @update:model-value="$emit('update:modelValue', $event)">
     <div class="max-h-[90vh] overflow-y-auto">
       <h2 class="font-display text-xl font-semibold mb-4">{{ $t('import.title') }}</h2>
 
       <!-- Profile selector -->
       <div class="mb-4">
         <label class="block text-sm font-medium mb-1">{{ $t('import.profile') }}</label>
-        <select v-model="profile" @change="onProfileChange" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm">
+        <select v-model="profile" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" @change="onProfileChange">
           <option v-for="p in profiles" :key="p.key" :value="p.key">{{ p.name }}</option>
         </select>
       </div>
@@ -14,7 +14,7 @@
       <!-- File upload -->
       <div class="mb-4">
         <label class="block text-sm font-medium mb-1">{{ $t('import.file') }}</label>
-        <input type="file" accept=".csv" @change="onFileChange" ref="fileInput" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" />
+        <input ref="fileInput" type="file" accept=".csv" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" @change="onFileChange" />
       </div>
 
       <!-- Delimiter -->
@@ -70,9 +70,9 @@
       </div>
 
       <div class="flex gap-3">
-        <button type="button" @click="close" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
-        <button @click="previewFile" :disabled="!file" class="px-4 py-2.5 rounded-full bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50">{{ $t('import.preview_btn') }}</button>
-        <button @click="importFile" :disabled="!file || importing" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card disabled:opacity-50 text-white text-sm font-medium">
+        <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="close">{{ $t('common.cancel') }}</button>
+        <button :disabled="!file" class="px-4 py-2.5 rounded-full bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50" @click="previewFile">{{ $t('import.preview_btn') }}</button>
+        <button :disabled="!file || importing" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card disabled:opacity-50 text-white text-sm font-medium" @click="importFile">
           {{ importing ? $t('common.loading') : $t('import.import_btn') }}
         </button>
       </div>

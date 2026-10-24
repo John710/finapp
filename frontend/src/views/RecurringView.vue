@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('recurring.title') }}</h1>
-      <button v-if="!isViewer" @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
+      <button v-if="!isViewer" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -36,11 +36,11 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <button @click="editRule(rule)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">{{ $t('common.edit') }}</button>
-          <button @click="toggleActive(rule)" class="w-11 h-6 rounded-full relative transition-colors" :class="rule.is_active ? 'bg-primary-600' : 'bg-slate-300 dark:bg-slate-700'">
+          <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click="editRule(rule)">{{ $t('common.edit') }}</button>
+          <button class="w-11 h-6 rounded-full relative transition-colors" :class="rule.is_active ? 'bg-primary-600' : 'bg-slate-300 dark:bg-slate-700'" @click="toggleActive(rule)">
             <span class="absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all" :class="rule.is_active ? 'right-1' : 'left-1'"></span>
           </button>
-          <button @click="deleteRule(rule.id)" class="p-2 text-slate-400 hover:text-danger-500 transition-colors">
+          <button class="p-2 text-slate-400 hover:text-danger-500 transition-colors" @click="deleteRule(rule.id)">
             <Icon name="delete" class="w-4 h-4" />
           </button>
         </div>
@@ -48,14 +48,14 @@
     </div>
 
     <!-- Modal -->
-    <BaseModal v-model="showModal" widthClass="max-w-md">
+    <BaseModal v-model="showModal" width-class="max-w-md">
         <h2 class="font-display text-xl font-semibold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
-        <form @submit.prevent="saveRule" class="space-y-4">
+        <form class="space-y-4" @submit.prevent="saveRule">
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('common.type') }}</label>
             <div class="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
-              <button type="button" @click="form.type = 'expense'" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.type === 'expense' ? 'bg-white dark:bg-slate-700 shadow-sm text-danger-500' : 'text-slate-500'">{{ $t('categories.types.expense') }}</button>
-              <button type="button" @click="form.type = 'income'" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.type === 'income' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-500' : 'text-slate-500'">{{ $t('categories.types.income') }}</button>
+              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.type === 'expense' ? 'bg-white dark:bg-slate-700 shadow-sm text-danger-500' : 'text-slate-500'" @click="form.type = 'expense'">{{ $t('categories.types.expense') }}</button>
+              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.type === 'income' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-500' : 'text-slate-500'" @click="form.type = 'income'">{{ $t('categories.types.income') }}</button>
             </div>
           </div>
           <div class="grid grid-cols-2 gap-4">
@@ -65,7 +65,8 @@
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
-              <CurrencySelect v-model="form.currency" required
+              <CurrencySelect
+v-model="form.currency" required
                 :placeholder="$t('common.currency')"
                 :search-placeholder="$t('common.search')"
                 :empty-text="$t('common.empty')" />
@@ -77,7 +78,7 @@
               <select v-model="form.account_id" required class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
                 <option v-for="acc in accountsStore.accounts" :key="acc.id" :value="acc.id">{{ acc.name }}</option>
               </select>
-              <button type="button" @click="showQuickAccount = true" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')">
+              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" @click="showQuickAccount = true">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
             </div>
@@ -89,7 +90,7 @@
                 <option :value="null">-</option>
                 <option v-for="cat in filteredCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
               </select>
-              <button type="button" @click="showQuickCategory = true" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')">
+              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" @click="showQuickCategory = true">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
             </div>
@@ -109,7 +110,7 @@
             <input v-model="form.note" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
           </div>
           <div class="flex gap-3 mt-6">
-            <button type="button" @click="closeModal" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
+            <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closeModal">{{ $t('common.cancel') }}</button>
             <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>

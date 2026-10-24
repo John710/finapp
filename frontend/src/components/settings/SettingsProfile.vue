@@ -14,17 +14,17 @@
         <p class="text-sm text-slate-500">{{ $t('settings.avatar_desc') }}</p>
         <div class="flex gap-2 mt-2">
           <button
-            @click="avatarFileInput?.click()"
             :disabled="avatarLoading"
             class="px-4 py-1.5 rounded-full bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium disabled:opacity-50"
+            @click="avatarFileInput?.click()"
           >
             {{ avatarLoading ? $t('common.loading') : $t('settings.avatar_upload') }}
           </button>
           <button
             v-if="auth.user?.avatar_set"
-            @click="removeAvatar"
             :disabled="avatarLoading"
             class="px-4 py-1.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50"
+            @click="removeAvatar"
           >
             {{ $t('settings.avatar_remove') }}
           </button>
@@ -37,7 +37,7 @@
         <p class="font-medium">{{ $t('settings.theme') }}</p>
         <p class="text-sm text-slate-500">{{ $t('settings.theme_desc') }}</p>
       </div>
-      <select v-model="theme" @change="changeTheme" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+      <select v-model="theme" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="changeTheme">
         <option value="auto">{{ $t('settings.theme_auto') }}</option>
         <option value="light">{{ $t('settings.theme_light') }}</option>
         <option value="dark">{{ $t('settings.theme_dark') }}</option>
@@ -48,7 +48,7 @@
         <p class="font-medium">{{ $t('settings.language') }}</p>
         <p class="text-sm text-slate-500">{{ $t('settings.language_desc') }}</p>
       </div>
-      <select v-model="locale" @change="changeLang" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+      <select v-model="locale" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="changeLang">
         <option value="ru">{{ $t('settings.lang_ru') }}</option>
         <option value="en">{{ $t('settings.lang_en') }}</option>
       </select>
@@ -58,19 +58,20 @@
         <p class="font-medium">{{ $t('settings.base_currency') }}</p>
         <p class="text-sm text-slate-500">{{ $t('settings.base_currency_desc') }}</p>
       </div>
-      <div class="relative w-48" ref="selectRef">
-        <button type="button" @click="showDropdown = !showDropdown" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-left text-sm flex items-center justify-between">
+      <div ref="selectRef" class="relative w-48">
+        <button type="button" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-left text-sm flex items-center justify-between" @click="showDropdown = !showDropdown">
           <span>{{ selectedCurrency?.code }} ({{ selectedCurrency?.symbol || selectedCurrency?.code }})</span>
           <Icon name="arrowDown" class="w-4 h-4 text-slate-400" />
         </button>
         <div v-if="showDropdown" class="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 rounded-lg border-0 bg-slate-100 dark:bg-slate-800 shadow-lg max-h-60 overflow-hidden flex flex-col">
           <div class="p-2 border-b border-slate-100 dark:border-slate-800">
-            <input v-model="search" type="text" :placeholder="$t('common.search')" ref="searchInput" class="w-full px-2 py-1.5 text-sm rounded-md border-0 bg-slate-100 dark:bg-slate-800 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-400" @keydown="onKeydown" />
+            <input ref="searchInput" v-model="search" type="text" :placeholder="$t('common.search')" class="w-full px-2 py-1.5 text-sm rounded-md border-0 bg-slate-100 dark:bg-slate-800 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-400" @keydown="onKeydown" />
           </div>
           <div class="overflow-y-auto flex-1">
-            <button v-for="fc in filteredCurrencies" :key="fc.code" type="button" @click="selectCurrency(fc)"
-              class="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between transition-colors"
-              :class="baseCurrency === fc.code ? 'bg-primary-100 dark:bg-primary-500/15 text-primary-600' : ''">
+            <button
+v-for="fc in filteredCurrencies" :key="fc.code" type="button" class="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between transition-colors"
+              :class="baseCurrency === fc.code ? 'bg-primary-100 dark:bg-primary-500/15 text-primary-600' : ''"
+              @click="selectCurrency(fc)">
               <span class="font-medium">{{ fc.code }}</span>
               <span class="text-slate-500 text-xs">{{ fc.name }}</span>
             </button>

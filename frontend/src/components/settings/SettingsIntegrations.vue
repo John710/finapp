@@ -15,10 +15,10 @@
       </div>
       <div class="flex gap-2">
         <input v-model="coingeckoKey" type="text" placeholder="CG-..." class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-        <button v-if="isCoingeckoDirty" @click="saveCoingeckoKey" :disabled="savingKey || !coingeckoKey.trim()" class="px-4 py-2 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-semibold disabled:opacity-50">
+        <button v-if="isCoingeckoDirty" :disabled="savingKey || !coingeckoKey.trim()" class="px-4 py-2 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-semibold disabled:opacity-50" @click="saveCoingeckoKey">
           {{ savingKey ? $t('common.loading') : $t('common.save') }}
         </button>
-        <button v-else-if="auth.user?.coingecko_api_key" @click="testCoingeckoKey" :disabled="coingeckoTestLoading" class="px-4 py-2 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-semibold disabled:opacity-50">
+        <button v-else-if="auth.user?.coingecko_api_key" :disabled="coingeckoTestLoading" class="px-4 py-2 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-semibold disabled:opacity-50" @click="testCoingeckoKey">
           {{ coingeckoTestLoading ? $t('common.loading') : $t('settings.coingecko_test') }}
         </button>
       </div>
@@ -58,24 +58,24 @@
         <div class="flex items-center gap-2 flex-wrap">
           <button
             v-if="!auth.user?.shoutrrr_url || isShoutrrrDirty"
-            @click="saveShoutrrrUrl"
             :disabled="shoutrrrLoading || shoutrrrTestLoading || !shoutrrrUrl.trim() || !!shoutrrrUrlError"
             class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+            @click="saveShoutrrrUrl"
           >
             {{ shoutrrrLoading ? $t('common.loading') : $t('settings.shoutrrr_save') }}
           </button>
           <template v-else>
             <button
-              @click="sendTestShoutrrr"
               :disabled="shoutrrrLoading || shoutrrrTestLoading"
               class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+              @click="sendTestShoutrrr"
             >
               {{ shoutrrrTestLoading ? $t('common.loading') : $t('settings.shoutrrr_test') }}
             </button>
             <button
-              @click="disableShoutrrr"
               :disabled="shoutrrrLoading || shoutrrrTestLoading"
               class="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50"
+              @click="disableShoutrrr"
             >
               {{ shoutrrrLoading ? $t('common.loading') : $t('settings.shoutrrr_disable') }}
             </button>

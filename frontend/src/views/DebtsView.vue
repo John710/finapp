@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('debts.title') }}</h1>
-      <button v-if="!isViewer" @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
+      <button v-if="!isViewer" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -41,17 +41,17 @@
           <span class="text-xs text-slate-500">{{ formatConverted(debt.paid_amount, debt.currency) }} / {{ formatConverted(debt.amount, debt.currency) }}</span>
         </div>
         <div class="flex gap-2">
-          <button v-if="debt.status !== 'paid'" @click="openPaymentModal(debt)" class="text-xs px-2 py-1 rounded bg-primary-100 dark:bg-primary-500/15 text-primary-600 hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors">{{ $t('debts.pay') }}</button>
-          <button @click="openHistory(debt)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">{{ $t('debts.history') }}</button>
-          <button @click="deleteDebt(debt.id)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors ml-auto">{{ $t('common.delete') }}</button>
+          <button v-if="debt.status !== 'paid'" class="text-xs px-2 py-1 rounded bg-primary-100 dark:bg-primary-500/15 text-primary-600 hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors" @click="openPaymentModal(debt)">{{ $t('debts.pay') }}</button>
+          <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click="openHistory(debt)">{{ $t('debts.history') }}</button>
+          <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors ml-auto" @click="deleteDebt(debt.id)">{{ $t('common.delete') }}</button>
         </div>
       </div>
     </div>
 
     <!-- Add/Edit Modal -->
-    <BaseModal v-model="showModal" widthClass="max-w-md">
+    <BaseModal v-model="showModal" width-class="max-w-md">
         <h2 class="font-display text-xl font-semibold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
-        <form @submit.prevent="saveDebt" class="space-y-4">
+        <form class="space-y-4" @submit.prevent="saveDebt">
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('debts.counterparty') }}</label>
             <input v-model="form.counterparty" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
@@ -67,7 +67,8 @@
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
-              <CurrencySelect v-model="form.currency" required
+              <CurrencySelect
+v-model="form.currency" required
                 :placeholder="$t('common.currency')"
                 :search-placeholder="$t('common.search')"
                 :empty-text="$t('common.empty')" />
@@ -91,22 +92,22 @@
                 <option :value="null">-</option>
                 <option v-for="acc in accountsStore.accounts" :key="acc.id" :value="acc.id">{{ acc.name }}</option>
               </select>
-              <button type="button" @click="showQuickAccount = true" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')">
+              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" @click="showQuickAccount = true">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
             </div>
           </div>
           <div class="flex gap-3 mt-6">
-            <button type="button" @click="closeModal" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
+            <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closeModal">{{ $t('common.cancel') }}</button>
             <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>
       </BaseModal>
 
     <!-- Payment Modal -->
-    <BaseModal v-model="showPaymentModal" widthClass="max-w-sm">
+    <BaseModal v-model="showPaymentModal" width-class="max-w-sm">
         <h2 class="font-display text-xl font-semibold mb-4">{{ $t('debts.pay') }}</h2>
-        <form @submit.prevent="savePayment" class="space-y-4">
+        <form class="space-y-4" @submit.prevent="savePayment">
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium mb-1">{{ $t('debts.pay_amount') }}</label>
@@ -114,7 +115,8 @@
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
-              <CurrencySelect v-model="paymentForm.currency" required
+              <CurrencySelect
+v-model="paymentForm.currency" required
                 :placeholder="$t('common.currency')"
                 :search-placeholder="$t('common.search')"
                 :empty-text="$t('common.empty')" />
@@ -132,14 +134,14 @@
             <input v-model="paymentForm.note" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
           </div>
           <div class="flex gap-3 mt-6">
-            <button type="button" @click="closePaymentModal" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
+            <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closePaymentModal">{{ $t('common.cancel') }}</button>
             <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>
       </BaseModal>
 
     <!-- History Modal -->
-    <BaseModal v-model="showHistoryModal" widthClass="max-w-md" contentClass="max-h-[80vh] overflow-y-auto">
+    <BaseModal v-model="showHistoryModal" width-class="max-w-md" content-class="max-h-[80vh] overflow-y-auto">
         <h2 class="font-display text-xl font-semibold mb-4">{{ $t('debts.history') }}</h2>
         <div v-if="!historyDebt && historyPayments.length === 0" class="text-center text-sm text-slate-500 py-8">{{ $t('debts.no_history') }}</div>
         <div v-else class="relative pl-4 border-l-2 border-slate-200 dark:border-slate-700 space-y-6">
@@ -162,7 +164,7 @@
           </div>
         </div>
         <div class="mt-6 flex justify-end">
-          <button @click="closeHistoryModal" class="px-4 py-2 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.close') }}</button>
+          <button class="px-4 py-2 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closeHistoryModal">{{ $t('common.close') }}</button>
         </div>
       </BaseModal>
 

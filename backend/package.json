@@ -16,7 +16,8 @@
     "migrate": "node-pg-migrate",
     "migrate:up": "node-pg-migrate up",
     "migrate:down": "node-pg-migrate down",
-    "generate:fiat": "node scripts/generateFiatCurrencies.mjs"
+    "generate:fiat": "node scripts/generateFiatCurrencies.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
@@ -46,6 +47,7 @@
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
-    "prettier": "^3.9.10"
+    "prettier": "^3.9.10",
+    "vitest": "^5.0.5"
   }
 }

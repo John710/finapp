@@ -108,6 +108,7 @@ async function importRoutes(fastify, opts) {
       const categoriesRes = await client.query('SELECT id, name, type FROM categories WHERE user_id = $1', [userId])
       const categoriesMap = new Map(categoriesRes.rows.map(c => [c.name.toLowerCase(), c]))
 
+      const prepared = []
       for (const row of rows) {
         try {
           const dateRaw = row[mapping.date]
@@ -183,23 +184,40 @@ async function importRoutes(fastify, opts) {
             currency = String(currencyRaw).toUpperCase()
           }
 
-          const txRes = await client.query(
-            'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-            [userId, accountId, categoryId, Math.abs(amount), type, date, noteRaw || null]
-          )
-
-          const sign = type === 'income' ? 1 : -1
-          await client.query(
-            'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
-            [Math.abs(amount) * sign, accountId, userId]
-          )
-
-          stats.created++
+          prepared.push({ accountId, categoryId, amount: Math.abs(amount), type, date, note: noteRaw || null, sign: type === 'income' ? 1 : -1 })
         } catch {
           // Don't leak internal error text (DB details) into the response
           stats.errors.push({ row: row[mapping.date] || '?', error: t('errors.import_row_failed', {}, lang) })
         }
       }
+
+      // Bulk-insert in chunks: one multi-row INSERT per 500 rows instead of
+      // 2 statements per row (a 20k import used to be 40k round trips).
+      const CHUNK = 500
+      for (let i = 0; i < prepared.length; i += CHUNK) {
+        const chunk = prepared.slice(i, i + CHUNK)
+        const placeholders = chunk
+          .map((_, j) => `($${j * 7 + 1}, $${j * 7 + 2}, $${j * 7 + 3}, $${j * 7 + 4}, $${j * 7 + 5}, $${j * 7 + 6}, $${j * 7 + 7})`)
+          .join(', ')
+        const params = chunk.flatMap(r => [userId, r.accountId, r.categoryId, r.amount, r.type, r.date, r.note])
+        await client.query(
+          `INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note) VALUES ${placeholders}`,
+          params
+        )
+
+        // Balance deltas grouped per account: one UPDATE per touched account per chunk
+        const deltas = new Map()
+        for (const r of chunk) {
+          deltas.set(r.accountId, (deltas.get(r.accountId) || 0) + r.amount * r.sign)
+        }
+        for (const [accountId, delta] of deltas) {
+          await client.query(
+            'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
+            [delta, accountId, userId]
+          )
+        }
+      }
+      stats.created = prepared.length
 
       await client.query('COMMIT')
     } catch (err) {

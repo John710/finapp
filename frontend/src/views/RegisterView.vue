@@ -8,7 +8,7 @@
         <h1 class="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">{{ $t('auth.register') }}</h1>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">{{ $t('auth.register_subtitle') }}</p>
       </div>
-      <form @submit.prevent="handleRegister" class="space-y-4">
+      <form class="space-y-4" @submit.prevent="handleRegister">
         <div>
           <label class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">{{ $t('auth.username') }}</label>
           <input

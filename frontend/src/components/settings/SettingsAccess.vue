@@ -16,7 +16,7 @@
       <!-- Enable flow: password -> QR -> code -->
       <div v-if="!totpEnabled && setupStage === 'idle'" class="space-y-2 max-w-sm">
         <input v-model="totpPassword" type="password" autocomplete="current-password" :placeholder="$t('settings.password_current')" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-        <button @click="startTotpSetup" :disabled="totpLoading || !totpPassword" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
+        <button :disabled="totpLoading || !totpPassword" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50" @click="startTotpSetup">
           {{ totpLoading ? $t('common.loading') : $t('settings.totp_setup') }}
         </button>
       </div>
@@ -27,7 +27,7 @@
         </div>
         <div class="flex gap-2 max-w-xs mx-auto">
           <input v-model="totpCode" type="text" inputmode="numeric" maxlength="8" :placeholder="$t('auth.totp_code')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm tracking-widest" />
-          <button @click="enableTotp" :disabled="totpLoading || !totpCode" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
+          <button :disabled="totpLoading || !totpCode" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50" @click="enableTotp">
             {{ totpLoading ? $t('common.loading') : $t('settings.totp_enable') }}
           </button>
         </div>
@@ -37,7 +37,7 @@
           <input v-model="totpPassword" type="password" autocomplete="current-password" :placeholder="$t('settings.password_current')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
           <input v-model="totpCode" type="text" inputmode="numeric" maxlength="8" :placeholder="$t('auth.totp_code')" class="w-28 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm tracking-widest" />
         </div>
-        <button @click="disableTotp" :disabled="totpLoading || !totpPassword || !totpCode" class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+        <button :disabled="totpLoading || !totpPassword || !totpCode" class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50" @click="disableTotp">
           {{ totpLoading ? $t('common.loading') : $t('settings.totp_disable') }}
         </button>
       </div>
@@ -61,7 +61,7 @@
             <span class="font-medium truncate block">{{ tok.name }}</span>
             <p class="text-xs text-slate-500">{{ $t('settings.token_last_used') }}: {{ tok.last_used_at ? formatDateTime(tok.last_used_at) : '—' }}</p>
           </div>
-          <button @click="revokeToken(tok.id)" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600">
+          <button class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600" @click="revokeToken(tok.id)">
             {{ $t('common.delete') }}
           </button>
         </li>
@@ -69,7 +69,7 @@
       <p v-else class="text-sm text-slate-500 mb-3">{{ $t('settings.tokens_empty') }}</p>
       <div class="flex gap-2 max-w-sm">
         <input v-model="newTokenName" type="text" :placeholder="$t('settings.token_name')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-        <button @click="createToken" :disabled="tokenLoading || !newTokenName.trim()" class="px-4 py-2 rounded-full bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
+        <button :disabled="tokenLoading || !newTokenName.trim()" class="px-4 py-2 rounded-full bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50" @click="createToken">
           {{ tokenLoading ? $t('common.loading') : $t('common.add') }}
         </button>
       </div>
@@ -87,7 +87,7 @@
             <span class="font-medium">{{ v.login }}</span>
             <p class="text-xs text-slate-500">{{ $t('settings.viewer_since') }}: {{ formatDateTime(v.created_at) }}</p>
           </div>
-          <button @click="removeViewer(v.id)" class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700">
+          <button class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700" @click="removeViewer(v.id)">
             {{ $t('common.delete') }}
           </button>
         </li>
@@ -96,7 +96,7 @@
       <div class="flex flex-col sm:flex-row gap-2 max-w-md">
         <input v-model="viewerLogin" type="text" :placeholder="$t('auth.username')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
         <input v-model="viewerPassword" type="password" autocomplete="new-password" :placeholder="$t('auth.password')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-        <button @click="createViewer" :disabled="viewerLoading || !viewerLogin.trim() || viewerPassword.length < 8" class="px-4 py-2 rounded-full bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
+        <button :disabled="viewerLoading || !viewerLogin.trim() || viewerPassword.length < 8" class="px-4 py-2 rounded-full bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50" @click="createViewer">
           {{ viewerLoading ? $t('common.loading') : $t('common.add') }}
         </button>
       </div>

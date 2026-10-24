@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('budgets.title') }}</h1>
-      <button v-if="!isViewer" @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
+      <button v-if="!isViewer" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -48,17 +48,17 @@
           <span v-else-if="b.progress >= 80">{{ $t('budgets.warning') }}</span>
           <span v-else>{{ $t('budgets.remaining') }}: {{ formatConverted(b.amount - b.spent, b.currency) }}</span>
         </p>
-        <div class="mt-4 flex gap-2" v-if="!isViewer">
-          <button @click="editBudget(b)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">{{ $t('common.edit') }}</button>
-          <button @click="deleteBudget(b.id)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors">{{ $t('common.delete') }}</button>
+        <div v-if="!isViewer" class="mt-4 flex gap-2">
+          <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click="editBudget(b)">{{ $t('common.edit') }}</button>
+          <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors" @click="deleteBudget(b.id)">{{ $t('common.delete') }}</button>
         </div>
       </div>
     </div>
 
     <!-- Modal -->
-    <BaseModal v-model="showModal" widthClass="max-w-md">
+    <BaseModal v-model="showModal" width-class="max-w-md">
         <h2 class="font-display text-xl font-semibold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
-        <form @submit.prevent="saveBudget" class="space-y-4">
+        <form class="space-y-4" @submit.prevent="saveBudget">
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('categories.title') }}</label>
             <div class="flex gap-2">
@@ -66,7 +66,7 @@
                 <option :value="null">{{ $t('budgets.no_category') }}</option>
                 <option v-for="cat in expenseCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
               </select>
-              <button type="button" @click="showQuickCategory = true" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')">
+              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" @click="showQuickCategory = true">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
             </div>
@@ -75,9 +75,10 @@
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('tags.title') }}</label>
             <div class="flex flex-wrap gap-1.5">
-              <button type="button" v-for="tag in tagsStore.tags" :key="tag.id" @click="toggleTag(tag.id)"
-                class="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors"
-                :class="form.tag_ids.includes(tag.id) ? 'bg-primary-600 text-white border-primary-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'">
+              <button
+v-for="tag in tagsStore.tags" :key="tag.id" type="button" class="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors"
+                :class="form.tag_ids.includes(tag.id) ? 'bg-primary-600 text-white border-primary-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'"
+                @click="toggleTag(tag.id)">
                 {{ tag.name }}
               </button>
               <span v-if="tagsStore.tags.length === 0" class="text-xs text-slate-500">{{ $t('tags.empty_list') }}</span>
@@ -89,7 +90,8 @@
           </div>
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
-            <CurrencySelect v-model="form.currency" required
+            <CurrencySelect
+v-model="form.currency" required
               :placeholder="$t('common.currency')"
               :search-placeholder="$t('common.search')"
               :empty-text="$t('common.empty')" />
@@ -97,12 +99,12 @@
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('budgets.period') }}</label>
             <div class="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
-              <button type="button" @click="form.period = 'month'" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.period === 'month' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-500'">{{ $t('budgets.period_month') }}</button>
-              <button type="button" @click="form.period = 'week'" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.period === 'week' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-500'">{{ $t('budgets.period_week') }}</button>
+              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.period === 'month' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-500'" @click="form.period = 'month'">{{ $t('budgets.period_month') }}</button>
+              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.period === 'week' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-500'" @click="form.period = 'week'">{{ $t('budgets.period_week') }}</button>
             </div>
           </div>
           <div class="flex gap-3 mt-6">
-            <button type="button" @click="closeModal" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
+            <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closeModal">{{ $t('common.cancel') }}</button>
             <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>

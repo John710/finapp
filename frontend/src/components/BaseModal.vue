@@ -8,9 +8,9 @@
     aria-modal="true"
     :aria-label="ariaLabel"
     :aria-labelledby="ariaLabelledBy"
+    tabindex="-1"
     @click.self="close"
     @keydown.esc="close"
-    tabindex="-1"
   >
     <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm" @click.self="close"></div>
     <div

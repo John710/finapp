@@ -13,26 +13,26 @@
       <div class="space-y-3 max-w-md">
         <div class="relative">
           <input v-model="currentPassword" autocomplete="current-password" :type="showPasswords.current ? 'text' : 'password'" :placeholder="$t('settings.password_current')" class="w-full px-3 pr-10 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-          <button type="button" @click="showPasswords.current = !showPasswords.current" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.current ? $t('settings.password_hide') : $t('settings.password_show')">
+          <button type="button" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.current ? $t('settings.password_hide') : $t('settings.password_show')" @click="showPasswords.current = !showPasswords.current">
             <Icon :name="showPasswords.current ? 'eyeOff' : 'eye'" size="18" />
           </button>
         </div>
         <div class="relative">
           <input v-model="newPassword" autocomplete="new-password" :type="showPasswords.new ? 'text' : 'password'" :placeholder="$t('settings.password_new')" class="w-full px-3 pr-10 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-          <button type="button" @click="showPasswords.new = !showPasswords.new" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.new ? $t('settings.password_hide') : $t('settings.password_show')">
+          <button type="button" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.new ? $t('settings.password_hide') : $t('settings.password_show')" @click="showPasswords.new = !showPasswords.new">
             <Icon :name="showPasswords.new ? 'eyeOff' : 'eye'" size="18" />
           </button>
         </div>
         <div class="relative">
           <input v-model="confirmPassword" autocomplete="new-password" :type="showPasswords.confirm ? 'text' : 'password'" :placeholder="$t('settings.password_confirm')" class="w-full px-3 pr-10 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-          <button type="button" @click="showPasswords.confirm = !showPasswords.confirm" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.confirm ? $t('settings.password_hide') : $t('settings.password_show')">
+          <button type="button" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.confirm ? $t('settings.password_hide') : $t('settings.password_show')" @click="showPasswords.confirm = !showPasswords.confirm">
             <Icon :name="showPasswords.confirm ? 'eyeOff' : 'eye'" size="18" />
           </button>
         </div>
         <button
-          @click="changePassword"
           :disabled="passwordLoading || !currentPassword || !newPassword || newPassword !== confirmPassword || newPassword.length < 6"
           class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+          @click="changePassword"
         >
           {{ passwordLoading ? $t('common.loading') : $t('settings.password_change') }}
         </button>
@@ -48,9 +48,9 @@
         </div>
         <button
           v-if="sessions.length > 1"
-          @click="logoutAllOtherSessions"
           :disabled="sessionsLoading"
           class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+          @click="logoutAllOtherSessions"
         >
           {{ sessionsLoading ? $t('common.loading') : $t('settings.sessions_terminate_all') }}
         </button>
@@ -65,9 +65,9 @@
           </div>
           <button
             v-if="!session.is_current"
-            @click="terminateSession(session.id)"
             :disabled="sessionsLoading"
             class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50"
+            @click="terminateSession(session.id)"
           >
             {{ $t('settings.sessions_terminate') }}
           </button>

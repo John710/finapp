@@ -12,10 +12,10 @@
       <h3 :id="titleId" class="font-display text-lg font-semibold mb-2">{{ title }}</h3>
       <p class="text-sm text-slate-500 mb-6">{{ message }}</p>
       <div class="flex gap-3">
-        <button ref="cancelBtn" @click="cancel" class="flex-1 py-2.5 rounded-full bg-slate-100 dark:bg-slate-800 text-sm font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+        <button ref="cancelBtn" class="flex-1 py-2.5 rounded-full bg-slate-100 dark:bg-slate-800 text-sm font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" @click="cancel">
           {{ cancelText }}
         </button>
-        <button ref="confirmBtn" @click="confirm" :class="danger ? 'bg-danger-500 hover:bg-danger-600' : 'bg-primary-500 hover:bg-primary-600 shadow-card'" class="flex-1 py-2.5 rounded-full text-white text-sm font-semibold transition-colors">
+        <button ref="confirmBtn" :class="danger ? 'bg-danger-500 hover:bg-danger-600' : 'bg-primary-500 hover:bg-primary-600 shadow-card'" class="flex-1 py-2.5 rounded-full text-white text-sm font-semibold transition-colors" @click="confirm">
           {{ confirmText }}
         </button>
       </div>

@@ -2,7 +2,7 @@
     <div>
       <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('reports.title') }}</h1>
-        <button @click="exportData" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors self-start">
+        <button class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors self-start" @click="exportData">
           <Icon name="upload" class="w-4 h-4" />
           {{ $t('reports.export_csv') }}
         </button>
@@ -11,9 +11,10 @@
       <!-- Filters -->
       <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark mb-6 flex flex-wrap gap-3 items-center">
         <div class="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-          <button v-for="p in periodOptions" :key="p.value" @click="setPeriod(p.value)"
-            class="px-3 py-2 rounded-md text-sm font-medium transition-colors"
-            :class="selectedPeriod === p.value ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-500'">
+          <button
+v-for="p in periodOptions" :key="p.value" class="px-3 py-2 rounded-md text-sm font-medium transition-colors"
+            :class="selectedPeriod === p.value ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-500'"
+            @click="setPeriod(p.value)">
             {{ p.label }}
           </button>
         </div>
@@ -25,7 +26,7 @@
           <label class="text-xs text-slate-500">{{ $t('reports.to') }}</label>
           <input v-model="filters.to" type="date" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" />
         </div>
-        <button @click="applyFilters" :disabled="loading" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card disabled:opacity-50 text-white rounded-full text-sm font-medium transition-colors">
+        <button :disabled="loading" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card disabled:opacity-50 text-white rounded-full text-sm font-medium transition-colors" @click="applyFilters">
           {{ loading ? $t('common.loading') + '...' : $t('reports.apply') }}
         </button>
       </div>
@@ -65,9 +66,10 @@
           <div class="flex items-center justify-between mb-4">
             <h3 class="font-semibold">{{ categoryType === 'income' ? $t('reports.income_by_category') : $t('reports.expenses_by_category') }}</h3>
             <div class="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-              <button v-for="t in ['expense', 'income']" :key="t" @click="categoryType = t"
-                class="px-3 py-1 rounded-md text-xs font-medium transition-colors"
-                :class="categoryType === t ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-500'">
+              <button
+v-for="t in ['expense', 'income']" :key="t" class="px-3 py-1 rounded-md text-xs font-medium transition-colors"
+                :class="categoryType === t ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-500'"
+                @click="categoryType = t">
                 {{ $t('categories.types.' + t) }}
               </button>
             </div>

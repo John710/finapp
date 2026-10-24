@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('tags.title') }}</h1>
-      <button v-if="!isViewer" @click="openModal()" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card text-white rounded-full text-sm font-medium transition-colors">
+      <button v-if="!isViewer" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card text-white rounded-full text-sm font-medium transition-colors" @click="openModal()">
         {{ $t('tags.add') }}
       </button>
     </div>
@@ -20,17 +20,17 @@
     </div>
 
     <div v-else class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div v-for="tag in tagsStore.tags" :key="tag.id" @click="goToTransactions(tag.id)" class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+      <div v-for="tag in tagsStore.tags" :key="tag.id" class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" @click="goToTransactions(tag.id)">
         <div class="flex items-center gap-3">
           <div class="w-4 h-4 rounded-full" :style="{ backgroundColor: tag.color || '#94a3b8' }"></div>
           <span class="font-medium">{{ tag.name }}</span>
           <span class="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-full">{{ tag.transaction_count ?? 0 }}</span>
         </div>
         <div class="flex items-center gap-1" @click.stop>
-          <button @click="openModal(tag)" class="p-1.5 text-slate-400 hover:text-primary-600 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+          <button class="p-1.5 text-slate-400 hover:text-primary-600 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" @click="openModal(tag)">
             <Icon name="edit" class="w-4 h-4" />
           </button>
-          <button @click="deleteTag(tag.id)" :disabled="deletingId === tag.id" class="p-1.5 text-slate-400 hover:text-danger-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50">
+          <button :disabled="deletingId === tag.id" class="p-1.5 text-slate-400 hover:text-danger-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50" @click="deleteTag(tag.id)">
             <Icon name="delete" class="w-4 h-4" />
           </button>
         </div>
@@ -38,7 +38,7 @@
     </div>
 
     <!-- Modal -->
-    <BaseModal v-model="showModal" widthClass="max-w-sm">
+    <BaseModal v-model="showModal" width-class="max-w-sm">
         <h3 class="text-lg font-semibold mb-4">{{ editingTag ? $t('tags.edit') : $t('tags.add') }}</h3>
         <div class="space-y-4">
           <div>
@@ -48,13 +48,13 @@
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('tags.color') }}</label>
             <div class="flex flex-wrap gap-2">
-              <button v-for="c in colors" :key="c" @click="form.color = c" class="w-6 h-6 rounded-full border-2 transition-all" :style="{ backgroundColor: c, borderColor: form.color === c ? c : 'transparent' }" :class="form.color === c ? 'scale-110 ring-2 ring-offset-1 ring-slate-300 dark:ring-slate-600' : ''"></button>
+              <button v-for="c in colors" :key="c" class="w-6 h-6 rounded-full border-2 transition-all" :style="{ backgroundColor: c, borderColor: form.color === c ? c : 'transparent' }" :class="form.color === c ? 'scale-110 ring-2 ring-offset-1 ring-slate-300 dark:ring-slate-600' : ''" @click="form.color = c"></button>
             </div>
           </div>
         </div>
         <div class="flex justify-end gap-2 mt-6">
-          <button @click="showModal = false" :disabled="saving" class="px-4 py-2 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm disabled:opacity-50">{{ $t('common.cancel') }}</button>
-          <button @click="saveTag" :disabled="saving || !form.name.trim()" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card disabled:opacity-50 text-white rounded-full text-sm font-medium">
+          <button :disabled="saving" class="px-4 py-2 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm disabled:opacity-50" @click="showModal = false">{{ $t('common.cancel') }}</button>
+          <button :disabled="saving || !form.name.trim()" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card disabled:opacity-50 text-white rounded-full text-sm font-medium" @click="saveTag">
             {{ saving ? $t('common.loading') : $t('common.save') }}
           </button>
         </div>

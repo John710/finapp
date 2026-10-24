@@ -137,7 +137,8 @@
         <div class="divide-y divide-slate-100 dark:divide-slate-800">
           <div v-for="t in recentTransactions" :key="t.id" class="px-5 lg:px-7 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
             <div class="flex items-center gap-3.5 min-w-0">
-              <div class="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
+              <div
+class="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0"
                 :class="t.type === 'income' ? 'bg-primary-100 dark:bg-primary-500/15 text-primary-600 dark:text-primary-400' : t.type === 'transfer' ? 'bg-sky-100 dark:bg-sky-500/15 text-sky-500' : 'bg-rose-100 dark:bg-rose-500/15 text-rose-500'">
                 <Icon :name="t.category_icon || 'money'" set="category" class="w-5 h-5" />
               </div>
@@ -168,6 +169,7 @@ import { useRecurringStore } from '../stores/recurring'
 import { formatFull } from '@/utils/currency'
 import { getUserLocale } from '@/utils/locale'
 import { formatCurrency as formatCurrencyValue, formatDate as formatDateValue } from '@/utils/format'
+import { logger } from '@/utils/logger.js'
 import { useDarkMode } from '@/composables/useDarkMode.js'
 import { useTransactionDisplay } from '@/composables/useTransactionDisplay'
 import { useChartOptions } from '@/composables/useChartOptions'
@@ -184,28 +186,44 @@ const recurringStore = useRecurringStore()
 const baseCurrency = computed(() => ratesStore.baseCurrency)
 
 const { isDark } = useDarkMode()
+const dashboard = ref(null)
 const { formatNote } = useTransactionDisplay(accountsStore)
 const { trendChartOption: buildTrendOption, categoryChartOption: buildCategoryOption } = useChartOptions({ isDark, baseCurrency, ratesStore })
 
 onMounted(async () => {
-  accountsStore.fetchAccounts()
-  transactionsStore.fetchTransactions({ limit: 5 })
   ratesStore.fetchRates()
 
+  // Single aggregate endpoint instead of ~11 individual requests
   const now = new Date()
   const monthFrom = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('sv-SE')
   const monthTo = now.toLocaleDateString('sv-SE')
-  reportsStore.fetchSummary({ from: monthFrom, to: monthTo })
-  debtsStore.fetchDebts()
-  recurringStore.fetchRules()
-
-  // Fetch trend for last 6 months
   const from = new Date(now.getFullYear(), now.getMonth() - 5, 1).toLocaleDateString('sv-SE')
   const to = now.toLocaleDateString('sv-SE')
-  reportsStore.fetchTrend({ from, to })
+
+  try {
+    const data = await reportsStore.fetchDashboard({ trend_months: 6, networth_months: 12 })
+    // Hydrate the stores the templates read from (single source of truth per concern)
+    accountsStore.accounts = data.accounts
+    transactionsStore.transactions = data.recent_transactions
+    debtsStore.debts = data.debts_full || debtsStore.debts
+    recurringStore.rules = data.recurring_full || recurringStore.rules
+    dashboard.value = data
+  } catch (e) {
+    logger.error('Dashboard aggregate failed', e)
+    // Fallback to per-endpoint fetches so the dashboard still renders
+    accountsStore.fetchAccounts()
+    transactionsStore.fetchTransactions({ limit: 5 })
+    debtsStore.fetchDebts()
+    recurringStore.fetchRules()
+    reportsStore.fetchSummary({ from: monthFrom, to: monthTo })
+    reportsStore.fetchTrend({ from, to })
+    reportsStore.fetchByCategory({ from, to, type: 'expense' })
+    reportsStore.fetchNetWorth({ months: 12 })
+    reportsStore.fetchSavingsRate({ from, to })
+  }
+
+  // byCategory (pie) still uses its own endpoint — needs per-category rows
   reportsStore.fetchByCategory({ from, to, type: 'expense' })
-  reportsStore.fetchNetWorth({ months: 12 })
-  reportsStore.fetchSavingsRate({ from, to })
 })
 
 const totalBalance = computed(() => {

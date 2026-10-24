@@ -2,7 +2,7 @@
   <div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('accounts.title') }}</h1>
-      <button v-if="!isViewer" @click="openModal()" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
+      <button v-if="!isViewer" class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors" @click="openModal()">
         <Icon name="plus" class="w-4 h-4" />
         {{ $t('common.add') }}
       </button>
@@ -30,7 +30,8 @@
       <div v-if="regularAccounts.length">
         <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">{{ $t('accounts.regular_title') }}</h2>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div v-for="account in regularAccounts" :key="account.id"
+          <div
+v-for="account in regularAccounts" :key="account.id"
             class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark relative overflow-hidden cursor-pointer"
             :class="{
               'opacity-60': account.is_archived,
@@ -41,7 +42,8 @@
             @drop="onDrop($event, account)"
             @click="$router.push(`/accounts/${account.id}`)">
             <div class="absolute top-0 right-0 w-24 h-24 rounded-bl-full" :style="{ backgroundColor: account.color + '10' }"></div>
-            <div class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing"
+            <div
+class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing"
               draggable="true"
               @dragstart="onDragStart($event, account)"
               @dragend="onDragEnd"
@@ -62,8 +64,8 @@
             </div>
             <p class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ formatCurrency(account.balance, account.currency) }}</p>
             <div class="mt-4 flex gap-2">
-              <button @click.stop="editAccount(account)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">{{ $t('common.edit') }}</button>
-              <button @click.stop="deleteAccount(account.id)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors">{{ $t('common.delete') }}</button>
+              <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click.stop="editAccount(account)">{{ $t('common.edit') }}</button>
+              <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors" @click.stop="deleteAccount(account.id)">{{ $t('common.delete') }}</button>
             </div>
           </div>
         </div>
@@ -73,7 +75,8 @@
       <div v-if="cryptoAccounts.length">
         <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">{{ $t('accounts.crypto_title') }}</h2>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div v-for="account in cryptoAccounts" :key="account.id"
+          <div
+v-for="account in cryptoAccounts" :key="account.id"
             class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark relative overflow-hidden cursor-pointer"
             :class="{
               'opacity-60': account.is_archived,
@@ -84,7 +87,8 @@
             @drop="onDrop($event, account)"
             @click="$router.push(`/accounts/${account.id}`)">
             <div class="absolute top-0 right-0 w-24 h-24 rounded-bl-full" :style="{ backgroundColor: account.color + '10' }"></div>
-            <div class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing"
+            <div
+class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing"
               draggable="true"
               @dragstart="onDragStart($event, account)"
               @dragend="onDragEnd"
@@ -108,8 +112,8 @@
               <p v-if="cryptoValue(account)" class="text-sm text-slate-500 mt-1">≈ {{ formatCurrency(cryptoValue(account), baseCurrency) }}</p>
             </div>
             <div class="mt-4 flex gap-2">
-              <button @click.stop="editAccount(account)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">{{ $t('common.edit') }}</button>
-              <button @click.stop="deleteAccount(account.id)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors">{{ $t('common.delete') }}</button>
+              <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click.stop="editAccount(account)">{{ $t('common.edit') }}</button>
+              <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors" @click.stop="deleteAccount(account.id)">{{ $t('common.delete') }}</button>
             </div>
           </div>
         </div>
@@ -119,7 +123,8 @@
       <div v-if="goalAccounts.length">
         <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">{{ $t('accounts.goals_title') }}</h2>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div v-for="account in goalAccounts" :key="account.id"
+          <div
+v-for="account in goalAccounts" :key="account.id"
             class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark relative overflow-hidden cursor-pointer"
             :class="{
               'opacity-60': account.is_archived,
@@ -130,7 +135,8 @@
             @drop="onDrop($event, account)"
             @click="$router.push(`/accounts/${account.id}`)">
             <div class="absolute top-0 right-0 w-24 h-24 rounded-bl-full" :style="{ backgroundColor: account.color + '10' }"></div>
-            <div class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing"
+            <div
+class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing"
               draggable="true"
               @dragstart="onDragStart($event, account)"
               @dragend="onDragEnd"
@@ -160,8 +166,8 @@
               <p class="text-xs mt-1 text-slate-500">{{ goalProgress(account) }}% {{ $t('accounts.completed') }}</p>
             </div>
             <div class="mt-3 flex gap-2">
-              <button @click.stop="editAccount(account)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">{{ $t('common.edit') }}</button>
-              <button @click.stop="deleteAccount(account.id)" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors">{{ $t('common.delete') }}</button>
+              <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click.stop="editAccount(account)">{{ $t('common.edit') }}</button>
+              <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors" @click.stop="deleteAccount(account.id)">{{ $t('common.delete') }}</button>
             </div>
           </div>
         </div>
@@ -169,9 +175,9 @@
     </div>
 
     <!-- Modal -->
-    <BaseModal v-model="showModal" widthClass="max-w-md" contentClass="max-h-[90vh] overflow-y-auto">
+    <BaseModal v-model="showModal" width-class="max-w-md" content-class="max-h-[90vh] overflow-y-auto">
         <h2 class="font-display text-xl font-semibold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
-        <form @submit.prevent="saveAccount" class="space-y-4">
+        <form class="space-y-4" @submit.prevent="saveAccount">
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('common.name') }}</label>
             <input v-model="form.name" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 focus:outline-none focus:ring-2 focus:ring-primary-400" />
@@ -189,20 +195,21 @@
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
-              <div v-if="form.type === 'crypto'" class="relative" ref="cryptoSelectRef">
-                <button type="button" @click="showCryptoDropdown = !showCryptoDropdown" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-left text-sm flex items-center justify-between">
+              <div v-if="form.type === 'crypto'" ref="cryptoSelectRef" class="relative">
+                <button type="button" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-left text-sm flex items-center justify-between" @click="showCryptoDropdown = !showCryptoDropdown">
                   <span v-if="form.currency">{{ form.currency }} — {{ cryptoList.find(c => c.symbol === form.currency)?.name || '' }}</span>
                   <span v-else class="text-slate-400">{{ $t('common.search') }}...</span>
                   <Icon name="arrowDown" class="w-4 h-4 text-slate-400" />
                 </button>
                 <div v-if="showCryptoDropdown" class="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 rounded-2xl border-0 shadow-float max-h-60 overflow-hidden flex flex-col">
                   <div class="p-2 border-b border-slate-100 dark:border-slate-800">
-                    <input v-model="cryptoSearch" type="text" :placeholder="$t('common.search')" class="w-full px-2 py-1.5 text-sm rounded-md border-0 bg-slate-100 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-400" @keydown="onCryptoKeydown" ref="cryptoSearchInput" />
+                    <input ref="cryptoSearchInput" v-model="cryptoSearch" type="text" :placeholder="$t('common.search')" class="w-full px-2 py-1.5 text-sm rounded-md border-0 bg-slate-100 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-400" @keydown="onCryptoKeydown" />
                   </div>
                   <div class="overflow-y-auto flex-1">
-                    <button v-for="c in filteredCryptoList" :key="c.symbol" type="button" @click="selectCrypto(c)"
-                      class="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 transition-colors"
-                      :class="form.currency === c.symbol ? 'bg-primary-100 dark:bg-primary-500/15 text-primary-600' : ''">
+                    <button
+v-for="c in filteredCryptoList" :key="c.symbol" type="button" class="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 transition-colors"
+                      :class="form.currency === c.symbol ? 'bg-primary-100 dark:bg-primary-500/15 text-primary-600' : ''"
+                      @click="selectCrypto(c)">
                       <img v-if="c.image && !imgError.has(c.symbol)" :src="c.image" class="w-5 h-5 rounded-full" @error="imgError.add(c.symbol)" />
                       <div v-else class="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-500 dark:text-slate-400">{{ c.symbol?.[0] || '?' }}</div>
                       <span class="font-medium">{{ c.symbol }}</span>
@@ -212,7 +219,8 @@
                   </div>
                 </div>
               </div>
-              <CurrencySelect v-else v-model="form.currency" required
+              <CurrencySelect
+v-else v-model="form.currency" required
                 :placeholder="$t('common.currency')"
                 :search-placeholder="$t('common.search')"
                 :empty-text="$t('common.empty')" />
@@ -229,14 +237,15 @@
           <div>
             <label class="block text-sm font-medium mb-1">{{ $t('accounts.color') }}</label>
             <div class="flex flex-wrap gap-2">
-              <button v-for="color in presetColors" :key="color" type="button" @click="form.color = color"
-                class="w-8 h-8 rounded-full transition-all"
+              <button
+v-for="color in presetColors" :key="color" type="button" class="w-8 h-8 rounded-full transition-all"
                 :class="form.color === color ? 'ring-2 ring-offset-2 dark:ring-offset-slate-900' : ''"
-                :style="{ backgroundColor: color, ringColor: color }"></button>
+                :style="{ backgroundColor: color, ringColor: color }"
+                @click="form.color = color"></button>
             </div>
           </div>
           <div class="flex gap-3 mt-6">
-            <button type="button" @click="closeModal" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800">{{ $t('common.cancel') }}</button>
+            <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closeModal">{{ $t('common.cancel') }}</button>
             <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
           </div>
         </form>

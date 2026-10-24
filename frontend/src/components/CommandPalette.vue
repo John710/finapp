@@ -1,10 +1,10 @@
 <template>
   <BaseModal
-    :modelValue="modelValue"
-    @update:modelValue="$emit('update:modelValue', $event)"
-    widthClass="max-w-lg p-0 rounded-3xl overflow-hidden"
-    zClass="z-[60]"
-    alignClass="items-start justify-center pt-[20vh]"
+    :model-value="modelValue"
+    width-class="max-w-lg p-0 rounded-3xl overflow-hidden"
+    z-class="z-[60]"
+    align-class="items-start justify-center pt-[20vh]"
+    @update:model-value="$emit('update:modelValue', $event)"
   >
     <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
       <Icon name="search" class="w-5 h-5 text-slate-400" />
@@ -29,9 +29,9 @@
         :key="item.path"
         role="option"
         :aria-selected="i === selectedIndex"
-        @click="select(item)"
         class="w-full text-left px-4 py-2.5 flex items-center gap-3 transition-colors"
         :class="i === selectedIndex ? 'bg-primary-100 dark:bg-primary-500/15 text-primary-700 dark:text-primary-300' : 'hover:bg-slate-50 dark:hover:bg-slate-800'"
+        @click="select(item)"
       >
         <Icon :name="item.icon" class="w-4 h-4 text-slate-400" />
         <span class="text-sm">{{ item.name }}</span>

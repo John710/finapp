@@ -1,7 +1,8 @@
 <template>
   <div role="status" aria-live="polite" aria-atomic="true" class="fixed bottom-4 right-4 z-[70] space-y-2">
     <TransitionGroup name="toast">
-      <div v-for="toast in toasts" :key="toast.id"
+      <div
+v-for="toast in toasts" :key="toast.id"
         class="flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-float border-0 text-sm font-medium max-w-sm"
         :class="typeClass(toast.type)">
         <Icon v-if="toast.type === 'success'" name="check" class="w-5 h-5 shrink-0" />
@@ -9,7 +10,7 @@
         <Icon v-else-if="toast.type === 'warning'" name="alert" class="w-5 h-5 shrink-0" />
         <Icon v-else name="info" class="w-5 h-5 shrink-0" />
         <span>{{ toast.message }}</span>
-        <button @click="remove(toast.id)" class="ml-auto text-current opacity-60 hover:opacity-100">
+        <button class="ml-auto text-current opacity-60 hover:opacity-100" @click="remove(toast.id)">
           <Icon name="cancel" class="w-4 h-4" />
         </button>
       </div>

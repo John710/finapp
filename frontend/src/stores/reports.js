@@ -25,7 +25,29 @@ export const useReportsStore = defineStore('reports', () => {
   const trend = ref([])
   const netWorth = ref([])
   const savingsRate = ref(null)
+  const dashboard = ref(null)
   const loading = ref(false)
+
+  // One aggregate payload for the dashboard (accounts, month summary, trend,
+  // net worth, recent transactions, upcoming recurring, debts summary)
+  async function fetchDashboard(params = {}) {
+    const query = buildQuery(params)
+    const data = await api(`/reports/dashboard?${query}`)
+    dashboard.value = data
+    // Hydrate the pieces other computeds already read
+    trend.value = data.trend
+    netWorth.value = data.net_worth
+    summary.value = {
+      total_income: data.month_summary.income,
+      total_expense: data.month_summary.expense,
+      total_transfer: 0,
+      net: data.month_summary.net,
+      count: null,
+      unconverted_count: 0,
+      base_currency: data.base_currency
+    }
+    return data
+  }
 
   async function fetchSummary(params = {}) {
     const query = buildQuery(params)
@@ -70,5 +92,5 @@ export const useReportsStore = defineStore('reports', () => {
     window.URL.revokeObjectURL(url)
   }
 
-  return { summary, byCategory, byCategoryAll, trend, netWorth, savingsRate, loading, fetchSummary, fetchByCategory, fetchByCategoryAll, fetchTrend, fetchNetWorth, fetchSavingsRate, exportCsv }
+  return { summary, byCategory, byCategoryAll, trend, netWorth, savingsRate, dashboard, loading, fetchDashboard, fetchSummary, fetchByCategory, fetchByCategoryAll, fetchTrend, fetchNetWorth, fetchSavingsRate, exportCsv }
 })
