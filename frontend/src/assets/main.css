@@ -91,3 +91,26 @@ body {
   opacity: 0;
   transform: translateY(12px);
 }
+
+/* Universal button feedback: every button gets a subtle hover/active state
+   even when the component does not define its own hover classes. */
+button:not([disabled]) {
+  transition: filter 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+
+button:not([disabled]):hover {
+  filter: brightness(0.95);
+}
+
+.dark button:not([disabled]):hover {
+  filter: brightness(1.12);
+}
+
+button:not([disabled]):active {
+  transform: scale(0.97);
+}
+
+button:not([disabled]):focus-visible {
+  outline: 2px solid #7c6fde;
+  outline-offset: 2px;
+}

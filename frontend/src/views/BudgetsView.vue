@@ -51,8 +51,8 @@
         </p>
         <div class="mt-4 flex gap-2 items-center">
           <span v-if="b.owner_login" class="text-xs text-primary-500 mr-auto">@{{ b.owner_login }}</span>
-          <button v-if="!b.owner_login" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1" @click="openShare(b)">
-            <Icon name="share" class="w-3 h-3" />{{ $t('sharing.title') }}
+          <button class="text-xs px-2 py-1 rounded-full border-0 flex items-center gap-1 transition-colors font-medium" :class="b.is_shared ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-600 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-500/30' : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'" @click="openShare(b)">
+            <Icon name="share" class="w-3 h-3" />{{ b.is_shared ? $t('sharing.shared_badge') : $t('sharing.title') }}
           </button>
           <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click="editBudget(b)">{{ $t('common.edit') }}</button>
           <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors" @click="deleteBudget(b.id)">{{ $t('common.delete') }}</button>

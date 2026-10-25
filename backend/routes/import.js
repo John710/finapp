@@ -105,7 +105,7 @@ async function importRoutes(fastify, opts) {
       const accountsRes = await client.query('SELECT id, name, currency FROM accounts WHERE user_id = $1 ORDER BY id', [userId])
       const accountsMap = new Map(accountsRes.rows.map(a => [a.name.toLowerCase(), a]))
 
-      const categoriesRes = await client.query('SELECT id, name, type FROM categories WHERE user_id = $1', [userId])
+      const categoriesRes = await client.query('SELECT id, name, type FROM categories', [userId])
       const categoriesMap = new Map(categoriesRes.rows.map(c => [c.name.toLowerCase(), c]))
 
       const prepared = []
@@ -172,8 +172,8 @@ async function importRoutes(fastify, opts) {
               categoryId = cat.id
             } else {
               const newCat = await client.query(
-                'INSERT INTO categories (user_id, name, type, color, icon) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-                [userId, String(categoryRaw), type, '#94a3b8', 'tag']
+                'INSERT INTO categories (name, type, color, icon) VALUES ($1, $2, $3, $4) RETURNING id',
+                [String(categoryRaw), type, '#94a3b8', 'tag']
               )
               categoryId = newCat.rows[0].id
               categoriesMap.set(String(categoryRaw).toLowerCase(), { id: categoryId, name: categoryRaw, type })

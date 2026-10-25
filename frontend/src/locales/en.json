@@ -448,6 +448,7 @@
     "users": "Specific users",
     "view": "Can view",
     "edit": "Can edit",
-    "pick_user": "Select a user…"
+    "pick_user": "Select a user…",
+    "shared_badge": "Shared"
   }
 }

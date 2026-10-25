@@ -6,7 +6,8 @@ async function recurringRoutes(fastify, opts) {
     const userId = request.user.userId
     const result = await fastify.db.query(`
       SELECT r.*, a.name as account_name, c.name as category_name,
-             CASE WHEN r.user_id = $1 THEN NULL ELSE ou.login END AS owner_login
+             CASE WHEN r.user_id = $1 THEN NULL ELSE ou.login END AS owner_login,
+             CASE WHEN r.user_id = $1 THEN COALESCE((SELECT true FROM entity_shares es3 WHERE es3.entity_type = 'recurring' AND es3.entity_id = r.id AND es3.owner_id = r.user_id LIMIT 1), false) ELSE false END AS is_shared
       FROM recurring_rules r
       LEFT JOIN accounts a ON a.id = r.account_id
       LEFT JOIN categories c ON c.id = r.category_id
@@ -47,7 +48,7 @@ async function recurringRoutes(fastify, opts) {
       return { error: t('errors.account_not_found', {}, lang) }
     }
     if (category_id) {
-      const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
+      const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1', [category_id, userId])
       if (catRes.rows.length === 0) {
         reply.code(404)
         return { error: t('errors.category_not_found', {}, lang) }
@@ -96,7 +97,7 @@ async function recurringRoutes(fastify, opts) {
       return { error: t('errors.account_not_found', {}, lang) }
     }
     if (category_id) {
-      const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
+      const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1', [category_id, userId])
       if (catRes.rows.length === 0) {
         reply.code(404)
         return { error: t('errors.category_not_found', {}, lang) }

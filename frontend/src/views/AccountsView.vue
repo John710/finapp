@@ -73,8 +73,8 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
             </div>
             <p class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ formatCurrency(account.balance, account.currency) }}</p>
             <div class="mt-4 flex gap-2">
-              <button v-if="!account.owner_login" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1" @click.stop="openShare(account)">
-                <Icon name="share" class="w-3 h-3" />{{ $t('sharing.title') }}
+              <button class="text-xs px-2 py-1 rounded-full border-0 flex items-center gap-1 transition-colors font-medium" :class="account.is_shared ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-600 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-500/30' : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'" @click.stop="openShare(account)">
+                <Icon name="share" class="w-3 h-3" />{{ account.is_shared ? $t('sharing.shared_badge') : $t('sharing.title') }}
               </button>
               <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click.stop="editAccount(account)">{{ $t('common.edit') }}</button>
               <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors" @click.stop="deleteAccount(account.id)">{{ $t('common.delete') }}</button>
@@ -133,8 +133,8 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
               <p v-if="cryptoValue(account)" class="text-sm text-slate-500 mt-1">≈ {{ formatCurrency(cryptoValue(account), baseCurrency) }}</p>
             </div>
             <div class="mt-4 flex gap-2">
-              <button v-if="!account.owner_login" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1" @click.stop="openShare(account)">
-                <Icon name="share" class="w-3 h-3" />{{ $t('sharing.title') }}
+              <button class="text-xs px-2 py-1 rounded-full border-0 flex items-center gap-1 transition-colors font-medium" :class="account.is_shared ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-600 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-500/30' : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'" @click.stop="openShare(account)">
+                <Icon name="share" class="w-3 h-3" />{{ account.is_shared ? $t('sharing.shared_badge') : $t('sharing.title') }}
               </button>
               <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click.stop="editAccount(account)">{{ $t('common.edit') }}</button>
               <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors" @click.stop="deleteAccount(account.id)">{{ $t('common.delete') }}</button>
@@ -199,8 +199,8 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
               <p class="text-xs mt-1 text-slate-500">{{ goalProgress(account) }}% {{ $t('accounts.completed') }}</p>
             </div>
             <div class="mt-3 flex gap-2">
-              <button v-if="!account.owner_login" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1" @click.stop="openShare(account)">
-                <Icon name="share" class="w-3 h-3" />{{ $t('sharing.title') }}
+              <button class="text-xs px-2 py-1 rounded-full border-0 flex items-center gap-1 transition-colors font-medium" :class="account.is_shared ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-600 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-500/30' : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'" @click.stop="openShare(account)">
+                <Icon name="share" class="w-3 h-3" />{{ account.is_shared ? $t('sharing.shared_badge') : $t('sharing.title') }}
               </button>
               <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click.stop="editAccount(account)">{{ $t('common.edit') }}</button>
               <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors" @click.stop="deleteAccount(account.id)">{{ $t('common.delete') }}</button>
@@ -286,6 +286,7 @@ v-for="color in presetColors" :key="color" type="button" class="w-8 h-8 rounded-
           </div>
         </form>
       </BaseModal>
+      <ShareModal v-model="shareState.show" entity-type="account" :entity-id="shareState.id" :entity-label="shareState.label" @saved="accountsStore.fetchAccounts()" />
   </div>
 </template>
 

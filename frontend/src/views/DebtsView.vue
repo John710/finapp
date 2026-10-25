@@ -43,8 +43,8 @@
         <div class="flex gap-2">
           <button v-if="debt.status !== 'paid'" class="text-xs px-2 py-1 rounded bg-primary-100 dark:bg-primary-500/15 text-primary-600 hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors" @click="openPaymentModal(debt)">{{ $t('debts.pay') }}</button>
           <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click="openHistory(debt)">{{ $t('debts.history') }}</button>
-          <button v-if="!debt.owner_login" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1" @click="openShare(debt)">
-            <Icon name="share" class="w-3 h-3" />{{ $t('sharing.title') }}
+          <button class="text-xs px-2 py-1 rounded-full border-0 flex items-center gap-1 transition-colors font-medium" :class="debt.is_shared ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-600 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-500/30' : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'" @click="openShare(debt)">
+            <Icon name="share" class="w-3 h-3" />{{ debt.is_shared ? $t('sharing.shared_badge') : $t('sharing.title') }}
           </button>
           <span v-if="debt.owner_login" class="text-xs text-primary-500 ml-auto">@{{ debt.owner_login }}</span>
           <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-500 transition-colors ml-auto" @click="deleteDebt(debt.id)">{{ $t('common.delete') }}</button>

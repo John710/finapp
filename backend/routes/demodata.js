@@ -11,10 +11,7 @@ async function demodataRoutes(fastify, opts) {
       await client.query('DELETE FROM debt_payments WHERE user_id = $1', [userId])
       await client.query('DELETE FROM debts WHERE user_id = $1', [userId])
       await client.query('DELETE FROM budgets WHERE user_id = $1', [userId])
-      await client.query('DELETE FROM transaction_tags WHERE user_id = $1', [userId])
       await client.query('DELETE FROM transactions WHERE user_id = $1', [userId])
-      await client.query('DELETE FROM tags WHERE user_id = $1', [userId])
-      await client.query('DELETE FROM categories WHERE user_id = $1', [userId])
       await client.query('DELETE FROM recurring_rules WHERE user_id = $1', [userId])
       await client.query('DELETE FROM notifications WHERE user_id = $1', [userId])
       await client.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId])
@@ -85,8 +82,8 @@ async function demodataRoutes(fastify, opts) {
       const categoryIds = []
       for (const cat of categories) {
         const result = await client.query(
-          'INSERT INTO categories (user_id, name, type, color, icon) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-          [userId, cat.name, cat.type, cat.color, cat.icon]
+          'INSERT INTO categories (name, type, color, icon) VALUES ($1, $2, $3, $4) RETURNING id',
+          [cat.name, cat.type, cat.color, cat.icon]
         )
         categoryIds.push(result.rows[0].id)
       }
@@ -102,8 +99,8 @@ async function demodataRoutes(fastify, opts) {
       const tagIds = []
       for (const tag of tags) {
         const result = await client.query(
-          'INSERT INTO tags (user_id, name, color) VALUES ($1, $2, $3) RETURNING id',
-          [userId, tag.name, tag.color]
+          'INSERT INTO tags (name, color) VALUES ($1, $2) RETURNING id',
+          [tag.name, tag.color]
         )
         tagIds.push(result.rows[0].id)
       }
@@ -296,8 +293,8 @@ async function demodataRoutes(fastify, opts) {
           const selectedTags = [...tagIds].sort(() => Math.random() - 0.5).slice(0, numTags)
           for (const tagId of selectedTags) {
             await client.query(
-              'INSERT INTO transaction_tags (transaction_id, tag_id, user_id) VALUES ($1, $2, $3)',
-              [txId, tagId, userId]
+              'INSERT INTO transaction_tags (transaction_id, tag_id) VALUES ($1, $2)',
+              [txId, tagId]
             )
           }
         }

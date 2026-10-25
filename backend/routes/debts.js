@@ -13,15 +13,15 @@ async function debtRoutes(fastify, opts) {
     const legacyNames = txType === 'income'
       ? ['Debts (income)', 'Долги (доход)', 'Title']
       : ['Debts (expense)', 'Долги (расход)', 'Title']
-    let res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2 AND user_id = $3', [catName, txType, userId])
+    let res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2', [catName, txType, userId])
     if (res.rows.length) return res.rows[0].id
     for (const name of legacyNames) {
-      res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2 AND user_id = $3', [name, txType, userId])
+      res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2', [name, txType, userId])
       if (res.rows.length) return res.rows[0].id
     }
     const newRes = await client.query(
-      'INSERT INTO categories (user_id, name, type, color, icon) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [userId, catName, txType, '#64748b', 'tag']
+      'INSERT INTO categories (name, type, color, icon) VALUES ($1, $2, $3, $4) RETURNING id',
+      [catName, txType, '#64748b', 'tag']
     )
     return newRes.rows[0].id
   }
@@ -45,7 +45,8 @@ async function debtRoutes(fastify, opts) {
     const [debtsResult, rates] = await Promise.all([
       fastify.db.query(`
         SELECT d.*, a.name as account_name,
-               CASE WHEN d.user_id = $1 THEN NULL ELSE ou.login END AS owner_login
+               CASE WHEN d.user_id = $1 THEN NULL ELSE ou.login END AS owner_login,
+               CASE WHEN d.user_id = $1 THEN COALESCE((SELECT true FROM entity_shares es3 WHERE es3.entity_type = 'debt' AND es3.entity_id = d.id AND es3.owner_id = d.user_id LIMIT 1), false) ELSE false END AS is_shared
         FROM debts d
         LEFT JOIN accounts a ON a.id = d.account_id
         JOIN users ou ON ou.id = d.user_id

@@ -53,7 +53,7 @@ async function budgetRoutes(fastify, opts) {
           (b.category_id IS NOT NULL AND b.category_id = t.category_id)
           OR EXISTS (
             SELECT 1 FROM budget_tags bt
-            JOIN transaction_tags tt ON tt.tag_id = bt.tag_id AND tt.user_id = t.user_id AND tt.transaction_id = t.id
+            JOIN transaction_tags tt ON tt.tag_id = bt.tag_id AND tt.transaction_id = t.id
             WHERE bt.budget_id = b.id
           )
         )
@@ -120,7 +120,7 @@ async function budgetRoutes(fastify, opts) {
     try {
       await client.query('BEGIN')
       if (category_id) {
-        const catRes = await client.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
+        const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [category_id, userId])
         if (catRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
@@ -128,7 +128,7 @@ async function budgetRoutes(fastify, opts) {
         }
       }
       if (tag_ids && tag_ids.length) {
-        const tagRes = await client.query('SELECT id FROM tags WHERE id = ANY($1) AND user_id = $2', [tag_ids, userId])
+        const tagRes = await client.query('SELECT id FROM tags WHERE id = ANY($1)', [tag_ids, userId])
         if (tagRes.rows.length !== tag_ids.length) {
           await client.query('ROLLBACK')
           reply.code(400)
@@ -189,7 +189,7 @@ async function budgetRoutes(fastify, opts) {
     try {
       await client.query('BEGIN')
       if (category_id) {
-        const catRes = await client.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
+        const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [category_id, userId])
         if (catRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
@@ -197,7 +197,7 @@ async function budgetRoutes(fastify, opts) {
         }
       }
       if (tag_ids && tag_ids.length) {
-        const tagRes = await client.query('SELECT id FROM tags WHERE id = ANY($1) AND user_id = $2', [tag_ids, userId])
+        const tagRes = await client.query('SELECT id FROM tags WHERE id = ANY($1)', [tag_ids, userId])
         if (tagRes.rows.length !== tag_ids.length) {
           await client.query('ROLLBACK')
           reply.code(400)

@@ -112,8 +112,8 @@ async function start() {
   await app.register(rateLimit, {
     max: async (req, key) => {
       if (req.routeOptions?.url?.startsWith('/api/v1/auth')) return 10
-      if (req.method === 'GET') return 100
-      return 30
+      if (req.method === 'GET') return 240
+      return 90
     },
     timeWindow: '1 minute',
     keyGenerator: (req) => req.ip,

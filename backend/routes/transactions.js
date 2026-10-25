@@ -100,7 +100,7 @@ async function transactionRoutes(fastify, opts) {
       const tagRes = await fastify.db.query(
         `SELECT tt.transaction_id, tg.id, tg.name, tg.color
          FROM transaction_tags tt
-         JOIN tags tg ON tg.id = tt.tag_id AND tg.user_id = $1
+         JOIN tags tg ON tg.id = tt.tag_id
          WHERE tt.transaction_id = ANY($2)`,
         [userId, transactionIds]
       )
@@ -189,7 +189,7 @@ async function transactionRoutes(fastify, opts) {
           return { error: t('errors.split_sum_mismatch', {}, lang) }
         }
         for (const sp of splits) {
-          const catRes = await client.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [sp.category_id, userId])
+          const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [sp.category_id, userId])
           if (catRes.rows.length === 0) {
             await client.query('ROLLBACK')
             reply.code(404)
@@ -220,7 +220,7 @@ async function transactionRoutes(fastify, opts) {
       }
 
       if (category_id) {
-        const catRes = await client.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
+        const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [category_id, userId])
         if (catRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
@@ -235,7 +235,7 @@ async function transactionRoutes(fastify, opts) {
       const transaction = result.rows[0]
 
       if (tags && tags.length) {
-        const tagCheck = await client.query('SELECT id FROM tags WHERE id = ANY($1) AND user_id = $2', [tags, userId])
+        const tagCheck = await client.query('SELECT id FROM tags WHERE id = ANY($1)', [tags, userId])
         if (tagCheck.rows.length !== tags.length) {
           await client.query('ROLLBACK')
           reply.code(400)
@@ -243,8 +243,8 @@ async function transactionRoutes(fastify, opts) {
         }
         const values = tags.map((_, i) => `($1, $${2 * i + 2}, $${2 * i + 3})`).join(',')
         await client.query(
-          `INSERT INTO transaction_tags (transaction_id, tag_id, user_id) VALUES ${values}`,
-          [transaction.id, ...tags.flatMap(tagId => [tagId, userId])]
+          `INSERT INTO transaction_tags (transaction_id, tag_id) VALUES ${values}`,
+          [transaction.id, ...tags]
         )
       }
 
@@ -538,7 +538,7 @@ async function transactionRoutes(fastify, opts) {
       }
 
       if (category_id) {
-        const catRes = await client.query('SELECT id FROM categories WHERE id = $1 AND user_id = $2', [category_id, userId])
+        const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [category_id, userId])
         if (catRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
@@ -581,7 +581,7 @@ async function transactionRoutes(fastify, opts) {
       // Update tags
       await client.query('DELETE FROM transaction_tags WHERE transaction_id = $1', [id])
       if (tags && tags.length) {
-        const tagCheck = await client.query('SELECT id FROM tags WHERE id = ANY($1) AND user_id = $2', [tags, userId])
+        const tagCheck = await client.query('SELECT id FROM tags WHERE id = ANY($1)', [tags, userId])
         if (tagCheck.rows.length !== tags.length) {
           await client.query('ROLLBACK')
           reply.code(400)
@@ -589,8 +589,8 @@ async function transactionRoutes(fastify, opts) {
         }
         const values = tags.map((_, i) => `($1, $${2 * i + 2}, $${2 * i + 3})`).join(',')
         await client.query(
-          `INSERT INTO transaction_tags (transaction_id, tag_id, user_id) VALUES ${values}`,
-          [transaction.id, ...tags.flatMap(tagId => [tagId, userId])]
+          `INSERT INTO transaction_tags (transaction_id, tag_id) VALUES ${values}`,
+          [transaction.id, ...tags]
         )
       }
 

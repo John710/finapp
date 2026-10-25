@@ -7,8 +7,7 @@ async function tagRoutes(fastify, opts) {
     const result = await fastify.db.query(
       `SELECT t.*, COUNT(tt.transaction_id)::int as transaction_count
        FROM tags t
-       LEFT JOIN transaction_tags tt ON tt.tag_id = t.id AND tt.user_id = $1
-       WHERE t.user_id = $1
+       LEFT JOIN transaction_tags tt ON tt.tag_id = t.id
        GROUP BY t.id
        ORDER BY transaction_count DESC, t.name ASC`,
       [userId]
@@ -32,8 +31,8 @@ async function tagRoutes(fastify, opts) {
     const userId = request.user.userId
     const { name, color } = request.body
     const result = await fastify.db.query(
-      'INSERT INTO tags (user_id, name, color) VALUES ($1, $2, $3) RETURNING *',
-      [userId, name, color || null]
+      'INSERT INTO tags (name, color) VALUES ($1, $2) RETURNING *',
+      [name, color || null]
     )
     reply.code(201)
     return result.rows[0]
@@ -62,8 +61,8 @@ async function tagRoutes(fastify, opts) {
     const { id } = request.params
     const { name, color } = request.body
     const result = await fastify.db.query(
-      'UPDATE tags SET name = $1, color = $2 WHERE id = $3 AND user_id = $4 RETURNING *',
-      [name, color, id, userId]
+      'UPDATE tags SET name = $1, color = $2 WHERE id = $3 RETURNING *',
+      [name, color, id]
     )
     if (result.rows.length === 0) {
       reply.code(404)
@@ -85,7 +84,7 @@ async function tagRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
-    const result = await fastify.db.query('DELETE FROM tags WHERE id = $1 AND user_id = $2', [id, userId])
+    const result = await fastify.db.query('DELETE FROM tags WHERE id = $1', [id, userId])
     if (result.rowCount === 0) {
       reply.code(404)
       return { error: t('errors.tag_not_found', {}, lang) }
