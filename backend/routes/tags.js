@@ -1,16 +1,14 @@
 import { t, getUserLang } from '../services/i18n.js'
 
 async function tagRoutes(fastify, opts) {
-  // List all tags
+  // List all tags (global — shared by every user of the instance)
   fastify.get('/tags', async (request, reply) => {
-    const userId = request.user.userId
     const result = await fastify.db.query(
       `SELECT t.*, COUNT(tt.transaction_id)::int as transaction_count
        FROM tags t
        LEFT JOIN transaction_tags tt ON tt.tag_id = t.id
        GROUP BY t.id
-       ORDER BY transaction_count DESC, t.name ASC`,
-      [userId]
+       ORDER BY transaction_count DESC, t.name ASC`
     )
     return result.rows
   })
@@ -28,7 +26,6 @@ async function tagRoutes(fastify, opts) {
       }
     }
   }, async (request, reply) => {
-    const userId = request.user.userId
     const { name, color } = request.body
     const result = await fastify.db.query(
       'INSERT INTO tags (name, color) VALUES ($1, $2) RETURNING *',
@@ -84,7 +81,7 @@ async function tagRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
-    const result = await fastify.db.query('DELETE FROM tags WHERE id = $1', [id, userId])
+    const result = await fastify.db.query('DELETE FROM tags WHERE id = $1', [id])
     if (result.rowCount === 0) {
       reply.code(404)
       return { error: t('errors.tag_not_found', {}, lang) }

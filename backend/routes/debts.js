@@ -13,10 +13,10 @@ async function debtRoutes(fastify, opts) {
     const legacyNames = txType === 'income'
       ? ['Debts (income)', 'Долги (доход)', 'Title']
       : ['Debts (expense)', 'Долги (расход)', 'Title']
-    let res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2', [catName, txType, userId])
+    let res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2', [catName, txType])
     if (res.rows.length) return res.rows[0].id
     for (const name of legacyNames) {
-      res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2', [name, txType, userId])
+      res = await client.query('SELECT id FROM categories WHERE name = $1 AND type = $2', [name, txType])
       if (res.rows.length) return res.rows[0].id
     }
     const newRes = await client.query(

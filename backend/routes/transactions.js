@@ -101,8 +101,8 @@ async function transactionRoutes(fastify, opts) {
         `SELECT tt.transaction_id, tg.id, tg.name, tg.color
          FROM transaction_tags tt
          JOIN tags tg ON tg.id = tt.tag_id
-         WHERE tt.transaction_id = ANY($2)`,
-        [userId, transactionIds]
+         WHERE tt.transaction_id = ANY($1)`,
+        [transactionIds]
       )
       for (const row of tagRes.rows) {
         if (!tagsMap[row.transaction_id]) tagsMap[row.transaction_id] = []
@@ -235,7 +235,7 @@ async function transactionRoutes(fastify, opts) {
       const transaction = result.rows[0]
 
       if (tags && tags.length) {
-        const tagCheck = await client.query('SELECT id FROM tags WHERE id = ANY($1)', [tags, userId])
+        const tagCheck = await client.query('SELECT id FROM tags WHERE id = ANY($1)', [tags])
         if (tagCheck.rows.length !== tags.length) {
           await client.query('ROLLBACK')
           reply.code(400)
@@ -581,7 +581,7 @@ async function transactionRoutes(fastify, opts) {
       // Update tags
       await client.query('DELETE FROM transaction_tags WHERE transaction_id = $1', [id])
       if (tags && tags.length) {
-        const tagCheck = await client.query('SELECT id FROM tags WHERE id = ANY($1)', [tags, userId])
+        const tagCheck = await client.query('SELECT id FROM tags WHERE id = ANY($1)', [tags])
         if (tagCheck.rows.length !== tags.length) {
           await client.query('ROLLBACK')
           reply.code(400)

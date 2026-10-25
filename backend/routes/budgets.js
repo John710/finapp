@@ -120,7 +120,7 @@ async function budgetRoutes(fastify, opts) {
     try {
       await client.query('BEGIN')
       if (category_id) {
-        const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [category_id, userId])
+        const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [category_id])
         if (catRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
@@ -128,7 +128,7 @@ async function budgetRoutes(fastify, opts) {
         }
       }
       if (tag_ids && tag_ids.length) {
-        const tagRes = await client.query('SELECT id FROM tags WHERE id = ANY($1)', [tag_ids, userId])
+        const tagRes = await client.query('SELECT id FROM tags WHERE id = ANY($1)', [tag_ids])
         if (tagRes.rows.length !== tag_ids.length) {
           await client.query('ROLLBACK')
           reply.code(400)
@@ -189,7 +189,7 @@ async function budgetRoutes(fastify, opts) {
     try {
       await client.query('BEGIN')
       if (category_id) {
-        const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [category_id, userId])
+        const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [category_id])
         if (catRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
@@ -197,7 +197,7 @@ async function budgetRoutes(fastify, opts) {
         }
       }
       if (tag_ids && tag_ids.length) {
-        const tagRes = await client.query('SELECT id FROM tags WHERE id = ANY($1)', [tag_ids, userId])
+        const tagRes = await client.query('SELECT id FROM tags WHERE id = ANY($1)', [tag_ids])
         if (tagRes.rows.length !== tag_ids.length) {
           await client.query('ROLLBACK')
           reply.code(400)

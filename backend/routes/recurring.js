@@ -48,7 +48,7 @@ async function recurringRoutes(fastify, opts) {
       return { error: t('errors.account_not_found', {}, lang) }
     }
     if (category_id) {
-      const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1', [category_id, userId])
+      const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1', [category_id])
       if (catRes.rows.length === 0) {
         reply.code(404)
         return { error: t('errors.category_not_found', {}, lang) }
@@ -97,7 +97,7 @@ async function recurringRoutes(fastify, opts) {
       return { error: t('errors.account_not_found', {}, lang) }
     }
     if (category_id) {
-      const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1', [category_id, userId])
+      const catRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1', [category_id])
       if (catRes.rows.length === 0) {
         reply.code(404)
         return { error: t('errors.category_not_found', {}, lang) }

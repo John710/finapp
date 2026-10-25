@@ -105,7 +105,7 @@ async function importRoutes(fastify, opts) {
       const accountsRes = await client.query('SELECT id, name, currency FROM accounts WHERE user_id = $1 ORDER BY id', [userId])
       const accountsMap = new Map(accountsRes.rows.map(a => [a.name.toLowerCase(), a]))
 
-      const categoriesRes = await client.query('SELECT id, name, type FROM categories', [userId])
+      const categoriesRes = await client.query('SELECT id, name, type FROM categories')
       const categoriesMap = new Map(categoriesRes.rows.map(c => [c.name.toLowerCase(), c]))
 
       const prepared = []

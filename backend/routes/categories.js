@@ -2,12 +2,10 @@ import { sanitizeSvg } from '../services/sanitizeSvg.js'
 import { t, getUserLang } from '../services/i18n.js'
 
 async function categoryRoutes(fastify, opts) {
-  // List
+  // List (categories are global — shared by every user of the instance)
   fastify.get('/categories', async (request, reply) => {
-    const userId = request.user.userId
     const result = await fastify.db.query(
-      'SELECT * FROM categories ORDER BY type, name',
-      [userId]
+      'SELECT * FROM categories ORDER BY type, name'
     )
     return result.rows
   })
@@ -33,7 +31,7 @@ async function categoryRoutes(fastify, opts) {
     const lang = await getUserLang(fastify.db, userId)
     const { name, type, color, icon, icon_custom, parent_id } = request.body
     if (parent_id) {
-      const parentRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1', [parent_id, userId])
+      const parentRes = await fastify.db.query('SELECT id FROM categories WHERE id = $1', [parent_id])
       if (parentRes.rows.length === 0) {
         reply.code(404)
         return { error: t('errors.parent_category_not_found', {}, lang) }
@@ -79,7 +77,7 @@ async function categoryRoutes(fastify, opts) {
         reply.code(400)
         return { error: t('errors.category_self_parent', {}, lang) }
       }
-      const parentRes = await fastify.db.query('SELECT id, parent_id FROM categories WHERE id = $1', [parent_id, userId])
+      const parentRes = await fastify.db.query('SELECT id, parent_id FROM categories WHERE id = $1', [parent_id])
       if (parentRes.rows.length === 0) {
         reply.code(404)
         return { error: t('errors.parent_category_not_found', {}, lang) }
@@ -114,7 +112,7 @@ async function categoryRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
-    const result = await fastify.db.query('DELETE FROM categories WHERE id = $1', [id, userId])
+    const result = await fastify.db.query('DELETE FROM categories WHERE id = $1', [id])
     if (result.rowCount === 0) {
       reply.code(404)
       return { error: t('errors.category_not_found', {}, lang) }
@@ -176,10 +174,10 @@ async function categoryRoutes(fastify, opts) {
            AND tb.category_id = $3 AND tb.period = b.period`,
         [id, userId, target_id]
       )
-      await client.query('UPDATE transactions SET category_id = $1 WHERE category_id = $2', [target_id, id, userId])
-      await client.query('UPDATE recurring_rules SET category_id = $1 WHERE category_id = $2', [target_id, id, userId])
-      await client.query('UPDATE budgets SET category_id = $1 WHERE category_id = $2', [target_id, id, userId])
-      await client.query('DELETE FROM categories WHERE id = $1', [id, userId])
+      await client.query('UPDATE transactions SET category_id = $1 WHERE category_id = $2', [target_id, id])
+      await client.query('UPDATE recurring_rules SET category_id = $1 WHERE category_id = $2', [target_id, id])
+      await client.query('UPDATE budgets SET category_id = $1 WHERE category_id = $2', [target_id, id])
+      await client.query('DELETE FROM categories WHERE id = $1', [id])
 
       await client.query('COMMIT')
       reply.code(204)
