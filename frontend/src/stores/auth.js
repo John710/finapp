@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useRatesStore } from './rates'
-import { api } from '@/utils/api.js'
+import { api, clearRefreshDead } from '@/utils/api.js'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -18,6 +18,7 @@ export const useAuthStore = defineStore('auth', () => {
       method: 'POST',
       body: JSON.stringify(body)
     })
+    clearRefreshDead()
     user.value = data.user
     if (data.user?.language) {
       localStorage.setItem('lang', data.user.language)

@@ -236,10 +236,12 @@ async function authRoutes(fastify, opts) {
       const newRefreshTokenHash = hashToken(newRefreshToken)
       const refreshExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 
-      // Rotate the refresh token atomically: check, consume and replace happen in
-      // one transaction. The DELETE ... RETURNING guard means a token that was
-      // already consumed by a concurrent request (theft/replay) is detected here
-      // instead of silently issuing a second replacement.
+      // Rotate the refresh token atomically: check, consume and replace happen
+      // in one transaction. The old token is NOT deleted — it keeps a 30-second
+      // grace validity so a second browser tab refreshing at the same moment is
+      // benign (each gets its own new token) instead of tripping replay
+      // detection and revoking every session. A token consumed BEYOND the grace
+      // window is still treated as stolen: all sessions are revoked.
       let rotated = false
       const client = await fastify.db.connect()
       try {
@@ -250,7 +252,7 @@ async function authRoutes(fastify, opts) {
         )
         if (tokenRes.rows.length > 0) {
           const consumed = await client.query(
-            'DELETE FROM refresh_tokens WHERE id = $1 AND user_id = $2 RETURNING id',
+            'UPDATE refresh_tokens SET expires_at = NOW() + INTERVAL \'30 seconds\' WHERE id = $1 AND user_id = $2 RETURNING id',
             [tokenRes.rows[0].id, payload.userId]
           )
           if (consumed.rowCount > 0) {

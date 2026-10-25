@@ -15,12 +15,24 @@ function showCoingeckoRateLimitToast() {
 }
 
 let refreshPromise = null
+// Once a refresh attempt fails, every queued 401'd request would otherwise
+// fire its own retry and hammer the auth rate limit while the redirect to
+// /login is still pending. The latch stops that storm until the next full
+// page load (the login page clears it on successful login).
+let refreshDead = false
+
+export function clearRefreshDead() {
+  refreshDead = false
+}
 
 async function refreshSession() {
   // Deduplicate: many parallel requests can hit 401 at once (dashboard load),
   // but the refresh cookie is one-time use — a second concurrent refresh with
   // the already-consumed cookie would falsely log the user out and trip the
   // backend's replay protection.
+  if (refreshDead) {
+    throw new Error('Session expired')
+  }
   if (!refreshPromise) {
     refreshPromise = (async () => {
       const res = await fetch(`${API_URL}/auth/refresh`, {
@@ -28,6 +40,7 @@ async function refreshSession() {
         credentials: 'include'
       })
       if (!res.ok) {
+        refreshDead = true
         throw new Error('Session expired')
       }
       return res.json()
@@ -76,6 +89,11 @@ export async function api(path, options = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
+    // Rate-limit rejections arrive as raw framework messages — surface a
+    // localized, actionable error instead of the English default
+    if (res.status === 429 || err.statusCode === 429) {
+      throw new Error(t('errors.rate_limited'))
+    }
     const e = new Error(err.error || `HTTP ${res.status}`)
     // Expose extra API flags (e.g. totp_required on login) to callers
     for (const key of Object.keys(err)) {

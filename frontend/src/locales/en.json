@@ -450,5 +450,8 @@
     "edit": "Can edit",
     "pick_user": "Select a user…",
     "shared_badge": "Shared"
+  },
+  "errors": {
+    "rate_limited": "Too many requests — please wait a moment and try again"
   }
 }

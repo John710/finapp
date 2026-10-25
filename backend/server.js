@@ -111,7 +111,14 @@ async function start() {
   // correct property; unmatched routes (404) stay unlimited.
   await app.register(rateLimit, {
     max: async (req, key) => {
-      if (req.routeOptions?.url?.startsWith('/api/v1/auth')) return 10
+      if (req.routeOptions?.url?.startsWith('/api/v1/auth')) {
+        // Refresh and setup are the session-recovery path: bursts of them
+        // happen exactly when sessions break, and rate-limiting those locks
+        // the user out. Brute-force protection stays on /auth/login (10/min).
+        if (req.routeOptions?.url?.startsWith('/api/v1/auth/refresh')) return 0
+        if (req.routeOptions?.url?.startsWith('/api/v1/auth/setup-required')) return 0
+        return 10
+      }
       if (req.method === 'GET') return 240
       return 90
     },
