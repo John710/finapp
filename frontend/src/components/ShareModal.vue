@@ -35,17 +35,14 @@
           </div>
         </div>
         <div class="flex gap-2">
-          <select v-model="pickedUserId" class="flex-1 px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+          <select v-model="pickedUserId" @change="addUser" class="flex-1 px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
             <option :value="null" disabled>{{ $t('sharing.pick_user') }}</option>
             <option v-for="u in addableUsers" :key="u.id" :value="u.id">{{ u.login }}</option>
           </select>
-          <button @click="addUser" :disabled="!pickedUserId" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-primary-600 disabled:opacity-40" :aria-label="$t('common.add')">
-            <Icon name="plus" class="w-4 h-4" />
-          </button>
         </div>
       </div>
 
-      <button @click="save" :disabled="saving" class="w-full py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium disabled:opacity-50">
+      <button @click="save" :disabled="saving || !!pickedUserId" class="w-full py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium disabled:opacity-40">
         {{ saving ? $t('common.loading') : $t('common.save') }}
       </button>
     </div>
