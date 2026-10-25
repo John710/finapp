@@ -77,9 +77,11 @@ export const up = (pgm) => {
   pgm.dropColumn('transaction_tags', 'user_id')
   pgm.addConstraint('categories', 'categories_name_type_unique', { unique: ['name', 'type'] })
   pgm.addConstraint('tags', 'tags_name_unique', { unique: ['name'] })
-  pgm.dropIndex('categories', 'user_id')
-  pgm.dropIndex('tags', 'user_id')
-  pgm.dropIndex('transaction_tags', 'user_id')
+  // IF EXISTS: node-pg-migrate 9 changed default index naming — pre-9
+  // databases have "..._user_id_index", fresh ones may not have them at all.
+  pgm.sql('DROP INDEX IF EXISTS categories_user_id_index')
+  pgm.sql('DROP INDEX IF EXISTS tags_user_id_index')
+  pgm.sql('DROP INDEX IF EXISTS transaction_tags_user_id_index')
 }
 
 export const down = (pgm) => {
