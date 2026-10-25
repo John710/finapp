@@ -66,7 +66,11 @@
 - **CSV Import** — import data from other finance apps
 - **CSV Export** — save your data for backup purposes
 ### Security & Access
-- **Multi-User Support** — separate accounts for family members with per-user data isolation
+- **Multi-User Support** — every family member has their own private finances
+- **Family Sharing** — share accounts, budgets, debts and recurring rules with the whole family or specific users, with view/edit permissions
+- **Admin User Management** — the first user administers accounts: create members, reset passwords
+- **Two-Factor Authentication** — TOTP codes from any authenticator app
+- **Personal API Tokens** — bearer tokens for external clients
 - **JWT Authentication** — secure app access
 - **Password Encryption** — account protection
 ### Localization
@@ -210,7 +214,25 @@ The `/health` endpoint returns HTTP 503 when the database connection is lost —
 | **Infrastructure** | Docker, GitHub Actions, GHCR |
  
 ---
- 
+
+## 👪 Family Sharing
+
+Every user keeps **private finances by default**. Anything can additionally be shared — per entity:
+
+1. The **first registered user** becomes the administrator. They create accounts for family members in **Settings → Access & API → Users** (each member then logs in with their own credentials). Registration itself stays closed.
+2. Open an account, budget, debt or recurring rule and press **Share**. Grant access to the **whole family** or to **specific users**, with either permission:
+   - **Can view** — the entity and its history appear in the grantee's lists, dashboards and reports
+   - **Can edit** — additionally lets the grantee work with the data: add transactions to a shared account (transfers included), record payments on a shared debt
+3. Shared entities are badged **Shared** for the owner and show the owner's name for the grantee. Un-share at any time from the same dialog.
+
+Notes:
+- **Categories and tags are global** — shared by every user of the instance.
+- Only the owner can edit the entity itself (rename an account, change a budget limit); CRUD of transactions on a shared account requires the *edit* permission.
+- Transactions store `created_by` — who actually entered them.
+- Accounts with edit permission count towards the grantee's reports and net worth.
+
+---
+
 ## 🔔 Notifications
 
 Notifications are configured per-user in **Settings**:

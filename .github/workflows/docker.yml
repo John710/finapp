@@ -165,18 +165,22 @@ jobs:
 
       - name: Compute changelog args
         id: cliffargs
-        # The range starts at the previous tag that HAS a published release —
-        # failed builds leave tags without releases, and counting them as
-        # boundaries would drop their commits from the changelog entirely.
-        # Stable releases additionally merge beta sections via --ignore-tags
-        # (--latest with --ignore-tags DROPS the beta releases instead of
-        # merging them, so a range is always required there).
+        # Betas: the range starts at the previous PUBLISHED release — failed
+        # builds leave tags without releases, and counting them as boundaries
+        # would drop their commits from the changelog entirely.
+        # Stable releases: range from the previous STABLE tag; --ignore-tags
+        # merges the beta sections into the stable one (--latest with
+        # --ignore-tags DROPS the beta releases instead of merging them).
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          PREV=$(gh release list --limit 50 --json tagName,createdAt \
-            --jq '[.[] | select(.tagName != "'"${TAG}"'")] | sort_by(.createdAt) | reverse | .[0].tagName // ""')
+          if [[ "$TAG" == *-* ]]; then
+            PREV=$(gh release list --limit 50 --json tagName,createdAt \
+              --jq '[.[] | select(.tagName != "'"${TAG}"'")] | sort_by(.createdAt) | reverse | .[0].tagName // ""')
+          else
+            PREV=$(git tag -l 'v*' | grep -v -- '-' | sort -V | awk -v t="$TAG" '$0==t{print p; exit} {p=$0}')
+          fi
           if [ -z "$PREV" ]; then
             echo "args=--latest --strip header" >> "$GITHUB_OUTPUT"
           else
