@@ -89,9 +89,11 @@ async function authRoutes(fastify, opts) {
       }
 
       const hash = await bcrypt.hash(password, 12)
+      // Registration is open only for the first user — they become the admin
+      // (the role column default is 'user' since migration 30)
       await client.query(
-        'INSERT INTO users (login, password_hash, language) VALUES ($1, $2, $3)',
-        [login, hash, language || process.env.DEFAULT_LANG || 'en']
+        'INSERT INTO users (login, password_hash, language, role) VALUES ($1, $2, $3, $4)',
+        [login, hash, language || process.env.DEFAULT_LANG || 'en', 'admin']
       )
       await client.query('COMMIT')
       return { success: true }
