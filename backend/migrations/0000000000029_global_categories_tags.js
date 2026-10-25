@@ -66,7 +66,7 @@ export const up = (pgm) => {
   pgm.sql(`
     DELETE FROM transaction_tags a
     USING transaction_tags b
-    WHERE a.transaction_id = b.transaction_id AND a.tag_id = b.tag_id AND a.id > b.id
+    WHERE a.transaction_id = b.transaction_id AND a.tag_id = b.tag_id AND a.ctid > b.ctid
   `)
 
   // ---- drop per-user scoping ----
