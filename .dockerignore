@@ -20,6 +20,24 @@ dist
 backend/public
 frontend/.vite
 
+# Tests and tooling (not needed at build or runtime).
+# backend/scripts/blackbox-test.mjs is deliberately kept: CI runs it inside the container.
+backend/test
+**/*.test.js
+backend/vitest.config.js
+frontend/vitest.config.js
+**/eslint.config.*
+**/.eslintrc*
+.prettierrc*
+.prettierignore
+
+# CI and local agent tooling
+.github
+.qoder
+.claude
+.zcode
+.dashboard
+
 # Docs
 *.md
 

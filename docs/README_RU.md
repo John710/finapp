@@ -94,12 +94,22 @@ cd finapp
 cp .env.example .env
 ```
  
-Отредактируйте `.env` — минимально нужно задать:
-```env
-JWT_SECRET=ваш_случайный_секрет
+Заполните в `.env` три обязательных секрета — `docker compose` не запустится, пока любой из них пуст. Значения генерируются так:
+```bash
+openssl rand -hex 16   # POSTGRES_PASSWORD
+openssl rand -hex 32   # JWT_SECRET
+openssl rand -hex 32   # ENCRYPTION_KEY
 ```
 
-Строка подключения к базе собирается автоматически из `POSTGRES_USER`, `POSTGRES_PASSWORD` и `POSTGRES_DB`. Если вы используете внешний Postgres, укажите `DATABASE_URL` в `docker-compose.yml` или передайте её через переменную окружения.
+```env
+POSTGRES_PASSWORD=<вывод openssl rand -hex 16>
+JWT_SECRET=<вывод openssl rand -hex 32>
+ENCRYPTION_KEY=<вывод openssl rand -hex 32>
+```
+
+`ENCRYPTION_KEY` должен состоять ровно из 64 hex-символов; без корректного ключа контейнер уходит в цикл перезапусков. Сохраните его в надёжном месте: после смены ключа уже сохранённые зашифрованные настройки (приватный VAPID-ключ, URL Shoutrrr, ключ CoinGecko) станут нечитаемыми.
+
+Строка подключения к базе собирается автоматически из `POSTGRES_USER`, `POSTGRES_PASSWORD` и `POSTGRES_DB`. Чтобы использовать внешний Postgres, измените строку `DATABASE_URL` в разделе `finapp.environment` файла `docker-compose.yml` (она задана там явно, поэтому `DATABASE_URL` из `.env` не пробрасывается) и уберите сервис `db` вместе с `depends_on`.
  
 ### 3. Запустить
 ```bash
@@ -175,10 +185,10 @@ docker compose pull && docker compose up -d
 |------------|----------|--------------|
 | `PORT` | Порт сервера | `6253` |
 | `POSTGRES_USER` | Пользователь PostgreSQL (сервис db) | `finapp` |
-| `POSTGRES_PASSWORD` | Пароль PostgreSQL (сервис db) | `finapp` |
+| `POSTGRES_PASSWORD` | Пароль PostgreSQL (сервис db) — **обязательный**, используйте значение, безопасное для URL, например `openssl rand -hex 16` | — |
 | `POSTGRES_DB` | База PostgreSQL (сервис db) | `finapp` |
-| `DATABASE_URL` | Полная строка подключения — только для внешней базы (compose собирает её из `POSTGRES_*` автоматически) | — |
-| `JWT_SECRET` | Секрет для подписи JWT | — |
+| `DATABASE_URL` | Полная строка подключения — только для внешней базы. Compose собирает её из `POSTGRES_*` и задаёт явно в `docker-compose.yml`; меняйте её там (значение из `.env` не пробрасывается) | — |
+| `JWT_SECRET` | Секрет для подписи JWT — **обязательный**, не короче 32 символов (`openssl rand -hex 32`) | — |
 | `JWT_ACCESS_TTL` | Время жизни access токена | `15m` |
 | `JWT_REFRESH_TTL` | Время жизни refresh токена | `30d` |
 | `TZ` | Часовой пояс | `UTC` |
@@ -190,7 +200,10 @@ docker compose pull && docker compose up -d
 | `PUID` | ID пользователя для Docker контейнера | `1000` (используется `node` из базового образа) |
 | `PGID` | ID группы для Docker контейнера | `1000` |
 | `DEFAULT_LANG` | Язык по умолчанию для новых пользователей (`ru` или `en`) | `en` |
-| `ENCRYPTION_KEY` | 64-символьный hex-ключ для шифрования чувствительных данных | — |
+| `ENCRYPTION_KEY` | 64-символьный hex-ключ для шифрования чувствительных данных — **обязательный**, без него сервер не запускается (`openssl rand -hex 32`) | — |
+| `COINGECKO_API_KEY` | Общий ключ CoinGecko API для всего сервера; используется, если пользователь не сохранил свой в настройках | — |
+| `LOG_LEVEL` | Подробность логов: `fatal`, `error`, `warn`, `info`, `debug`, `trace` | `info` (вне production — `debug`) |
+| `PUSH_SEND_TIMEOUT` | Таймаут отправки одного Web Push уведомления, в миллисекундах | `10000` |
  
 ---
  
@@ -323,7 +336,7 @@ finapp/
  
 REST API доступен по адресу `/api/v1`:
  
-`/auth` · `/accounts` · `/transactions` · `/categories` · `/tags` · `/budgets` · `/debts` · `/recurring` · `/reports` · `/currencies` · `/import` · `/export` · `/notifications`
+`/auth` · `/users` (профиль, сессии, 2FA, персональные API-токены в `/users/tokens`) · `/admin` (управление пользователями, демо-данные) · `/accounts` · `/transactions` (+ `/transactions/:id/attachments`) · `/attachments` · `/categories` · `/tags` · `/budgets` · `/debts` · `/recurring` (+ календарная лента `/recurring.ics`, `/recurring/feed-tokens`, `/recurring/occurrences`) · `/shares` · `/reports` (`summary`, `by-category`, `trend`, `net-worth`, `savings-rate`, `recurring-plan`, `dashboard`) · `/currencies` · `/import` · `/export` · `/notifications` · `/config` · `/health`
  
 ---
  

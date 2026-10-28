@@ -29,7 +29,6 @@ GROUP_NAME=$(getent group "$PGID" | cut -d: -f1)
 if ! getent passwd "$PUID" >/dev/null 2>&1; then
     adduser -u "$PUID" -G "$GROUP_NAME" -D -s /sbin/nologin "finapp$PUID"
 fi
-USER_NAME=$(getent passwd "$PUID" | cut -d: -f1)
 
 # Fix ownership of the application files to match the runtime user.
 CURRENT_OWNER=$(stat -c '%u' /app)
@@ -38,5 +37,7 @@ if [ "$CURRENT_OWNER" != "$PUID" ]; then
 fi
 
 # Run migrations as the target user so any generated files share ownership.
-su-exec "$USER_NAME" node scripts/migrate.js
-exec su-exec "$USER_NAME" "$@"
+# Use the numeric "uid:gid" form: a bare user name would take that user's primary
+# group from /etc/passwd and silently ignore PGID when PUID is an existing user.
+su-exec "$PUID:$PGID" node scripts/migrate.js
+exec su-exec "$PUID:$PGID" "$@"

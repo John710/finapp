@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-finapp}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (e.g. openssl rand -hex 16)}
       POSTGRES_DB: ${POSTGRES_DB:-finapp}
     volumes:
       - finapp_db_data:/var/lib/postgresql/data
@@ -35,18 +35,22 @@ services:
     environment:
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
-      DATABASE_URL: postgres://${POSTGRES_USER:-finapp}:${POSTGRES_PASSWORD:-finapp}@db:5432/${POSTGRES_DB:-finapp}
-      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgres://${POSTGRES_USER:-finapp}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (e.g. openssl rand -hex 16)}@db:5432/${POSTGRES_DB:-finapp}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (openssl rand -hex 32, at least 32 characters)}
       PORT: ${PORT:-6253}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       TZ: ${TZ:-UTC}
       DEFAULT_LANG: ${DEFAULT_LANG:-en}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env (openssl rand -hex 32, exactly 64 hex characters)}
       DATABASE_SSL: ${DATABASE_SSL:-false}
       DATABASE_SSL_REJECT_UNAUTHORIZED: ${DATABASE_SSL_REJECT_UNAUTHORIZED:-true}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      SHOUTRRR_BLOCK_PRIVATE_TARGETS: ${SHOUTRRR_BLOCK_PRIVATE_TARGETS:-false}
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PUSH_SEND_TIMEOUT: ${PUSH_SEND_TIMEOUT:-10000}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:${PORT:-6253}/health"]
       interval: 30s

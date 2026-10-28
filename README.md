@@ -94,12 +94,22 @@ cd finapp
 cp .env.example .env
 ```
  
-Edit `.env` — at minimum set:
-```env
-JWT_SECRET=your_random_secret_here
+Fill in the three required secrets in `.env` — `docker compose` refuses to start while any of them is empty. Generate each value with:
+```bash
+openssl rand -hex 16   # POSTGRES_PASSWORD
+openssl rand -hex 32   # JWT_SECRET
+openssl rand -hex 32   # ENCRYPTION_KEY
 ```
 
-The database connection string is built automatically from `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`. If you use an external Postgres server, set `DATABASE_URL` in `docker-compose.yml` or pass it as an environment variable.
+```env
+POSTGRES_PASSWORD=<output of openssl rand -hex 16>
+JWT_SECRET=<output of openssl rand -hex 32>
+ENCRYPTION_KEY=<output of openssl rand -hex 32>
+```
+
+`ENCRYPTION_KEY` must be exactly 64 hex characters; without a valid one the container crash-loops at start. Back it up: changing it makes already-stored encrypted settings (VAPID private key, Shoutrrr URL, CoinGecko key) unreadable.
+
+The database connection string is built automatically from `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`. To use an external Postgres server, edit the `DATABASE_URL` line under `finapp.environment` in `docker-compose.yml` (it is set there explicitly, so a `DATABASE_URL` in `.env` is not forwarded) and drop the `db` service and `depends_on`.
  
 ### 3. Start
 ```bash
@@ -175,10 +185,10 @@ The `/health` endpoint returns HTTP 503 when the database connection is lost —
 |----------|-------------|---------|
 | `PORT` | Server port | `6253` |
 | `POSTGRES_USER` | PostgreSQL user (db service) | `finapp` |
-| `POSTGRES_PASSWORD` | PostgreSQL password (db service) | `finapp` |
+| `POSTGRES_PASSWORD` | PostgreSQL password (db service) — **required**, use a URL-safe value such as `openssl rand -hex 16` | — |
 | `POSTGRES_DB` | PostgreSQL database (db service) | `finapp` |
-| `DATABASE_URL` | Full PostgreSQL URL — only for an external database instance (compose builds it from `POSTGRES_*` automatically) | — |
-| `JWT_SECRET` | JWT signing secret | — |
+| `DATABASE_URL` | Full PostgreSQL URL — only for an external database instance. Compose builds it from `POSTGRES_*` and sets it explicitly in `docker-compose.yml`; edit it there (a value in `.env` is not forwarded) | — |
+| `JWT_SECRET` | JWT signing secret — **required**, at least 32 characters (`openssl rand -hex 32`) | — |
 | `JWT_ACCESS_TTL` | Access token lifetime | `15m` |
 | `JWT_REFRESH_TTL` | Refresh token lifetime | `30d` |
 | `TZ` | Timezone | `UTC` |
@@ -190,7 +200,10 @@ The `/health` endpoint returns HTTP 503 when the database connection is lost —
 | `PUID` | Docker container user ID | `1000` (reuses base image `node` user) |
 | `PGID` | Docker container group ID | `1000` |
 | `DEFAULT_LANG` | Default language for new users (`ru` or `en`) | `en` |
-| `ENCRYPTION_KEY` | 64-char hex key for sensitive user data | — |
+| `ENCRYPTION_KEY` | 64-char hex key for sensitive user data — **required**, the server does not start without it (`openssl rand -hex 32`) | — |
+| `COINGECKO_API_KEY` | Server-wide CoinGecko API key, used when a user has not saved their own in Settings | — |
+| `LOG_LEVEL` | Log verbosity: `fatal`, `error`, `warn`, `info`, `debug`, `trace` | `info` (`debug` outside production) |
+| `PUSH_SEND_TIMEOUT` | Timeout for sending one Web Push notification, in milliseconds | `10000` |
  
 ---
  
@@ -322,7 +335,7 @@ finapp/
  
 REST API available at `/api/v1`:
  
-`/auth` · `/accounts` · `/transactions` · `/categories` · `/tags` · `/budgets` · `/debts` · `/recurring` · `/reports` · `/currencies` · `/import` · `/export` · `/notifications`
+`/auth` · `/users` (profile, sessions, 2FA, personal API tokens at `/users/tokens`) · `/admin` (user management, demo data) · `/accounts` · `/transactions` (+ `/transactions/:id/attachments`) · `/attachments` · `/categories` · `/tags` · `/budgets` · `/debts` · `/recurring` (+ `/recurring.ics` calendar feed, `/recurring/feed-tokens`, `/recurring/occurrences`) · `/shares` · `/reports` (`summary`, `by-category`, `trend`, `net-worth`, `savings-rate`, `recurring-plan`, `dashboard`) · `/currencies` · `/import` · `/export` · `/notifications` · `/config` · `/health`
  
 ---
  

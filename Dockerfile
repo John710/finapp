@@ -29,7 +29,9 @@ FROM ${NODE_IMAGE}
 
 WORKDIR /app
 
-RUN apk add --no-cache su-exec tzdata curl
+# tini: PID 1 init that forwards signals and reaps zombies (the shoutrrr plugin
+# spawns child processes; the entrypoint ends in `exec node`)
+RUN apk add --no-cache su-exec tzdata curl tini
 
 ARG SHOUTRRR_VERSION=0.8.0
 RUN apk add --no-cache --virtual .build-deps wget \
@@ -64,8 +66,9 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 ENV NODE_ENV=production
 EXPOSE 6253
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+# start-period: migrations run before the server starts listening
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -sf http://localhost:${PORT:-6253}/health || exit 1
 
-ENTRYPOINT ["entrypoint.sh"]
+ENTRYPOINT ["/sbin/tini", "--", "entrypoint.sh"]
 CMD ["node", "server.js"]

@@ -44,12 +44,20 @@ jobs:
         run: npm run lint
         working-directory: backend
 
+      - name: Unit tests backend
+        run: npm test
+        working-directory: backend
+
       - name: Install frontend deps
         run: npm ci
         working-directory: frontend
 
       - name: Lint frontend
         run: npm run lint
+        working-directory: frontend
+
+      - name: Unit tests frontend
+        run: npm test
         working-directory: frontend
 
   test:

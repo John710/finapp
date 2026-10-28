@@ -14,6 +14,11 @@ updates:
       interval: weekly
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      backend-minor-patch:
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: npm
     directory: /frontend
@@ -21,8 +26,20 @@ updates:
       interval: weekly
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      frontend-minor-patch:
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: docker-compose
     directory: /
     schedule:
       interval: weekly
