@@ -77,7 +77,7 @@ jobs:
       - name: Run stack (app + postgres)
         run: |
           cat > finapp-ci.env <<'EOF'
-          JWT_SECRET=ci-jwt-secret-ci-jwt-secret-ci-jwt-secret
+          JWT_SECRET=4f1c9a7e2b8d06e35a1f7c94d2e8b6a03c5f9e1d7b2a84c6e0f3d9b5a7c1e82f
           ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
           POSTGRES_USER=finapp
           POSTGRES_PASSWORD=finapp
