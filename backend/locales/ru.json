@@ -91,6 +91,13 @@
   "notifications": {
     "recurring_created": "Создана регулярная транзакция",
     "recurring_created_body": "Транзакция \"{name}\" на сумму {amount} {currency} создана автоматически",
+    "recurring_created_multi_body": "Создано записей: {count} — \"{name}\" на сумму {amount} {currency}",
+    "recurring_due_soon": "Скоро регулярный платёж",
+    "recurring_due_soon_body": "\"{name}\" на сумму {amount} {currency} нужно оплатить {date}",
+    "recurring_overdue": "Просрочен регулярный платёж",
+    "recurring_overdue_body": "\"{name}\" на сумму {amount} {currency} должен был быть оплачен {date}, записи нет",
+    "recurring_finished": "Регулярное правило завершено",
+    "recurring_finished_body": "У правила \"{name}\" не осталось выплат — оно отключено",
     "debt_due_soon": "Приближается срок возврата долга",
     "debt_due_soon_body": "Долг \"{name}\" необходимо вернуть до {date}",
     "budget_warning": "Бюджет почти исчерпан",

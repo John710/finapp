@@ -12,26 +12,9 @@ import {
   resolveProjectionWindow,
   buildSchedulePatch,
   frequencyToSchedule,
+  ruleColumns,
   PATCHABLE_COLUMNS
 } from '../services/recurring-schedule.js'
-
-const RULE_FIELDS = [
-  'id', 'user_id', 'account_id', 'category_id', 'amount', 'currency', 'type', 'frequency',
-  'interval_unit', 'interval_value', 'billing_anchor_day', 'start_date', 'next_date', 'end_date',
-  'cancellation_date', 'auto_renew', 'payment_limit', 'occurrences_paid', 'last_run_date',
-  'notify_days_before', 'note', 'is_active', 'created_at', 'updated_at'
-]
-
-// pg returns DATE as a local-midnight Date, so the JSON would carry the day
-// before the schedule means whenever the container is not on UTC. Text keeps
-// the calendar day intact and matches what the schedule service consumes.
-const TEXT_FIELDS = new Set(['amount', 'start_date', 'next_date', 'end_date', 'cancellation_date', 'last_run_date'])
-
-function ruleColumns(prefix) {
-  return RULE_FIELDS.map(field =>
-    TEXT_FIELDS.has(field) ? `${prefix}${field}::text AS ${field}` : `${prefix}${field}`
-  ).join(', ')
-}
 
 const SCHEDULE_COLUMNS = new Set([
   'interval_unit', 'interval_value', 'billing_anchor_day', 'start_date', 'end_date',

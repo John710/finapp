@@ -12,7 +12,7 @@ import Fastify from 'fastify'
 
 export const TEST_USER = 7
 
-export function buildStubServer(routePlugin, handlers = [], { userId = TEST_USER, prefix = '/' } = {}) {
+export function buildStubDb(handlers = []) {
   const queries = []
   const answer = sql => {
     for (const h of handlers) {
@@ -24,7 +24,7 @@ export function buildStubServer(routePlugin, handlers = [], { userId = TEST_USER
     return []
   }
   const run = sql => params => {
-    queries.push({ sql: sql.trim(), params })
+    queries.push({ sql: sql.trim().replace(/\s+/g, ' '), params })
     const rows = answer(sql)
     return { rows, rowCount: rows.length }
   }
@@ -35,6 +35,11 @@ export function buildStubServer(routePlugin, handlers = [], { userId = TEST_USER
       release: () => {}
     })
   }
+  return { db, queries }
+}
+
+export function buildStubServer(routePlugin, handlers = [], { userId = TEST_USER, prefix = '/' } = {}) {
+  const { db, queries } = buildStubDb(handlers)
   const app = Fastify()
   app.decorate('db', db)
   app.addHook('preHandler', async request => {

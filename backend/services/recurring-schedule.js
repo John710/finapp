@@ -248,3 +248,52 @@ export function frequencyToSchedule(frequency) {
   const legacy = LEGACY_FREQUENCIES[frequency]
   return legacy ? { unit: legacy.unit, value: legacy.value } : null
 }
+
+// Every reader of recurring_rules must cast the DATE columns to text: pg hands
+// back a local-midnight Date, and the JSON would then carry the day before the
+// schedule means whenever the container is not on UTC.
+export const RULE_FIELDS = [
+  'id', 'user_id', 'account_id', 'category_id', 'amount', 'currency', 'type', 'frequency',
+  'interval_unit', 'interval_value', 'billing_anchor_day', 'start_date', 'next_date', 'end_date',
+  'cancellation_date', 'auto_renew', 'payment_limit', 'occurrences_paid', 'last_run_date',
+  'notify_days_before', 'note', 'is_active', 'created_at', 'updated_at'
+]
+
+const RULE_TEXT_FIELDS = new Set(['amount', 'start_date', 'next_date', 'end_date', 'cancellation_date', 'last_run_date'])
+
+export function ruleColumns(prefix) {
+  return RULE_FIELDS.map(field =>
+    RULE_TEXT_FIELDS.has(field) ? `${prefix}${field}::text AS ${field}` : `${prefix}${field}`
+  ).join(', ')
+}
+
+export const CATCHUP_LIMIT = 10
+
+// What one cron pass owes a rule: the occurrences to insert, the ones it has to
+// rewind because the catch-up cap was reached, and where the cursor ends up.
+// When the schedule runs out, the cursor parks on the last allowed day so the
+// caller can deactivate the rule without losing the date it stopped on.
+export function planRuleRun(rawRule, todayStr, options = {}) {
+  const { paid = new Set(), skipped = new Set(), limit = CATCHUP_LIMIT } = options
+  const toCreate = []
+  const rewound = []
+  let cursor = isDateStr(rawRule?.next_date) ? rawRule.next_date : occurrenceAtIndex(scheduleOf(rawRule), 0)
+  // An anchor change can leave the stored cursor off-schedule; never create a
+  // date the schedule itself does not generate.
+  while (cursor && !occurrenceAllowed(rawRule, cursor)) cursor = nextOccurrenceAfter(rawRule, cursor)
+
+  let lastDate = null
+  while (cursor && cursor <= todayStr) {
+    lastDate = cursor
+    if (paid.has(cursor) || skipped.has(cursor)) {
+      cursor = nextOccurrenceAfter(rawRule, cursor)
+      continue
+    }
+    if (toCreate.length >= limit) rewound.push(cursor)
+    else toCreate.push(cursor)
+    cursor = nextOccurrenceAfter(rawRule, cursor)
+  }
+
+  if (!cursor) return { toCreate, rewound, nextDate: lastDate, lastDate, finished: true }
+  return { toCreate, rewound, nextDate: cursor, lastDate, finished: false }
+}

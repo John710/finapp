@@ -2,17 +2,8 @@ import fp from 'fastify-plugin'
 import cron from 'node-cron'
 import { t, getUserLang } from '../services/i18n.js'
 import { notify, checkDuplicateNotification } from '../services/notify.js'
-
-function frequencyToInterval(frequency) {
-  switch (frequency) {
-    case 'daily': return '1 day'
-    case 'weekly': return '7 days'
-    case 'biweekly': return '14 days'
-    case 'monthly': return '1 month'
-    case 'yearly': return '1 year'
-    default: return '1 month'
-  }
-}
+import { ruleColumns } from '../services/recurring-schedule.js'
+import { generateOccurrences } from '../services/recurring-run.js'
 
 // node-pg parses DATE columns as local midnight Dates; keep the calendar day
 // in local components so timezone offsets cannot shift it by one day.
@@ -21,6 +12,11 @@ function dateKey(d) {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${m}-${day}`
+}
+
+function amountText(amount) {
+  const value = Number(amount)
+  return Number.isFinite(value) ? String(value) : String(amount)
 }
 
 async function cronPlugin(fastify, opts) {
@@ -57,8 +53,6 @@ async function cronPlugin(fastify, opts) {
   // app instances can never process the same rule concurrently. A rule that
   // fell behind catches up immediately (bounded), instead of one occurrence
   // per hourly run for weeks.
-  const RECURRING_CATCHUP_LIMIT = 10
-
   schedule('0 * * * *', async () => {
     fastify.log.info('Running recurring transactions check')
     const usersRes = await fastify.db.query('SELECT id FROM users ORDER BY id')
@@ -67,14 +61,13 @@ async function cronPlugin(fastify, opts) {
       const lang = await getUserLang(fastify.db, userId)
 
       while (true) {
-        const todayKey = dateKey(new Date())
+        const today = dateKey(new Date())
         const client = await fastify.db.connect()
-        let notifRule = null
-        let createdCount = 0
+        const events = []
         try {
           await client.query('BEGIN')
           const ruleRes = await client.query(
-            `SELECT * FROM recurring_rules
+            `SELECT ${ruleColumns('')} FROM recurring_rules
              WHERE is_active = true AND next_date <= CURRENT_DATE AND user_id = $1
              ORDER BY next_date, id
              LIMIT 1
@@ -86,45 +79,20 @@ async function cronPlugin(fastify, opts) {
             break
           }
           const rule = ruleRes.rows[0]
-          const interval = frequencyToInterval(rule.frequency)
-          const sign = rule.type === 'income' ? 1 : -1
 
-          let nextDate = rule.next_date
-          let advanced = 0
-          while (dateKey(nextDate) <= todayKey && createdCount < RECURRING_CATCHUP_LIMIT) {
-            await client.query(
-              'INSERT INTO transactions (user_id, account_id, category_id, amount, type, date, note, recurring_rule_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-              [userId, rule.account_id, rule.category_id, rule.amount, rule.type, dateKey(nextDate), rule.note, rule.id]
-            )
-            await client.query(
-              'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
-              [rule.amount * sign, rule.account_id, userId]
-            )
-            createdCount++
-            const adv = await client.query(
-              `UPDATE recurring_rules SET next_date = next_date + INTERVAL '${interval}' WHERE id = $1 RETURNING next_date`,
-              [rule.id]
-            )
-            nextDate = adv.rows[0].next_date
-            advanced++
-          }
-          // Catch-up cap reached but the rule is still due (e.g. inactive for a
-          // very long time): jump to the next future occurrence instead of
-          // flooding the ledger with historical entries.
-          while (dateKey(nextDate) <= todayKey) {
-            const adv = await client.query(
-              `UPDATE recurring_rules SET next_date = next_date + INTERVAL '${interval}' WHERE id = $1 RETURNING next_date`,
-              [rule.id]
-            )
-            nextDate = adv.rows[0].next_date
-            advanced++
-            if (advanced > 100000) throw new Error('recurring next_date advancement exceeded safety limit')
-          }
+          // Which dates exist at all, and which of them the ledger still owes, is
+          // decided by the schedule service — no date arithmetic in SQL, so a
+          // 31st-of-the-month anchor cannot ratchet.
+          const outcome = await generateOccurrences(client, rule, today)
 
           await client.query('COMMIT')
-          if (createdCount > 0) {
-            notifRule = { rule, createdCount }
-            fastify.log.info(`Created ${createdCount} recurring transaction(s) for rule ${rule.id} user ${userId}`)
+          if (outcome.createdCount > 0) {
+            events.push({ kind: 'created', rule, createdCount: outcome.createdCount })
+            fastify.log.info(`Created ${outcome.createdCount} recurring transaction(s) for rule ${rule.id} user ${userId}`)
+          }
+          if (outcome.finished) events.push({ kind: 'finished', rule })
+          if (outcome.rewound.length > 0) {
+            fastify.log.warn(`Rewound ${outcome.rewound.length} overdue occurrence(s) for rule ${rule.id} past the catch-up limit`)
           }
         } catch (err) {
           await client.query('ROLLBACK')
@@ -134,24 +102,96 @@ async function cronPlugin(fastify, opts) {
         }
 
         // Notifications (network I/O) strictly after COMMIT and client release
-        if (notifRule) {
+        for (const event of events) {
           try {
-            const { rule, createdCount } = notifRule
-            // rule.amount is a numeric string from pg — trim the trailing
-            // zeroes instead of pushing the raw "1500.000000000000" into the message
-            const amountNum = Number(rule.amount)
-            const amountText = Number.isFinite(amountNum) ? String(amountNum) : String(rule.amount)
-            const title = t('notifications.recurring_created', {}, lang)
-            const message = t('notifications.recurring_created_body', { name: rule.note || rule.type, amount: amountText, currency: createdCount > 1 ? `×${createdCount}` : '' }, lang)
-            await notify(fastify, userId, {
-              type: 'recurring_created', title, message,
-              data: { entity_id: rule.id, url: '/transactions' },
-              channels: ['bell', 'push', 'shoutrrr']
-            })
+            if (event.kind === 'created') {
+              const { rule, createdCount } = event
+              const params = { name: rule.note || rule.type, amount: amountText(rule.amount), currency: rule.currency }
+              const message = t(
+                createdCount > 1 ? 'notifications.recurring_created_multi_body' : 'notifications.recurring_created_body',
+                createdCount > 1 ? { ...params, count: createdCount } : params,
+                lang
+              )
+              await notify(fastify, userId, {
+                type: 'recurring_created', title: t('notifications.recurring_created', {}, lang), message,
+                data: { entity_id: rule.id, url: '/transactions' },
+                channels: ['bell', 'push', 'shoutrrr']
+              })
+            } else {
+              const { rule } = event
+              await notify(fastify, userId, {
+                type: 'recurring_finished',
+                title: t('notifications.recurring_finished', {}, lang),
+                message: t('notifications.recurring_finished_body', { name: rule.note || rule.type }, lang),
+                data: { entity_id: rule.id, url: '/recurring' },
+                channels: ['bell', 'push', 'shoutrrr']
+              })
+            }
           } catch (notifErr) {
             fastify.log.warn(notifErr, 'Recurring notification failed')
           }
         }
+      }
+    }
+  })
+
+  // Run daily at 08:00 — upcoming payment reminders for rules that ask for them
+  schedule('0 8 * * *', async () => {
+    fastify.log.info('Running recurring due date check')
+    const usersRes = await fastify.db.query('SELECT id FROM users ORDER BY id')
+    for (const user of usersRes.rows) {
+      const userId = user.id
+      const lang = await getUserLang(fastify.db, userId)
+      const { rows } = await fastify.db.query(
+        `SELECT ${ruleColumns('r.')} FROM recurring_rules r
+         WHERE r.user_id = $1 AND r.is_active = true AND r.notify_days_before > 0
+           AND r.next_date = CURRENT_DATE + make_interval(days => r.notify_days_before)`,
+        [userId]
+      )
+      for (const rule of rows) {
+        const dup = await checkDuplicateNotification(fastify, { userId, type: 'recurring_due_soon', entityId: rule.id, hours: 24 })
+        if (dup) continue
+        await notify(fastify, userId, {
+          type: 'recurring_due_soon',
+          title: t('notifications.recurring_due_soon', {}, lang),
+          message: t('notifications.recurring_due_soon_body', {
+            name: rule.note || rule.type, amount: amountText(rule.amount), currency: rule.currency, date: rule.next_date
+          }, lang),
+          data: { entity_id: rule.id, url: '/recurring' },
+          channels: ['bell', 'push', 'shoutrrr']
+        })
+      }
+    }
+  })
+
+  // Run daily at 09:30 — occurrences the ledger still does not have
+  schedule('30 9 * * *', async () => {
+    fastify.log.info('Running recurring overdue check')
+    const usersRes = await fastify.db.query('SELECT id FROM users ORDER BY id')
+    for (const user of usersRes.rows) {
+      const userId = user.id
+      const lang = await getUserLang(fastify.db, userId)
+      const { rows } = await fastify.db.query(
+        `SELECT ${ruleColumns('r.')} FROM recurring_rules r
+         WHERE r.user_id = $1 AND r.is_active = true AND r.next_date < CURRENT_DATE
+           AND NOT EXISTS (SELECT 1 FROM transactions tx
+                           WHERE tx.recurring_rule_id = r.id AND tx.date = r.next_date)
+           AND NOT EXISTS (SELECT 1 FROM recurring_exceptions ex
+                           WHERE ex.rule_id = r.id AND ex.occurrence_date = r.next_date AND ex.kind = 'skipped')`,
+        [userId]
+      )
+      for (const rule of rows) {
+        const dup = await checkDuplicateNotification(fastify, { userId, type: 'recurring_overdue', entityId: rule.id, hours: 24 })
+        if (dup) continue
+        await notify(fastify, userId, {
+          type: 'recurring_overdue',
+          title: t('notifications.recurring_overdue', {}, lang),
+          message: t('notifications.recurring_overdue_body', {
+            name: rule.note || rule.type, amount: amountText(rule.amount), currency: rule.currency, date: rule.next_date
+          }, lang),
+          data: { entity_id: rule.id, url: '/recurring' },
+          channels: ['bell', 'push', 'shoutrrr']
+        })
       }
     }
   })

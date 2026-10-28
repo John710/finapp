@@ -11,6 +11,7 @@ import {
   initialNextDate,
   resolveProjectionWindow,
   dueOccurrence,
+  planRuleRun,
   buildSchedulePatch
 } from '../services/recurring-schedule.js'
 
@@ -399,5 +400,82 @@ describe('dueOccurrence', () => {
   it('still reports a cursor for a paused rule — paying one occurrence by hand stays possible', () => {
     const r = rule({ start_date: '2026-03-01', next_date: '2026-03-01', is_active: false })
     expect(dueOccurrence(r, '2026-03-05', new Set(), new Set())).toBe('2026-03-01')
+  })
+})
+
+describe('planRuleRun', () => {
+  it('creates every missed occurrence and parks the cursor in the future', () => {
+    const plan = planRuleRun(rule({ next_date: '2026-01-31' }), '2026-03-31')
+    expect(plan.toCreate).toEqual(['2026-01-31', '2026-02-28', '2026-03-31'])
+    expect(plan.rewound).toEqual([])
+    expect(plan.nextDate).toBe('2026-04-30')
+    expect(plan.finished).toBe(false)
+  })
+
+  it('keeps the catch-up cap and reports what it had to rewind', () => {
+    const plan = planRuleRun(rule({ interval_unit: 'day', start_date: '2026-01-01', next_date: '2026-01-01' }), '2026-01-30', { limit: 10 })
+    expect(plan.toCreate.length).toBe(10)
+    expect(plan.toCreate[0]).toBe('2026-01-01')
+    expect(plan.rewound[0]).toBe('2026-01-11')
+    expect(plan.rewound.length).toBe(20)
+    expect(plan.rewound[19]).toBe('2026-01-30')
+    expect(plan.nextDate).toBe('2026-01-31')
+  })
+
+  it('does not create a skipped occurrence but still advances past it', () => {
+    const plan = planRuleRun(rule({ next_date: '2026-01-31' }), '2026-03-31', { skipped: new Set(['2026-02-28']) })
+    expect(plan.toCreate).toEqual(['2026-01-31', '2026-03-31'])
+    expect(plan.rewound).toEqual([])
+  })
+
+  it('treats an already-paid date as settled', () => {
+    const plan = planRuleRun(rule({ next_date: '2026-01-31' }), '2026-02-28', { paid: new Set(['2026-01-31']) })
+    expect(plan.toCreate).toEqual(['2026-02-28'])
+    expect(plan.nextDate).toBe('2026-03-31')
+  })
+
+  it('finishes on the end date and parks the cursor on the last allowed day', () => {
+    const plan = planRuleRun(rule({ next_date: '2026-01-31', end_date: '2026-03-01' }), '2026-06-30')
+    expect(plan.toCreate).toEqual(['2026-01-31', '2026-02-28'])
+    expect(plan.finished).toBe(true)
+    expect(plan.lastDate).toBe('2026-02-28')
+    expect(plan.nextDate).toBe('2026-02-28')
+  })
+
+  it('stops at the payment limit', () => {
+    const plan = planRuleRun(rule({ payment_limit: 2, next_date: '2026-01-31' }), '2026-12-31')
+    expect(plan.toCreate).toEqual(['2026-01-31', '2026-02-28'])
+    expect(plan.finished).toBe(true)
+  })
+
+  it('pays a non-renewing rule once and is done', () => {
+    const plan = planRuleRun(rule({ auto_renew: false, next_date: '2026-01-31' }), '2026-05-31')
+    expect(plan.toCreate).toEqual(['2026-01-31'])
+    expect(plan.finished).toBe(true)
+    expect(plan.lastDate).toBe('2026-01-31')
+  })
+
+  it('snaps a stored cursor that no longer fits the schedule', () => {
+    const plan = planRuleRun(
+      rule({ billing_anchor_day: 15, start_date: '2026-01-15', next_date: '2026-01-31' }),
+      '2026-03-31'
+    )
+    expect(plan.toCreate).toEqual(['2026-02-15', '2026-03-15'])
+    expect(plan.nextDate).toBe('2026-04-15')
+  })
+
+  it('leaves a rule that is not due yet untouched', () => {
+    const plan = planRuleRun(rule({ next_date: '2026-05-31' }), '2026-03-31')
+    expect(plan.toCreate).toEqual([])
+    expect(plan.rewound).toEqual([])
+    expect(plan.nextDate).toBe('2026-05-31')
+    expect(plan.finished).toBe(false)
+  })
+
+  it('reports an exhausted schedule instead of looping', () => {
+    const plan = planRuleRun(rule({ next_date: null, start_date: '2026-01-31', payment_limit: 0, end_date: '2026-01-01' }), '2026-06-30')
+    expect(plan.toCreate).toEqual([])
+    expect(plan.finished).toBe(true)
+    expect(plan.nextDate).toBe(null)
   })
 })

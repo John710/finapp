@@ -91,6 +91,13 @@
   "notifications": {
     "recurring_created": "Recurring transaction created",
     "recurring_created_body": "Transaction \"{name}\" for {amount} {currency} was created automatically",
+    "recurring_created_multi_body": "{count} transactions \"{name}\" for {amount} {currency} were created automatically",
+    "recurring_due_soon": "Recurring payment due soon",
+    "recurring_due_soon_body": "\"{name}\" for {amount} {currency} is due on {date}",
+    "recurring_overdue": "Recurring payment overdue",
+    "recurring_overdue_body": "\"{name}\" for {amount} {currency} was due on {date} and has no entry yet",
+    "recurring_finished": "Recurring rule finished",
+    "recurring_finished_body": "\"{name}\" has no payments left and is now inactive",
     "debt_due_soon": "Debt due date approaching",
     "debt_due_soon_body": "Debt \"{name}\" is due by {date}",
     "budget_warning": "Budget almost exhausted",

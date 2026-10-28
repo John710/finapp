@@ -446,4 +446,34 @@ describe('backend locales', () => {
       }
     }
   })
+
+  const notificationKeys = [
+    'recurring_created',
+    'recurring_created_body',
+    'recurring_created_multi_body',
+    'recurring_due_soon',
+    'recurring_due_soon_body',
+    'recurring_overdue',
+    'recurring_overdue_body',
+    'recurring_finished',
+    'recurring_finished_body'
+  ]
+
+  function placeholders(text) {
+    return (text.match(/\{\w+\}/g) ?? []).sort()
+  }
+
+  it('defines every recurring notification key with the same placeholders in both languages', () => {
+    const catalogs = {}
+    for (const file of ['en.json', 'ru.json']) {
+      catalogs[file] = JSON.parse(readFileSync(new URL(`../locales/${file}`, import.meta.url), 'utf-8'))
+    }
+    for (const key of notificationKeys) {
+      for (const file of ['en.json', 'ru.json']) {
+        expect(catalogs[file].notifications[key], `${file} notifications.${key}`).toBeTypeOf('string')
+      }
+      expect(placeholders(catalogs['ru.json'].notifications[key]), `placeholders of notifications.${key}`)
+        .toEqual(placeholders(catalogs['en.json'].notifications[key]))
+    }
+  })
 })
