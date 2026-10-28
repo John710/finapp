@@ -447,7 +447,8 @@ let eurRate = null
   assert('feed projects the upcoming occurrence as an all-day event', feedBody.includes(dtstart), `missing ${dtstart}`)
   assert('feed summarises the rule', feedBody.includes('SUMMARY:Feed Sub'), 'no SUMMARY for the rule note')
   assert('feed excludes the finished rule', !feedBody.includes('SUMMARY:Expired Sub'), 'a past-end-date rule leaked into the feed')
-  assert('feed events carry a stable UID and no RRULE', /^UID:finapp-\d+-\d+-\d{8}@/m.test(feedBody) && !feedBody.includes('RRULE'), 'UID shape or RRULE presence')
+  const uidLine = (feedBody.match(/^UID:[^\r\n]*/m) || ['<no UID line>'])[0]
+  assert('feed events carry a stable UID and no RRULE', /^UID:finapp-\d+-\d+-\d{4}-\d{2}-\d{2}@finapp$/.test(uidLine) && !feedBody.includes('RRULE'), `uid=${uidLine}`)
   assert('feed folds lines under 76 octets', feedBody.split('\r\n').every(l => Buffer.byteLength(l, 'utf8') <= 75), 'a long unfolded line')
 
   const revoked = await req('DELETE', `/recurring/feed-tokens/${issued.json?.id}`)
