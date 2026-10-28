@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 
 const ALGO = 'aes-256-gcm'
+const AUTH_TAG_LENGTH = 16
 
 export function validateEncryptionKey() {
   const key = process.env.ENCRYPTION_KEY
@@ -36,7 +37,9 @@ export function decrypt(encrypted) {
   try {
     const key = getKey()
     const [ivHex, authTagHex, ciphertextHex] = encrypted.split(':')
-    const decipher = crypto.createDecipheriv(ALGO, key, Buffer.from(ivHex, 'hex'))
+    // Pin the tag length: without it GCM accepts a truncated tag (down to 4
+    // bytes), which makes forging a ciphertext far cheaper.
+    const decipher = crypto.createDecipheriv(ALGO, key, Buffer.from(ivHex, 'hex'), { authTagLength: AUTH_TAG_LENGTH })
     decipher.setAuthTag(Buffer.from(authTagHex, 'hex'))
     return Buffer.concat([decipher.update(Buffer.from(ciphertextHex, 'hex')), decipher.final()]).toString('utf8')
   } catch {

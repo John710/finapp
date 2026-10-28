@@ -12,7 +12,9 @@
     "session_not_found": "Session not found",
     "cannot_terminate_current": "Cannot terminate current session",
     "totp_required": "Two-factor code required",
-    "invalid_totp_code": "Invalid two-factor code"
+    "invalid_totp_code": "Invalid two-factor code",
+    "totp_locked": "Too many wrong two-factor codes. Try again in {minutes} minutes.",
+    "password_too_long": "Password is too long: at most 72 bytes (fewer characters for non-Latin letters)"
   },
   "debts": {
     "title": "Debts"
@@ -84,6 +86,7 @@
     "not_found": "Not found",
     "not_allowed": "You do not have permission to modify this item",
     "admin_only": "Only the administrator can manage users",
+    "api_token_forbidden": "A personal API token cannot be used here: sign in to the web app instead",
     "login_taken": "This login is already taken",
     "admin_last": "Cannot demote or delete the last administrator",
     "admin_self_delete": "You cannot delete your own account",
@@ -118,7 +121,9 @@
     "account_overdrawn": "Account overdrawn",
     "account_overdrawn_body": "Account \"{name}\" is overdrawn: {balance}",
     "login_failed": "Failed login attempt",
-    "login_failed_body": "User {login} failed to sign in. IP: {ip}"
+    "login_failed_body": "User {login} failed to sign in. IP: {ip}",
+    "totp_failed": "Wrong two-factor code",
+    "totp_failed_body": "A sign-in for {login} used the correct password but a wrong two-factor code. If it was not you, change your password. IP: {ip}"
   },
   "feed": {
     "calendar_name": "FinApp subscriptions"

@@ -1,16 +1,15 @@
-import pkg from '../package.json' with { type: 'json' }
-
 async function healthRoutes(fastify, opts) {
+  // Public liveness probe for the Docker/compose healthchecks. It reports only
+  // whether the database answers: the version and uptime were readable by
+  // anyone (fingerprinting, restart timing) and no client used them.
   fastify.get('/health', { config: { public: true } }, async (request, reply) => {
     try {
-      const result = await fastify.db.query('SELECT 1')
+      await fastify.db.query('SELECT 1')
       return {
         status: 'ok',
-        version: pkg.version,
-        db: 'connected',
-        uptime: Math.floor(process.uptime())
+        db: 'connected'
       }
-    } catch (err) {
+    } catch {
       reply.code(503)
       return {
         status: 'error',

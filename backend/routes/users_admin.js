@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs'
 import { t, getUserLang } from '../services/i18n.js'
+import { passwordTooLong, revokeUserCredentials } from '../services/credentials.js'
 
 // User management — admin only. Registration stays closed; the admin creates
 // accounts. Every user is a peer with their own data.
@@ -11,7 +12,7 @@ async function usersAdminRoutes(fastify, opts) {
       return { error: t('errors.admin_only', {}, lang) }
     }
     const { rows } = await fastify.db.query(
-      'SELECT id, login, role, created_at FROM users ORDER BY created_at'
+      'SELECT id, login, role, created_at, totp_enabled FROM users ORDER BY created_at'
     )
     return rows
   })
@@ -35,6 +36,11 @@ async function usersAdminRoutes(fastify, opts) {
       return { error: t('errors.admin_only', {}, lang) }
     }
     const { login, password, role } = request.body
+    if (passwordTooLong(password)) {
+      const lang = await getUserLang(fastify.db, request.user.userId)
+      reply.code(400)
+      return { error: t('auth.password_too_long', {}, lang) }
+    }
     const hash = await bcrypt.hash(password, 12)
     try {
       const result = await fastify.db.query(
@@ -64,7 +70,10 @@ async function usersAdminRoutes(fastify, opts) {
         type: 'object',
         properties: {
           password: { type: 'string', minLength: 8, maxLength: 128 },
-          role: { type: 'string', enum: ['user', 'admin'] }
+          role: { type: 'string', enum: ['user', 'admin'] },
+          // Recovery for a user who lost their authenticator: turns 2FA off
+          // and clears the secret, the lockout and the replay marker.
+          reset_2fa: { type: 'boolean' }
         }
       }
     }
@@ -76,8 +85,12 @@ async function usersAdminRoutes(fastify, opts) {
     }
     const userId = request.user.userId
     const { id } = request.params
-    const { password, role } = request.body
+    const { password, role, reset_2fa: reset2fa } = request.body
     const lang = await getUserLang(fastify.db, userId)
+    if (password && passwordTooLong(password)) {
+      reply.code(400)
+      return { error: t('auth.password_too_long', {}, lang) }
+    }
 
     // Never demote or lock out the last admin
     if (role === 'user' || (id === userId && password)) {
@@ -100,22 +113,48 @@ async function usersAdminRoutes(fastify, opts) {
     let idx = 1
     if (password) { fields.push(`password_hash = $${idx++}`); values.push(await bcrypt.hash(password, 12)) }
     if (role) { fields.push(`role = $${idx++}`); values.push(role) }
+    if (reset2fa) {
+      fields.push('totp_enabled = false', 'totp_secret = NULL', 'totp_failed_attempts = 0',
+        'totp_locked_until = NULL', 'totp_last_step = NULL')
+    }
     if (fields.length === 0) {
       reply.code(400)
       return { error: t('errors.no_fields_to_update', {}, lang) }
     }
     values.push(id)
-    const result = await fastify.db.query(
-      `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, login, role`,
-      values
-    )
-    if (result.rows.length === 0) {
-      reply.code(404)
-      return { error: t('errors.user_not_found', {}, lang) }
+
+    // The update and the revocation land together: a password reset that left
+    // the old sessions or API tokens alive would not lock out whoever had them.
+    const client = await fastify.db.connect()
+    let result
+    try {
+      await client.query('BEGIN')
+      result = await client.query(
+        `UPDATE users SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, login, role, totp_enabled`,
+        values
+      )
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK')
+        reply.code(404)
+        return { error: t('errors.user_not_found', {}, lang) }
+      }
+      if (password) {
+        // Sessions, personal API tokens and calendar feed tokens all go
+        await revokeUserCredentials(client, id)
+      } else if (role === 'user') {
+        // A demotion already takes effect on the next request (the role is read
+        // from the database); the sessions are still ended as before.
+        await client.query('DELETE FROM refresh_tokens WHERE user_id = $1', [id])
+      }
+      await client.query('COMMIT')
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
     }
-    // A password reset or demotion revokes the user's sessions
-    if (password || (role && role === 'user')) {
-      await fastify.db.query('DELETE FROM refresh_tokens WHERE user_id = $1', [id])
+    if (reset2fa) {
+      fastify.log.info({ adminId: userId, userId: id }, 'Two-factor authentication reset by admin')
     }
     return result.rows[0]
   })

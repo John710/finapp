@@ -109,19 +109,25 @@ async function start() {
   // which used to make allowList() return true for every request (no limiting at all).
   // `req.routeOptions.url` (available in the onRequest hook for matched routes) is the
   // correct property; unmatched routes (404) stay unlimited.
+  // These general limits share one counter per client across all API routes.
+  // Credential checks (login, register, 2FA) carry their own route-level
+  // `config.rateLimit`, which gives them a separate counter: ordinary API traffic
+  // cannot use up the login budget, and login attempts do not eat into it either.
+  // The plugin's default key generator is kept on purpose: it buckets IPv6
+  // clients by their /64 (one subscriber owns a whole /64 and could otherwise
+  // rotate through it) and collapses IPv4-mapped addresses to plain IPv4.
   await app.register(rateLimit, {
     max: async (req, key) => {
-      if (req.routeOptions?.url?.startsWith('/api/v1/auth')) return 10
       if (req.method === 'GET') return 240
       return 90
     },
     timeWindow: '1 minute',
-    keyGenerator: (req) => req.ip,
+    ipv6Subnet: 64,
     allowList: (req, key) => {
       if (!req.routeOptions?.url?.startsWith('/api/v1')) return true
       // Refresh and setup are the session-recovery path: bursts of them happen
       // exactly when sessions break, and rate-limiting those locks the user
-      // out. Brute-force protection stays on /auth/login (10/min).
+      // out. Brute-force protection stays on /auth/login (route-level 10/min).
       const url = req.routeOptions?.url
       if (url.startsWith('/api/v1/auth/refresh') || url.startsWith('/api/v1/auth/setup-required')) return true
       return false
@@ -237,6 +243,30 @@ async function start() {
     request.log.error({ err }, 'Unhandled error')
     return reply.code(500).send({ error: t('errors.internal', {}, lang) })
   })
+
+  // Graceful shutdown: `docker stop` sends SIGTERM. app.close() stops accepting
+  // connections, lets in-flight requests finish and runs the onClose hooks
+  // (cron jobs stop, the pg pool ends) before the process exits.
+  let shuttingDown = false
+  const shutdown = async (signal) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    app.log.info({ signal }, 'Shutting down')
+    // Never hang past the container's stop timeout on a stuck request
+    setTimeout(() => {
+      app.log.error('Graceful shutdown timed out, exiting')
+      process.exit(1)
+    }, 10000).unref()
+    try {
+      await app.close()
+      process.exit(0)
+    } catch (err) {
+      app.log.error(err, 'Error during shutdown')
+      process.exit(1)
+    }
+  }
+  process.once('SIGTERM', () => shutdown('SIGTERM'))
+  process.once('SIGINT', () => shutdown('SIGINT'))
 
   try {
     await app.listen({ port: PORT, host: '0.0.0.0' })
