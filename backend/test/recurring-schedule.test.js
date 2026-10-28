@@ -12,6 +12,7 @@ import {
   resolveProjectionWindow,
   dueOccurrence,
   planRuleRun,
+  projectOccurrences,
   buildSchedulePatch
 } from '../services/recurring-schedule.js'
 
@@ -477,5 +478,66 @@ describe('planRuleRun', () => {
     expect(plan.toCreate).toEqual([])
     expect(plan.finished).toBe(true)
     expect(plan.nextDate).toBe(null)
+  })
+})
+
+describe('projectOccurrences', () => {
+  const rent = rule({ id: 1, note: 'Rent', category_name: 'Housing', account_name: 'Checking', start_date: '2026-01-31' })
+  const salary = rule({
+    id: 2,
+    type: 'income',
+    amount: '2500.000000000000',
+    note: 'Payday',
+    start_date: '2026-01-05',
+    billing_anchor_day: 5,
+    interval_value: 1
+  })
+
+  it('flattens every rule into one date-ordered list', () => {
+    const rows = projectOccurrences([rent, salary], {}, '2026-02-01', '2026-03-31')
+    expect(rows.map(o => `${o.rule_id}:${o.date}`)).toEqual(['2:2026-02-05', '1:2026-02-28', '2:2026-03-05', '1:2026-03-31'])
+  })
+
+  it('orders same-day occurrences by rule id', () => {
+    const rows = projectOccurrences([salary, rent], {}, '2026-01-01', '2026-01-31')
+    expect(rows.filter(o => o.date === '2026-01-31').map(o => o.rule_id)).toEqual([1])
+    expect(rows[0].date <= rows[rows.length - 1].date).toBe(true)
+  })
+
+  it('labels an occurrence from the rule note, then category, then account', () => {
+    const rows = projectOccurrences(
+      [rule({ id: 3, note: null, category_name: 'Food', account_name: 'Card' }), rule({ id: 4, note: 'Gym', category_name: null, account_name: 'Card' })],
+      {},
+      '2026-01-01',
+      '2026-01-31'
+    )
+    expect(rows.find(o => o.rule_id === 3).name).toBe('Food')
+    expect(rows.find(o => o.rule_id === 4).name).toBe('Gym')
+  })
+
+  it('carries paid and skipped flags from the exception maps', () => {
+    const flags = {
+      paid: new Map([[1, new Set(['2026-02-28'])]]),
+      skipped: new Map([[1, new Set(['2026-03-31'])]])
+    }
+    const rows = projectOccurrences([rent], flags, '2026-02-01', '2026-03-31')
+    expect(rows.find(o => o.date === '2026-02-28').paid).toBe(true)
+    expect(rows.find(o => o.date === '2026-02-28').skipped).toBe(false)
+    expect(rows.find(o => o.date === '2026-03-31').skipped).toBe(true)
+  })
+
+  it('keeps amounts as the numeric strings pg returns', () => {
+    const [row] = projectOccurrences([rent], {}, '2026-02-01', '2026-02-28')
+    expect(row.amount).toBe('100.000000000000')
+    expect(typeof row.amount).toBe('string')
+  })
+
+  it('contributes nothing for a window past the end date or the payment limit', () => {
+    expect(projectOccurrences([rule({ id: 5, start_date: '2026-01-31', end_date: '2026-02-01' })], {}, '2026-03-01', '2026-06-30')).toEqual([])
+    expect(projectOccurrences([rule({ id: 6, start_date: '2026-01-31', payment_limit: 1 })], {}, '2026-03-01', '2026-06-30')).toEqual([])
+  })
+
+  it('returns an empty list for an inverted window', () => {
+    expect(projectOccurrences([rent], {}, '2026-04-01', '2026-01-01')).toEqual([])
   })
 })

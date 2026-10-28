@@ -1,12 +1,13 @@
 import Decimal from 'decimal.js'
 import { t, getUserLang } from '../services/i18n.js'
+import { loadOccurrenceFlags, loadRule, loadVisibleRules } from '../services/recurring-rules.js'
 import {
-  occurrenceDates,
   nextOccurrenceAfter,
   occurrenceAllowed,
   statusOf,
   monthlyEquivalent,
   dueOccurrence,
+  projectOccurrences,
   toLegacyFrequency,
   initialNextDate,
   resolveProjectionWindow,
@@ -20,20 +21,6 @@ const SCHEDULE_COLUMNS = new Set([
   'interval_unit', 'interval_value', 'billing_anchor_day', 'start_date', 'end_date',
   'cancellation_date', 'auto_renew', 'payment_limit'
 ])
-
-const RULE_JOIN = `
-  FROM recurring_rules r
-  LEFT JOIN accounts a ON a.id = r.account_id
-  LEFT JOIN categories c ON c.id = r.category_id
-  JOIN users ou ON ou.id = r.user_id
-  LEFT JOIN entity_shares es ON es.entity_type = 'recurring' AND es.entity_id = r.id
-    AND es.owner_id = r.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)`
-
-const RULE_SHARE_COLUMNS = `a.name AS account_name, c.name AS category_name,
-  CASE WHEN r.user_id = $1 THEN NULL ELSE ou.login END AS owner_login,
-  (r.user_id = $1) AS is_owner,
-  CASE WHEN r.user_id = $1 THEN COALESCE((SELECT true FROM entity_shares es3
-    WHERE es3.entity_type = 'recurring' AND es3.entity_id = r.id AND es3.owner_id = r.user_id LIMIT 1), false) ELSE false END AS is_shared`
 
 const PROJECTION_RATE_LIMIT = {
   config: { rateLimit: { max: 30, timeWindow: '1 minute', keyGenerator: req => req.user?.userId ?? req.ip } }
@@ -58,48 +45,6 @@ async function recurringRoutes(fastify, opts) {
   async function serverToday() {
     const { rows } = await fastify.db.query('SELECT CURRENT_DATE::text AS today')
     return rows[0]?.today ?? null
-  }
-
-  async function flagsFor(db, ruleIds) {
-    const paid = new Map()
-    const skipped = new Map()
-    if (ruleIds.length === 0) return { paid, skipped }
-    const { rows: txRows } = await db.query(
-      'SELECT recurring_rule_id AS rule_id, date::text AS date FROM transactions WHERE recurring_rule_id = ANY($1::int[])',
-      [ruleIds]
-    )
-    for (const row of txRows) {
-      if (!paid.has(row.rule_id)) paid.set(row.rule_id, new Set())
-      paid.get(row.rule_id).add(row.date)
-    }
-    const { rows: skipRows } = await db.query(
-      "SELECT rule_id, occurrence_date::text AS date FROM recurring_exceptions WHERE rule_id = ANY($1::int[]) AND kind = 'skipped'",
-      [ruleIds]
-    )
-    for (const row of skipRows) {
-      if (!skipped.has(row.rule_id)) skipped.set(row.rule_id, new Set())
-      skipped.get(row.rule_id).add(row.date)
-    }
-    return { paid, skipped }
-  }
-
-  async function loadVisibleRules(userId, { order = 'r.next_date ASC' } = {}) {
-    const { rows } = await fastify.db.query(
-      `SELECT ${ruleColumns('r.')}, ${RULE_SHARE_COLUMNS} ${RULE_JOIN}
-       WHERE r.user_id = $1 OR es.id IS NOT NULL
-       ORDER BY ${order}`,
-      [userId]
-    )
-    return rows
-  }
-
-  async function loadRule(userId, id) {
-    const { rows } = await fastify.db.query(
-      `SELECT ${ruleColumns('r.')}, ${RULE_SHARE_COLUMNS} ${RULE_JOIN}
-       WHERE r.id = $2 AND (r.user_id = $1 OR es.id IS NOT NULL)`,
-      [userId, id]
-    )
-    return rows[0] ?? null
   }
 
   function upcoming(rule, today, paidSet, skipSet) {
@@ -144,9 +89,9 @@ async function recurringRoutes(fastify, opts) {
   // List
   fastify.get('/recurring', PROJECTION_RATE_LIMIT, async (request, reply) => {
     const userId = request.user.userId
-    const rules = await loadVisibleRules(userId)
+    const rules = await loadVisibleRules(fastify.db, userId)
     const today = await serverToday()
-    const { paid, skipped } = await flagsFor(fastify.db, rules.map(r => r.id))
+    const { paid, skipped } = await loadOccurrenceFlags(fastify.db, rules.map(r => r.id))
     return rules.map(rule => enrich(rule, today, paid.get(rule.id) ?? new Set(), skipped.get(rule.id) ?? new Set()))
   })
 
@@ -171,30 +116,9 @@ async function recurringRoutes(fastify, opts) {
       reply.code(400)
       return { error: t(`errors.${window.error}`, {}, lang) }
     }
-    const rules = await loadVisibleRules(userId, { order: 'r.id ASC' })
-    const { paid, skipped } = await flagsFor(fastify.db, rules.map(r => r.id))
-    const occurrences = []
-    for (const rule of rules) {
-      const paidSet = paid.get(rule.id) ?? new Set()
-      const skipSet = skipped.get(rule.id) ?? new Set()
-      for (const date of occurrenceDates(rule, window.from, window.to)) {
-        occurrences.push({
-          rule_id: rule.id,
-          name: rule.note || rule.category_name || rule.account_name,
-          date,
-          amount: rule.amount,
-          currency: rule.currency,
-          type: rule.type,
-          account_id: rule.account_id,
-          account_name: rule.account_name,
-          category_name: rule.category_name,
-          paid: paidSet.has(date),
-          skipped: skipSet.has(date),
-          is_active: rule.is_active
-        })
-      }
-    }
-    occurrences.sort((a, b) => (a.date === b.date ? a.rule_id - b.rule_id : a.date < b.date ? -1 : 1))
+    const rules = await loadVisibleRules(fastify.db, userId, { order: 'r.id ASC' })
+    const flags = await loadOccurrenceFlags(fastify.db, rules.map(r => r.id))
+    const occurrences = projectOccurrences(rules, flags, window.from, window.to)
     return { from: window.from, to: window.to, occurrences }
   })
 
@@ -295,7 +219,7 @@ async function recurringRoutes(fastify, opts) {
     const id = request.params.id
     const body = request.body
 
-    const rule = await loadRule(userId, id)
+    const rule = await loadRule(fastify.db, userId, id)
     if (!rule) {
       reply.code(404)
       return { error: t('errors.rule_not_found', {}, lang) }
@@ -466,7 +390,7 @@ async function recurringRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const id = request.params.id ?? request.body.rule_id
-    const rule = await loadRule(userId, id)
+    const rule = await loadRule(fastify.db, userId, id)
     if (!rule) {
       reply.code(404)
       return { error: t('errors.rule_not_found', {}, lang) }
@@ -501,7 +425,7 @@ async function recurringRoutes(fastify, opts) {
       reply.code(400)
       return { error: t('errors.occurrence_not_scheduled', {}, lang) }
     }
-    const { paid } = await flagsFor(fastify.db, [rule.id])
+    const { paid } = await loadOccurrenceFlags(fastify.db, [rule.id])
     if (paid.get(rule.id)?.has(date)) {
       reply.code(400)
       return { error: t('errors.occurrence_already_paid', {}, lang) }
@@ -613,7 +537,7 @@ async function recurringRoutes(fastify, opts) {
       reply.code(400)
       return { error: t('errors.occurrence_not_scheduled', {}, lang) }
     }
-    const { paid } = await flagsFor(fastify.db, [rule.id])
+    const { paid } = await loadOccurrenceFlags(fastify.db, [rule.id])
     if (paid.get(rule.id)?.has(date)) {
       reply.code(400)
       return { error: t('errors.occurrence_already_paid', {}, lang) }
@@ -661,7 +585,7 @@ async function recurringRoutes(fastify, opts) {
     if (owned.error) return owned
     const { rule, userId, lang } = owned
     const today = await serverToday()
-    const { paid, skipped } = await flagsFor(fastify.db, [rule.id])
+    const { paid, skipped } = await loadOccurrenceFlags(fastify.db, [rule.id])
     const cursor = dueOccurrence(rule, today, paid.get(rule.id) ?? new Set(), skipped.get(rule.id) ?? new Set())
     if (!cursor) {
       reply.code(400)
@@ -719,7 +643,7 @@ async function recurringRoutes(fastify, opts) {
   }, async (request, reply) => {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
-    const rule = await loadRule(userId, request.params.id)
+    const rule = await loadRule(fastify.db, userId, request.params.id)
     if (!rule) {
       reply.code(404)
       return { error: t('errors.rule_not_found', {}, lang) }

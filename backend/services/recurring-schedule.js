@@ -39,7 +39,7 @@ function dayNum(dateStr) {
   return Math.floor(Date.UTC(year, month - 1, day) / DAY_MS)
 }
 
-function shiftDays(dateStr, days) {
+export function shiftDays(dateStr, days) {
   const date = new Date(dayNum(dateStr) * DAY_MS + days * DAY_MS)
   return format(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate())
 }
@@ -147,6 +147,35 @@ export function occurrenceDates(rawRule, from, to) {
     if (date >= from) dates.push(date)
   }
   return dates
+}
+
+// The same flattened projection the calendar, the dashboard and the reports read:
+// keeping the label order and the paid/skipped flags here means all three agree.
+export function projectOccurrences(rules, flags = {}, from, to) {
+  const { paid = new Map(), skipped = new Map() } = flags
+  const occurrences = []
+  for (const rule of rules) {
+    const paidSet = paid.get(rule.id) ?? new Set()
+    const skipSet = skipped.get(rule.id) ?? new Set()
+    for (const date of occurrenceDates(rule, from, to)) {
+      occurrences.push({
+        rule_id: rule.id,
+        name: rule.note || rule.category_name || rule.account_name,
+        date,
+        amount: rule.amount,
+        currency: rule.currency,
+        type: rule.type,
+        account_id: rule.account_id,
+        account_name: rule.account_name,
+        category_name: rule.category_name,
+        paid: paidSet.has(date),
+        skipped: skipSet.has(date),
+        is_active: rule.is_active
+      })
+    }
+  }
+  occurrences.sort((a, b) => (a.date === b.date ? a.rule_id - b.rule_id : a.date < b.date ? -1 : 1))
+  return occurrences
 }
 
 export function nextOccurrenceAfter(rawRule, dateStr) {
