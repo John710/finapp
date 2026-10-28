@@ -242,6 +242,8 @@ Notifications are configured per-user in **Settings**:
 
 > **Note:** Web Push requires a secure context (`https://` or `localhost`). It will not work on plain `http://` IP addresses.
 
+> **Note:** A Shoutrrr `generic` webhook URL carries its token in the query string. Point it at an `https://` endpoint only: on plain `http://` the token leaves your network in clear text and lands in the receiving server's access logs. FinApp stores the URL encrypted at rest, but that does not protect it in transit.
+
 The app sends automatic notifications for:
 - Recurring transaction created
 - Upcoming debt due date

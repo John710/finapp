@@ -66,6 +66,7 @@ export async function api(path, options = {}) {
   })
 
   if (res.status === 401 && !path.startsWith('/auth/')) {
+    // A dead refresh leaves no store able to recover in-app, so a full reload is intentional.
     try {
       await refreshSession()
     } catch {
