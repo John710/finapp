@@ -25,6 +25,7 @@ export const useReportsStore = defineStore('reports', () => {
   const trend = ref([])
   const netWorth = ref([])
   const savingsRate = ref(null)
+  const recurringPlan = ref(null)
   const dashboard = ref(null)
   const loading = ref(false)
 
@@ -79,6 +80,12 @@ export const useReportsStore = defineStore('reports', () => {
     savingsRate.value = await api(`/reports/savings-rate?${query}`)
   }
 
+  // Monthly plan (what the schedules ask for) vs actual (what the ledger booked)
+  async function fetchRecurringPlan(params = {}) {
+    const query = buildQuery(params)
+    recurringPlan.value = await api(`/reports/recurring-plan?${query}`)
+  }
+
   async function exportCsv(params = {}) {
     const query = buildQuery(params)
     const res = await fetch(`/api/v1/export/csv?${query}`, { credentials: 'include' })
@@ -92,5 +99,5 @@ export const useReportsStore = defineStore('reports', () => {
     window.URL.revokeObjectURL(url)
   }
 
-  return { summary, byCategory, byCategoryAll, trend, netWorth, savingsRate, dashboard, loading, fetchDashboard, fetchSummary, fetchByCategory, fetchByCategoryAll, fetchTrend, fetchNetWorth, fetchSavingsRate, exportCsv }
+  return { summary, byCategory, byCategoryAll, trend, netWorth, savingsRate, recurringPlan, dashboard, loading, fetchDashboard, fetchSummary, fetchByCategory, fetchByCategoryAll, fetchTrend, fetchNetWorth, fetchSavingsRate, fetchRecurringPlan, exportCsv }
 })

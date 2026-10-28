@@ -1,6 +1,12 @@
 import Decimal from 'decimal.js'
 import { loadRates, convertAmountDecimal } from '../services/currency.js'
 import { visibleAccountIds } from '../services/visibility.js'
+import { loadOccurrenceFlags, loadVisibleRules } from '../services/recurring-rules.js'
+import { monthlyEquivalent, projectOccurrences, shiftDays } from '../services/recurring-schedule.js'
+
+// The dashboard card answers "what is coming next", so it looks a horizon ahead
+// instead of the whole calendar window the projection endpoint allows.
+const RECURRING_HORIZON_DAYS = 60
 
 async function dashboardRoutes(fastify, opts) {
   // One endpoint for the dashboard mount instead of ~11 parallel requests.
@@ -13,13 +19,14 @@ async function dashboardRoutes(fastify, opts) {
           base_currency: { type: 'string', pattern: '^[A-Z]{3}$', default: 'USD' },
           trend_months: { type: 'integer', minimum: 1, maximum: 24, default: 6 },
           networth_months: { type: 'integer', minimum: 1, maximum: 120, default: 12 },
-          recent_limit: { type: 'integer', minimum: 1, maximum: 20, default: 5 }
+          recent_limit: { type: 'integer', minimum: 1, maximum: 20, default: 5 },
+          upcoming_limit: { type: 'integer', minimum: 1, maximum: 20, default: 6 }
         }
       }
     }
   }, async (request, reply) => {
     const userId = request.user.userId
-    const { base_currency = 'USD', trend_months = 6, networth_months = 12, recent_limit = 5 } = request.query
+    const { base_currency = 'USD', trend_months = 6, networth_months = 12, recent_limit = 5, upcoming_limit = 6 } = request.query
     const rates = await loadRates(fastify.db)
     const visible = await visibleAccountIds(fastify.db, userId)
 
@@ -34,7 +41,7 @@ async function dashboardRoutes(fastify, opts) {
     const trendStart = new Date(now.getFullYear(), now.getMonth() - (trend_months - 1), 1).toISOString().slice(0, 10)
     const today = now.toISOString().slice(0, 10)
 
-    const [monthTotals, trendGroups, accountsRes, recentRes, recurringRes, debtsRes] = await Promise.all([
+    const [monthTotals, trendGroups, accountsRes, recentRes, recurringRules, debtsRes, todayRes] = await Promise.all([
       // Current-month income/expense (split children excluded: parents carry the flow)
       fastify.db.query(
         `SELECT t.type, a.currency, COALESCE(SUM(t.amount), 0) as sum
@@ -79,19 +86,9 @@ async function dashboardRoutes(fastify, opts) {
          LIMIT $2`,
         [visible, recent_limit]
       ),
-      fastify.db.query(
-        `SELECT r.*, a.name as account_name, c.name as category_name,
-                CASE WHEN r.user_id = $1 THEN NULL ELSE ou.login END AS owner_login
-         FROM recurring_rules r
-         LEFT JOIN accounts a ON a.id = r.account_id
-         LEFT JOIN categories c ON c.id = r.category_id
-         JOIN users ou ON ou.id = r.user_id
-         LEFT JOIN entity_shares es ON es.entity_type = 'recurring' AND es.entity_id = r.id
-           AND es.owner_id = r.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
-         WHERE r.is_active = true AND (r.user_id = $1 OR es.id IS NOT NULL)
-         ORDER BY r.next_date ASC`,
-        [userId]
-      ),
+      // The schedule contract lives in the recurring service modules: rules read
+      // through ruleColumns() give text dates, so no container timezone moves a day.
+      loadVisibleRules(fastify.db, userId),
       fastify.db.query(
         `SELECT d.id, d.name, d.counterparty, d.amount, d.currency, d.type, d.status, d.due_date,
                 CASE WHEN d.user_id = $1 THEN NULL ELSE ou.login END AS owner_login
@@ -102,7 +99,10 @@ async function dashboardRoutes(fastify, opts) {
          WHERE d.user_id = $1 OR es.id IS NOT NULL
          ORDER BY d.due_date ASC NULLS LAST`,
         [userId]
-      )
+      ),
+      // The schedule contract is defined against the database clock, so the card
+      // and the Recurring page cannot disagree about which day is today.
+      fastify.db.query('SELECT CURRENT_DATE::text AS today')
     ])
 
     // Month summary
@@ -175,13 +175,21 @@ async function dashboardRoutes(fastify, opts) {
       else lent = lent.plus(val)
     }
 
-    const upcomingRecurring = recurringRes.rows
-      .filter(r => {
-        const next = new Date(r.next_date)
-        const limit = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5)
-        return next >= now && next <= limit
-      })
-      .map(r => ({ ...r }))
+    // Recurring: what the active schedules are worth per month, and what they
+    // ask for next. Paid and skipped occurrences are settled business, so the
+    // list only carries the ones still outstanding.
+    const serverToday = todayRes.rows[0]?.today ?? today
+    const activeRules = recurringRules.filter(r => r.is_active)
+    const flags = await loadOccurrenceFlags(fastify.db, activeRules.map(r => r.id))
+    let commitments = new Decimal(0)
+    for (const rule of activeRules) {
+      if (rule.type !== 'expense') continue
+      commitments = commitments.plus(toBase(monthlyEquivalent(rule), rule.currency || base_currency))
+    }
+    const horizon = shiftDays(serverToday, RECURRING_HORIZON_DAYS)
+    const upcomingOccurrence = projectOccurrences(activeRules, flags, serverToday, horizon)
+      .filter(o => !o.paid && !o.skipped)
+      .slice(0, upcoming_limit)
 
     return {
       month_summary: {
@@ -201,7 +209,12 @@ async function dashboardRoutes(fastify, opts) {
       net_worth: netWorth,
       accounts: accountsRes.rows,
       recent_transactions: recentRes.rows,
-      upcoming_recurring: upcomingRecurring,
+      recurring: {
+        monthly_commitments: parseFloat(commitments.toNumber().toFixed(2)),
+        active_count: activeRules.length,
+        window: { from: serverToday, to: horizon },
+        upcoming: upcomingOccurrence
+      },
       debts_summary: {
         owed: parseFloat(owed.toNumber().toFixed(2)),
         lent: parseFloat(lent.toNumber().toFixed(2)),

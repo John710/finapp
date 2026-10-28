@@ -239,6 +239,23 @@ v-for="t in ['expense', 'income']" :key="t" class="px-3 py-1 rounded-md text-xs 
         </div>
       </div>
 
+      <!-- Recurring plan vs actual -->
+      <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <h3 class="font-semibold">{{ $t('reports.recurring_plan_vs_actual') }}</h3>
+          <div class="flex flex-wrap gap-3">
+            <div v-for="item in recurringPlanLegend" :key="item.label" class="flex items-center gap-1.5 text-xs text-slate-500">
+              <div class="w-2.5 h-2.5 rounded-full" :style="{ backgroundColor: item.color }"></div>
+              {{ item.label }}
+            </div>
+          </div>
+        </div>
+        <div v-if="hasRecurringPlan" class="relative h-64">
+          <BaseChart :option="recurringPlanChartOption" />
+        </div>
+        <p v-else class="text-slate-500 text-center py-12">{{ $t('dashboard.no_chart_data') }}</p>
+      </div>
+
       <!-- Recurring -->
       <div class="mt-6 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
@@ -307,7 +324,7 @@ import { logger } from '@/utils/logger.js'
   const baseCurrency = computed(() => ratesStore.baseCurrency)
 
   const { isDark } = useDarkMode()
-  const { trendChartOption: buildTrendOption, categoryChartOption: buildCategoryOption } = useChartOptions({ isDark, baseCurrency, ratesStore })
+  const { trendChartOption: buildTrendOption, categoryChartOption: buildCategoryOption, recurringPlanChartOption: buildRecurringPlanOption } = useChartOptions({ isDark, baseCurrency, ratesStore })
 
   const periodOptions = computed(() => [
     { value: 'today', label: t('reports.today') },
@@ -362,6 +379,11 @@ import { logger } from '@/utils/logger.js'
     debtsStore.fetchDebts()
     recurringStore.fetchRules()
     ratesStore.fetchRates()
+    // The projection window is capped at 400 days server-side, so the plan
+    // card always shows the current calendar year rather than the chart filter.
+    const year = new Date().getFullYear()
+    reportsStore.fetchRecurringPlan({ from: `${year}-01-01`, to: `${year}-12-31` })
+      .catch(e => logger.error('Recurring plan failed', e))
   })
 
 
@@ -414,6 +436,21 @@ import { logger } from '@/utils/logger.js'
 const trendChartOption = computed(() => buildTrendOption(reportsStore.trend))
 
 const categoryChartOption = computed(() => buildCategoryOption(typedCategories.value.filter(c => parseFloat(c.total) > 0)))
+
+const recurringPlanMonths = computed(() => reportsStore.recurringPlan?.months || [])
+const hasRecurringPlan = computed(() => recurringPlanMonths.value.some(m =>
+  parseFloat(m.plan_income) > 0 || parseFloat(m.plan_expense) > 0 ||
+  parseFloat(m.actual_income) > 0 || parseFloat(m.actual_expense) > 0))
+const recurringPlanChartOption = computed(() => buildRecurringPlanOption(reportsStore.recurringPlan))
+
+// The chart hides its built-in legend (ECharts legend names would be truncated),
+// so the four series are labelled here instead.
+const recurringPlanLegend = computed(() => [
+  { label: `${t('reports.income')} · ${t('reports.plan')}`, color: 'rgba(124, 111, 222, 0.35)' },
+  { label: `${t('reports.income')} · ${t('reports.actual')}`, color: '#7c6fde' },
+  { label: `${t('reports.expense')} · ${t('reports.plan')}`, color: 'rgba(184, 193, 234, 0.45)' },
+  { label: `${t('reports.expense')} · ${t('reports.actual')}`, color: '#8fa2d8' }
+])
 
 const sankeyData = computed(() => {
   const nodes = []

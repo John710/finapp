@@ -1,6 +1,28 @@
 import Decimal from 'decimal.js'
 import { loadRates, convertAmountDecimal } from '../services/currency.js'
 import { visibleAccountIds } from '../services/visibility.js'
+import { t, getUserLang } from '../services/i18n.js'
+import { loadOccurrenceFlags, loadVisibleRules } from '../services/recurring-rules.js'
+import { projectOccurrences, resolveProjectionWindow } from '../services/recurring-schedule.js'
+
+function nextMonthKey(key) {
+  const year = Number(key.slice(0, 4))
+  const month = Number(key.slice(5, 7))
+  return month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, '0')}`
+}
+
+// Every calendar month the range touches, so a chart axis stays continuous even
+// for months without any scheduled money.
+function calendarMonths(from, to) {
+  const keys = []
+  let key = from.slice(0, 7)
+  const last = to.slice(0, 7)
+  while (key <= last) {
+    keys.push(key)
+    key = nextMonthKey(key)
+  }
+  return keys
+}
 
 const dateRangeSchema = {
   type: 'object',
@@ -328,6 +350,63 @@ async function reportRoutes(fastify, opts) {
       savings: parseFloat(savings.toNumber().toFixed(2)),
       rate: parseFloat(rate.toNumber().toFixed(2)),
       base_currency
+    }
+  })
+
+  // Plan vs actual for the subscription schedules: the plan is what the active
+  // rules ask for in the month (skipped occurrences are not asked for), the
+  // actual is what the ledger booked for those rules — a payment made with a
+  // different amount shows up there. Paused rules drop out of the plan but keep
+  // whatever they already paid in the actual.
+  fastify.get('/reports/recurring-plan', { schema: { querystring: dateRangeSchema } }, async (request, reply) => {
+    const userId = request.user.userId
+    const lang = await getUserLang(fastify.db, userId)
+    const window = resolveProjectionWindow(request.query.from, request.query.to)
+    if (!window.ok) {
+      reply.code(400)
+      return { error: t(`errors.${window.error}`, {}, lang) }
+    }
+    const { base_currency = 'USD' } = request.query
+    const [rules, visible, rates] = await Promise.all([
+      loadVisibleRules(fastify.db, userId, { order: 'r.id ASC' }),
+      visibleAccountIds(fastify.db, userId),
+      loadRates(fastify.db)
+    ])
+    const activeRules = rules.filter(rule => rule.is_active)
+    const flags = await loadOccurrenceFlags(fastify.db, activeRules.map(rule => rule.id))
+
+    const months = calendarMonths(window.from, window.to)
+    const empty = () => new Map(months.map(key => [key, { income: new Decimal(0), expense: new Decimal(0) }]))
+    const planned = empty()
+    const booked = empty()
+
+    for (const occurrence of projectOccurrences(activeRules, flags, window.from, window.to)) {
+      if (occurrence.skipped) continue
+      const side = occurrence.type === 'income' ? 'income' : 'expense'
+      planned.get(occurrence.date.slice(0, 7))[side] = planned.get(occurrence.date.slice(0, 7))[side]
+        .plus(sumInBase(occurrence.amount, occurrence.currency, base_currency, rates))
+    }
+
+    const where = `t.recurring_rule_id IS NOT NULL AND t.date >= $${2} AND t.date <= $${3}`
+    const groups = await fetchTotalsByMonth(visible, where, [window.from, window.to])
+    for (const g of groups) {
+      if (!booked.has(g.month) || (g.type !== 'income' && g.type !== 'expense')) continue
+      const side = g.type === 'income' ? 'income' : 'expense'
+      booked.get(g.month)[side] = booked.get(g.month)[side].plus(sumInBase(g.sum, g.account_currency, base_currency, rates))
+    }
+
+    const money = value => parseFloat(value.toNumber().toFixed(2))
+    return {
+      from: window.from,
+      to: window.to,
+      base_currency,
+      months: months.map(key => ({
+        month: key,
+        plan_income: money(planned.get(key).income),
+        plan_expense: money(planned.get(key).expense),
+        actual_income: money(booked.get(key).income),
+        actual_expense: money(booked.get(key).expense)
+      }))
     }
   })
 }

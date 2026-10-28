@@ -44,7 +44,9 @@
     "active_accounts": "Активные счета",
     "crypto_balance": "Крипто баланс",
     "unpaid_debts": "Неоплаченные долги",
-    "upcoming_recurring": "Регулярные платежи",
+    "monthly_commitments": "Ежемесячные обязательства",
+    "active_subscriptions": "Активных подписок: {count}",
+    "upcoming_occurrences": "Ближайшие платежи",
     "no_data": "Нет данных",
     "no_data_desc": "Добавьте первый счёт и транзакцию, чтобы увидеть статистику",
     "add_transaction": "Добавить транзакцию",
@@ -315,7 +317,10 @@
     "next_date": "След. дата",
     "status": "Статус",
     "upcoming": "Ближайшие",
-    "upcoming_recurring_payments": "Ближайшие Регулярные платежи"
+    "upcoming_recurring_payments": "Ближайшие Регулярные платежи",
+    "plan": "План",
+    "actual": "Факт",
+    "recurring_plan_vs_actual": "Подписки: план и факт"
   },
   "tags": {
     "title": "Теги",

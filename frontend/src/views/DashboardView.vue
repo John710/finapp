@@ -62,14 +62,14 @@
           <p class="text-xs text-slate-400 mt-0.5">{{ debtsStore.debts.filter(d => d.status !== 'paid').length }} {{ $t('reports.unpaid') }}</p>
         </div>
       </router-link>
-      <router-link to="/recurring" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark hover:shadow-float dark:hover:shadow-none transition-shadow flex items-center gap-4">
+      <router-link to="/recurring/calendar" class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark hover:shadow-float dark:hover:shadow-none transition-shadow flex items-center gap-4">
         <div class="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-500/15 text-amber-500 flex items-center justify-center flex-shrink-0">
           <Icon name="repeat" class="w-6 h-6" />
         </div>
         <div class="min-w-0">
-          <p class="text-xs text-slate-400 dark:text-slate-500 mb-0.5">{{ $t('dashboard.upcoming_recurring') }}</p>
-          <p class="font-display font-semibold truncate text-primary-600 dark:text-primary-400">{{ upcomingRecurring.length }} — {{ formatCurrency(upcomingRecurringTotal) }}</p>
-          <p class="text-xs text-slate-400 mt-0.5">≤ 5 {{ $t('common.days') }}</p>
+          <p class="text-xs text-slate-400 dark:text-slate-500 mb-0.5">{{ $t('dashboard.monthly_commitments') }}</p>
+          <p class="font-display font-semibold truncate text-primary-600 dark:text-primary-400">{{ formatCurrency(monthlyCommitments) }}</p>
+          <p class="text-xs text-slate-400 mt-0.5">{{ $t('dashboard.active_subscriptions', { count: activeRecurringCount }) }}</p>
         </div>
       </router-link>
     </div>
@@ -128,6 +128,31 @@
         <p v-else class="text-slate-500 text-center py-12">{{ $t('dashboard.no_chart_data') }}</p>
       </div>
 
+      <!-- Upcoming occurrences from the schedule projection -->
+      <div class="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark overflow-hidden">
+        <div class="px-5 lg:px-7 py-5 flex items-center justify-between">
+          <h3 class="font-display font-semibold">{{ $t('dashboard.upcoming_occurrences') }}</h3>
+          <router-link to="/recurring/calendar" class="text-sm text-primary-500 hover:text-primary-600 font-medium">{{ $t('common.view_all') }} →</router-link>
+        </div>
+        <div v-if="upcomingOccurrences.length === 0" class="px-5 lg:px-7 py-8 text-center text-slate-500 text-sm">{{ $t('recurring.empty') }}</div>
+        <div v-else class="divide-y divide-slate-100 dark:divide-slate-800">
+          <div v-for="occurrence in upcomingOccurrences" :key="`${occurrence.rule_id}-${occurrence.date}`" class="px-5 lg:px-7 py-4 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3.5 min-w-0">
+              <div class="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0" :class="occurrence.type === 'income' ? 'bg-primary-100 dark:bg-primary-500/15 text-primary-600 dark:text-primary-400' : 'bg-rose-100 dark:bg-rose-500/15 text-rose-500'">
+                <Icon name="repeat" class="w-5 h-5" />
+              </div>
+              <div class="min-w-0">
+                <p class="font-semibold text-sm truncate">{{ occurrence.name || '-' }}</p>
+                <p class="text-xs text-slate-400 mt-0.5">{{ formatDate(occurrence.date) }} • {{ occurrence.account_name }}</p>
+              </div>
+            </div>
+            <span class="font-display font-semibold text-sm whitespace-nowrap" :class="occurrence.type === 'income' ? 'text-primary-600 dark:text-primary-400' : 'text-danger-500'">
+              {{ occurrence.type === 'income' ? '+' : '−' }}{{ formatFull(occurrence.amount, occurrence.currency, baseCurrency, ratesStore.rates) }}
+            </span>
+          </div>
+        </div>
+      </div>
+
       <!-- Recent transactions -->
       <div class="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl shadow-card dark:shadow-card-dark overflow-hidden">
         <div class="px-5 lg:px-7 py-5 flex items-center justify-between">
@@ -165,7 +190,6 @@ import { useTransactionsStore } from '../stores/transactions'
 import { useReportsStore } from '../stores/reports'
 import { useRatesStore } from '../stores/rates'
 import { useDebtsStore } from '../stores/debts'
-import { useRecurringStore } from '../stores/recurring'
 import { formatFull } from '@/utils/currency'
 import { getUserLocale } from '@/utils/locale'
 import { formatCurrency as formatCurrencyValue, formatDate as formatDateValue } from '@/utils/format'
@@ -182,7 +206,6 @@ const transactionsStore = useTransactionsStore()
 const reportsStore = useReportsStore()
 const ratesStore = useRatesStore()
 const debtsStore = useDebtsStore()
-const recurringStore = useRecurringStore()
 const baseCurrency = computed(() => ratesStore.baseCurrency)
 
 const { isDark } = useDarkMode()
@@ -206,7 +229,6 @@ onMounted(async () => {
     accountsStore.accounts = data.accounts
     transactionsStore.transactions = data.recent_transactions
     debtsStore.debts = data.debts_full || debtsStore.debts
-    recurringStore.rules = data.recurring_full || recurringStore.rules
     dashboard.value = data
   } catch (e) {
     logger.error('Dashboard aggregate failed', e)
@@ -214,7 +236,6 @@ onMounted(async () => {
     accountsStore.fetchAccounts()
     transactionsStore.fetchTransactions({ limit: 5 })
     debtsStore.fetchDebts()
-    recurringStore.fetchRules()
     reportsStore.fetchSummary({ from: monthFrom, to: monthTo })
     reportsStore.fetchTrend({ from, to })
     reportsStore.fetchByCategory({ from, to, type: 'expense' })
@@ -260,23 +281,9 @@ const unpaidDebtsTotal = computed(() => {
     }, 0)
 })
 
-const upcomingRecurring = computed(() => {
-  const now = new Date()
-  const fiveDaysLater = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5)
-  return recurringStore.rules.filter(r => {
-    if (!r.is_active) return false
-    const nextDate = new Date(r.next_date)
-    return nextDate >= now && nextDate <= fiveDaysLater
-  })
-})
-
-const upcomingRecurringTotal = computed(() => {
-  return upcomingRecurring.value.reduce((sum, r) => {
-    const amount = parseFloat(r.amount) || 0
-    const converted = ratesStore.convert(amount, r.currency || baseCurrency.value, baseCurrency.value)
-    return sum + (converted !== null ? converted : amount)
-  }, 0)
-})
+const upcomingOccurrences = computed(() => dashboard.value?.recurring?.upcoming || [])
+const monthlyCommitments = computed(() => parseFloat(dashboard.value?.recurring?.monthly_commitments) || 0)
+const activeRecurringCount = computed(() => dashboard.value?.recurring?.active_count || 0)
 
 const recentTransactions = computed(() => transactionsStore.transactions.slice(0, 5))
 

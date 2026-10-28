@@ -44,7 +44,9 @@
     "active_accounts": "Active accounts",
     "crypto_balance": "Crypto Balance",
     "unpaid_debts": "Unpaid Debts",
-    "upcoming_recurring": "Recurring Payments",
+    "monthly_commitments": "Monthly Commitments",
+    "active_subscriptions": "Active: {count}",
+    "upcoming_occurrences": "Upcoming Payments",
     "no_data": "No data",
     "no_data_desc": "Add your first account and transaction to see statistics",
     "add_transaction": "Add transaction",
@@ -315,7 +317,10 @@
     "next_date": "Next Date",
     "status": "Status",
     "upcoming": "Upcoming",
-    "upcoming_recurring_payments": "Upcoming Recurring Payments"
+    "upcoming_recurring_payments": "Upcoming Recurring Payments",
+    "plan": "Plan",
+    "actual": "Actual",
+    "recurring_plan_vs_actual": "Subscriptions: Plan vs Actual"
   },
   "tags": {
     "title": "Tags",

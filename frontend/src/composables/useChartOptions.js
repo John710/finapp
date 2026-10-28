@@ -124,5 +124,63 @@ export function useChartOptions({ isDark, baseCurrency, ratesStore }) {
     }
   }
 
-  return { trendChartOption, categoryChartOption }
+  // Plan bars reuse the actual bar's hue at reduced opacity, so the eye compares
+  // heights within a month instead of learning a fourth colour.
+  function planBarSeries(name, data, color, opacity) {
+    return {
+      name,
+      type: 'bar',
+      data,
+      itemStyle: { color, opacity, borderRadius: [6, 6, 0, 0] }
+    }
+  }
+
+  function recurringPlanChartOption(plan) {
+    const months = plan?.months || []
+    const income = t('reports.income')
+    const expense = t('reports.expense')
+    const planLabel = t('reports.plan')
+    const actualLabel = t('reports.actual')
+
+    return {
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        ...tooltipStyle(),
+        formatter: (params) => {
+          let result = params[0].axisValue + '<br/>'
+          params.forEach(p => {
+            result += `${p.marker} ${p.seriesName}: ${formatFull(p.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}<br/>`
+          })
+          return result
+        }
+      },
+      legend: { show: false },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        top: '10%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        data: months.map(m => m.month),
+        axisLine: { lineStyle: { color: isDark.value ? '#334155' : '#eceaf6' } },
+        axisTick: { show: false }
+      },
+      yAxis: {
+        type: 'value',
+        splitLine: { lineStyle: { color: isDark.value ? 'rgba(148,163,184,0.12)' : '#f1f1f7' } }
+      },
+      series: [
+        planBarSeries(`${income} · ${planLabel}`, months.map(m => m.plan_income), '#7c6fde', 0.35),
+        planBarSeries(`${income} · ${actualLabel}`, months.map(m => m.actual_income), '#7c6fde', 1),
+        planBarSeries(`${expense} · ${planLabel}`, months.map(m => m.plan_expense), '#b8c1ea', 0.45),
+        planBarSeries(`${expense} · ${actualLabel}`, months.map(m => m.actual_expense), '#8fa2d8', 1)
+      ]
+    }
+  }
+
+  return { trendChartOption, categoryChartOption, recurringPlanChartOption }
 }
