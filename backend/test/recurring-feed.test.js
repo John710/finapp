@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import crypto from 'node:crypto'
+import Fastify from 'fastify'
+import rateLimit from '@fastify/rate-limit'
 import recurringRoutes from '../routes/recurring.js'
-import { buildStubServer, TEST_USER as USER } from './helpers/stub-db.js'
+import { buildStubDb, buildStubServer, TEST_USER as USER } from './helpers/stub-db.js'
 
 // Contract of the subscription feed: a token in the query string stands in for a
 // login, so the only thing that may ever reach PostgreSQL is its sha256 digest,
@@ -187,5 +189,26 @@ describe('feed token management', () => {
     const revoke = queries.find(entry => /UPDATE recurring_feed_tokens[\s\S]*revoked_at/.test(entry.sql))
     expect(revoke.params).toEqual([9, USER])
     expect(queries.some(entry => /DELETE FROM recurring_feed_tokens/.test(entry.sql))).toBe(false)
+  })
+})
+
+describe('feed rate limit', () => {
+  it('counts guessed tokens from one address against one bucket', async () => {
+    const { db } = buildStubDb([{ match: /FROM recurring_feed_tokens/, rows: [] }])
+    const app = Fastify()
+    app.decorate('db', db)
+    await app.register(rateLimit, { global: false })
+    await app.register(recurringRoutes)
+    const statuses = []
+    for (let i = 0; i < 31; i++) {
+      const res = await app.inject({ method: 'GET', url: `/recurring.ics?token=${crypto.randomUUID()}`, remoteAddress: '203.0.113.7' })
+      statuses.push(res.statusCode)
+    }
+    expect(statuses.slice(0, 30).every(code => code === 401)).toBe(true)
+    expect(statuses[30]).toBe(429)
+    // another address keeps its own budget
+    const other = await app.inject({ method: 'GET', url: `/recurring.ics?token=${crypto.randomUUID()}`, remoteAddress: '203.0.113.8' })
+    expect(other.statusCode).toBe(401)
+    await app.close()
   })
 })

@@ -12,7 +12,12 @@ const RULE_JOIN = `
   LEFT JOIN entity_shares es ON es.entity_type = 'recurring' AND es.entity_id = r.id
     AND es.owner_id = r.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)`
 
-const RULE_SHARE_COLUMNS = `a.name AS account_name, c.name AS category_name,
+// A rule can be shared without its account: the account's name is only shown to
+// users who can see the account itself (same scope as services/visibility.js).
+const RULE_SHARE_COLUMNS = `CASE WHEN a.user_id = $1 OR EXISTS (SELECT 1 FROM entity_shares es2
+    WHERE es2.entity_type = 'account' AND es2.entity_id = a.id AND es2.owner_id = a.user_id
+      AND (es2.shared_with = $1 OR es2.shared_with IS NULL)) THEN a.name END AS account_name,
+  c.name AS category_name,
   CASE WHEN r.user_id = $1 THEN NULL ELSE ou.login END AS owner_login,
   (r.user_id = $1) AS is_owner,
   CASE WHEN r.user_id = $1 THEN COALESCE((SELECT true FROM entity_shares es3
