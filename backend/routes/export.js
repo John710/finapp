@@ -39,7 +39,7 @@ async function exportRoutes(fastify, opts) {
 
     const result = await fastify.db.query(`
       SELECT
-        t.date,
+        t.date::text AS date,
         a.name as account_name,
         t.type,
         c.name as category_name,
@@ -48,7 +48,7 @@ async function exportRoutes(fastify, opts) {
         t.note
       FROM transactions t
       LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-      LEFT JOIN categories c ON c.id = t.category_id AND c.user_id = $1
+      LEFT JOIN categories c ON c.id = t.category_id
       WHERE ${whereClause}
       ORDER BY t.date DESC
     `, params)

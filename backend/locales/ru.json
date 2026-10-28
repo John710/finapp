@@ -49,6 +49,8 @@
     "import_row_no_account": "Счёт не найден",
     "import_row_failed": "Не удалось импортировать строку",
     "failed_to_fetch_rates": "Не удалось получить курсы валют",
+    "rates_refresh_throttled": "Курсы валют обновлялись менее {minutes} минут назад. Повторите попытку позже.",
+    "debt_has_payments": "По этому долгу уже есть платежи: сумму, валюту, тип и счёт изменить нельзя",
     "push_not_configured": "Push-уведомления не настроены",
     "shoutrrr_not_configured": "Shoutrrr не настроен",
     "encryption_key_missing": "Ключ шифрования не настроен на сервере",

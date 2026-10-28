@@ -100,7 +100,26 @@ async function coingeckoFetch(fastify, path, apiKey, opts = {}) {
   return { ok: false, error: lastErr }
 }
 
-async function updateExchangeRates(fastify, userId) {
+// A manual refresh appends ~160 exchange_rates rows; the providers update
+// daily, so one refresh per window is plenty.
+export const MANUAL_REFRESH_MIN_INTERVAL_MINUTES = 10
+let manualRefreshInFlight = null
+
+// The crypto tickers to price: one user's accounts for a manual refresh, every
+// user's for the daily job (the rate table is shared by the whole instance).
+export async function cryptoSymbolsToPrice(db, userId, { allUsers = false } = {}) {
+  let res
+  if (allUsers) {
+    res = await db.query("SELECT DISTINCT UPPER(currency) as currency FROM accounts WHERE type = 'crypto'")
+  } else if (userId) {
+    res = await db.query("SELECT DISTINCT UPPER(currency) as currency FROM accounts WHERE type = 'crypto' AND user_id = $1", [userId])
+  } else {
+    return []
+  }
+  return res.rows.map(r => r.currency?.toLowerCase()).filter(Boolean)
+}
+
+async function updateExchangeRates(fastify, userId, { allUsers = false } = {}) {
   // All external HTTP calls happen BEFORE a DB client is checked out: with
   // retries they can take a minute or more, and holding a pooled client (and an
   // open transaction) for that long starves the rest of the app.
@@ -119,12 +138,9 @@ async function updateExchangeRates(fastify, userId) {
   const userRes = await fastify.db.query('SELECT coingecko_api_key FROM users WHERE id = $1', [userId])
   const apiKey = decrypt(userRes.rows[0]?.coingecko_api_key) || process.env.COINGECKO_API_KEY
 
-  // Fetch crypto symbols actually used by this user's accounts, fallback to top list.
-  // Scoped by user_id: other users' tickers must not influence this user's rate pool.
-  const accountRes = userId
-    ? await fastify.db.query("SELECT DISTINCT UPPER(currency) as currency FROM accounts WHERE type = 'crypto' AND user_id = $1", [userId])
-    : { rows: [] }
-  const accountSymbols = accountRes.rows.map(r => r.currency.toLowerCase()).filter(Boolean)
+  // Fetch crypto symbols actually used by the accounts, fallback to top list.
+  // A manual refresh is scoped by user_id; the daily job prices every user's.
+  const accountSymbols = await cryptoSymbolsToPrice(fastify.db, userId, { allUsers })
   const symbols = accountSymbols.length ? accountSymbols.join(',') : FALLBACK_SYMBOLS
   fastify.log.info(`Updating crypto rates for symbols: ${symbols}`)
 
@@ -305,30 +321,60 @@ async function currencyRoutes(fastify, opts) {
     return result.rows
   })
 
-  // Update rates
+  // Update rates. Throttled instance-wide: every refresh appends a full set of
+  // rows, and the sources only move daily. One refresh runs at a time and a
+  // new one is refused (429) while the last is younger than the window.
   fastify.post('/currencies/update', async (request, reply) => {
+    const userId = request.user?.userId
+    const throttled = async () => {
+      const lang = await getUserLang(fastify.db, userId)
+      reply.code(429)
+      reply.header('retry-after', String(MANUAL_REFRESH_MIN_INTERVAL_MINUTES * 60))
+      return { error: t('errors.rates_refresh_throttled', { minutes: MANUAL_REFRESH_MIN_INTERVAL_MINUTES }, lang) }
+    }
+    if (manualRefreshInFlight) return throttled()
+
+    // exchange_rates.updated_at is a timestamp written with now() in the
+    // session timezone, so it is compared against LOCALTIMESTAMP.
+    manualRefreshInFlight = (async () => {
+      const recent = await fastify.db.query(
+        'SELECT COALESCE(MAX(updated_at) > LOCALTIMESTAMP - make_interval(mins => $1), false) AS fresh FROM exchange_rates',
+        [MANUAL_REFRESH_MIN_INTERVAL_MINUTES]
+      )
+      if (recent.rows[0]?.fresh) return { throttled: true }
+      return { result: await updateExchangeRates(fastify, userId) }
+    })()
+
+    let outcome
     try {
-      const result = await updateExchangeRates(fastify, request.user?.userId)
-      if (result.cryptoUpdated === 0) {
-        reply.header('x-coingecko-rate-limited', 'true')
-      }
-      return result
+      outcome = await manualRefreshInFlight
     } catch (err) {
       fastify.log.warn({ err }, 'Exchange rates update failed')
-      const lang = await getUserLang(fastify.db, request.user?.userId)
+      const lang = await getUserLang(fastify.db, userId)
       reply.code(502)
       reply.header('x-coingecko-rate-limited', 'true')
       return { error: t('errors.failed_to_fetch_rates', {}, lang) }
+    } finally {
+      manualRefreshInFlight = null
     }
+    if (outcome.throttled) return throttled()
+    if (outcome.result.cryptoUpdated === 0) {
+      reply.header('x-coingecko-rate-limited', 'true')
+    }
+    return outcome.result
   })
 
-  // Auto-update exchange rates once per day at 04:00 (Fawazahmed0 updates daily)
+  // Auto-update exchange rates once per day at 04:00 (Fawazahmed0 updates daily).
+  // The rate table is shared, so the job prices every user's crypto tickers;
+  // the CoinGecko key is taken from the first user that configured one.
   fastify.schedule('0 4 * * *', async () => {
     fastify.log.info('Auto-updating exchange rates (daily)')
     try {
-      const userRes = await fastify.db.query('SELECT id FROM users ORDER BY id LIMIT 1')
+      const userRes = await fastify.db.query(
+        'SELECT id FROM users ORDER BY (coingecko_api_key IS NULL), id LIMIT 1'
+      )
       const userId = userRes.rows[0]?.id
-      await updateExchangeRates(fastify, userId)
+      await updateExchangeRates(fastify, userId, { allUsers: true })
       fastify.log.info('Exchange rates auto-updated')
     } catch (err) {
       fastify.log.error('Exchange rates auto-update failed:', err.message)
