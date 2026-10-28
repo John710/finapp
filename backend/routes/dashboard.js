@@ -2,21 +2,13 @@ import Decimal from 'decimal.js'
 import { loadRates, convertAmountDecimal } from '../services/currency.js'
 import { visibleAccountIds } from '../services/visibility.js'
 import { loadOccurrenceFlags, loadVisibleRules } from '../services/recurring-rules.js'
-import { monthlyEquivalent, projectOccurrences, shiftDays } from '../services/recurring-schedule.js'
+import { monthlyEquivalent, projectOccurrences, shiftDays, shiftMonth } from '../services/recurring-schedule.js'
 import { FLOW_TYPE_SQL, flowSign } from '../services/flows.js'
 import { paidInDebtCurrency, remainingOnDebt } from '../services/debt-payments.js'
 
 // The dashboard card answers "what is coming next", so it looks a horizon ahead
 // instead of the whole calendar window the projection endpoint allows.
 const RECURRING_HORIZON_DAYS = 60
-
-// 'YYYY-MM' shifted by whole months — pure string arithmetic, so no process
-// timezone can move a month boundary.
-export function shiftMonth(key, delta) {
-  const index = Number(key.slice(0, 4)) * 12 + Number(key.slice(5, 7)) - 1 + delta
-  const year = Math.floor(index / 12)
-  return `${year}-${String(index - year * 12 + 1).padStart(2, '0')}`
-}
 
 async function dashboardRoutes(fastify, opts) {
   // One endpoint for the dashboard mount instead of ~11 parallel requests.

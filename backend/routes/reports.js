@@ -4,13 +4,7 @@ import { visibleAccountIds } from '../services/visibility.js'
 import { FLOW_TYPE_SQL, flowSign } from '../services/flows.js'
 import { t, getUserLang } from '../services/i18n.js'
 import { loadOccurrenceFlags, loadVisibleRules } from '../services/recurring-rules.js'
-import { projectOccurrences, resolveProjectionWindow } from '../services/recurring-schedule.js'
-
-function nextMonthKey(key) {
-  const year = Number(key.slice(0, 4))
-  const month = Number(key.slice(5, 7))
-  return month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, '0')}`
-}
+import { projectOccurrences, resolveProjectionWindow, shiftMonth } from '../services/recurring-schedule.js'
 
 // Every calendar month the range touches, so a chart axis stays continuous even
 // for months without any scheduled money.
@@ -20,7 +14,7 @@ function calendarMonths(from, to) {
   const last = to.slice(0, 7)
   while (key <= last) {
     keys.push(key)
-    key = nextMonthKey(key)
+    key = shiftMonth(key, 1)
   }
   return keys
 }
@@ -292,14 +286,13 @@ async function reportRoutes(fastify, opts) {
       flowByMonth.set(month, (flowByMonth.get(month) || new Decimal(0)).plus(val.times(sign)))
     }
 
-    const now = new Date()
-    const start = new Date(now.getFullYear(), now.getMonth() - monthsInt + 1, 1)
+    // The series ends at the database's current month, not the Node clock's:
+    // the container runs a different timezone than PostgreSQL, and the
+    // dashboard's net-worth series already follows CURRENT_DATE.
+    const { rows: [{ today }] } = await fastify.db.query('SELECT CURRENT_DATE::text AS today')
+    const currentMonth = today.slice(0, 7)
     const monthsList = []
-    for (let d = new Date(start); d <= now; d.setMonth(d.getMonth() + 1)) {
-      const y = d.getFullYear()
-      const m = String(d.getMonth() + 1).padStart(2, '0')
-      monthsList.push(`${y}-${m}`)
-    }
+    for (let i = monthsInt - 1; i >= 0; i--) monthsList.push(shiftMonth(currentMonth, -i))
 
     // Flows after the window still differ from the anchor; subtract them first.
     const lastMonth = monthsList[monthsList.length - 1]
