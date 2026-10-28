@@ -3,16 +3,7 @@ import cron from 'node-cron'
 import { t, getUserLang } from '../services/i18n.js'
 import { notify, checkDuplicateNotification } from '../services/notify.js'
 import { ruleColumns } from '../services/recurring-schedule.js'
-import { generateOccurrences } from '../services/recurring-run.js'
-
-// node-pg parses DATE columns as local midnight Dates; keep the calendar day
-// in local components so timezone offsets cannot shift it by one day.
-function dateKey(d) {
-  if (typeof d === 'string') return d.slice(0, 10)
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${m}-${day}`
-}
+import { bookDueRules } from '../services/recurring-run.js'
 
 function amountText(amount) {
   const value = Number(amount)
@@ -58,48 +49,11 @@ async function cronPlugin(fastify, opts) {
     const usersRes = await fastify.db.query('SELECT id FROM users ORDER BY id')
     for (const user of usersRes.rows) {
       const userId = user.id
-      const lang = await getUserLang(fastify.db, userId)
-
-      while (true) {
-        const today = dateKey(new Date())
-        const client = await fastify.db.connect()
-        const events = []
-        try {
-          await client.query('BEGIN')
-          const ruleRes = await client.query(
-            `SELECT ${ruleColumns('')} FROM recurring_rules
-             WHERE is_active = true AND next_date <= CURRENT_DATE AND user_id = $1
-             ORDER BY next_date, id
-             LIMIT 1
-             FOR UPDATE SKIP LOCKED`,
-            [userId]
-          )
-          if (ruleRes.rows.length === 0) {
-            await client.query('COMMIT')
-            break
-          }
-          const rule = ruleRes.rows[0]
-
-          // Which dates exist at all, and which of them the ledger still owes, is
-          // decided by the schedule service — no date arithmetic in SQL, so a
-          // 31st-of-the-month anchor cannot ratchet.
-          const outcome = await generateOccurrences(client, rule, today)
-
-          await client.query('COMMIT')
-          if (outcome.createdCount > 0) {
-            events.push({ kind: 'created', rule, createdCount: outcome.createdCount })
-            fastify.log.info(`Created ${outcome.createdCount} recurring transaction(s) for rule ${rule.id} user ${userId}`)
-          }
-          if (outcome.finished) events.push({ kind: 'finished', rule })
-          if (outcome.rewound.length > 0) {
-            fastify.log.warn(`Rewound ${outcome.rewound.length} overdue occurrence(s) for rule ${rule.id} past the catch-up limit`)
-          }
-        } catch (err) {
-          await client.query('ROLLBACK')
-          throw err
-        } finally {
-          client.release()
-        }
+      // bookDueRules catches per rule; this guard keeps one user's failure
+      // (e.g. their language lookup) from skipping every user after them.
+      try {
+        const lang = await getUserLang(fastify.db, userId)
+        const events = await bookDueRules(fastify.db, fastify.log, userId)
 
         // Notifications (network I/O) strictly after COMMIT and client release
         for (const event of events) {
@@ -131,6 +85,8 @@ async function cronPlugin(fastify, opts) {
             fastify.log.warn(notifErr, 'Recurring notification failed')
           }
         }
+      } catch (err) {
+        fastify.log.error(err, `Recurring transactions check failed for user ${userId}`)
       }
     }
   })
