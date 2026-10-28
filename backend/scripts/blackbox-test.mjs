@@ -310,6 +310,125 @@ let eurRate = null
   assert('net-worth anchored to current balances (incl. no-transaction account)', last && near(last.balance, expected, 0.5), `got=${last?.balance} expected=${expected.toFixed(2)}`)
 }
 
+// ---------- U: recurring subscriptions ----------
+// Deliberately last: it writes transactions and moves balances, and section S
+// asserts an exact net-worth figure.
+{
+  const wallet = await req('POST', '/accounts', { body: { name: 'RecurringWallet', type: 'cash', currency: 'USD', balance: 1000 } })
+  assert('recurring wallet created', wallet.status === 201, `status=${wallet.status}`)
+  const ruleAcc = wallet.json?.id
+  let ruleId = null
+
+  const occs = async (from, to) => {
+    const r = await req('GET', `/recurring/occurrences?from=${from}&to=${to}`)
+    const list = (r.json?.occurrences || []).filter(o => o.rule_id === ruleId)
+    return { status: r.status, body: r.json, list }
+  }
+  const datesOf = (list) => list.map(o => o.date)
+
+  // Anchor day must survive short months (the old next_date + INTERVAL ratchet did not).
+  // All fixtures start in 2027 so the expected dates do not depend on the container clock.
+  const created = await req('POST', '/recurring', {
+    body: { account_id: ruleAcc, amount: 20, type: 'expense', interval_unit: 'month', interval_value: 1, start_date: '2027-01-31', note: 'Audit Sub' }
+  })
+  ruleId = created.json?.id
+  assert('monthly rule created', created.status === 201 && !!ruleId, `status=${created.status} body=${JSON.stringify(created.json).slice(0, 160)}`)
+  assert('anchor day derived from start_date', created.json?.billing_anchor_day === 31, `${created.json?.billing_anchor_day}`)
+  assert('legacy frequency kept in sync', created.json?.frequency === 'monthly', `${created.json?.frequency}`)
+  assert('future start_date becomes the first occurrence', created.json?.next_date === '2027-01-31', `${created.json?.next_date}`)
+  assert('dates come back as text, not Date objects', typeof created.json?.start_date === 'string', `${typeof created.json?.start_date}`)
+
+  const jan = await occs('2027-01-01', '2027-04-30')
+  assert('occurrences window ok', jan.status === 200, `status=${jan.status}`)
+  assert('31st clamps per short month without ratcheting', JSON.stringify(datesOf(jan.list)) === JSON.stringify(['2027-01-31', '2027-02-28', '2027-03-31', '2027-04-30']), JSON.stringify(datesOf(jan.list)))
+
+  const tooWide = await req('GET', '/recurring/occurrences?from=2026-01-01&to=2027-06-01')
+  assert('over-wide projection window -> 400', tooWide.status === 400, `status=${tooWide.status}`)
+  const fakeDay = await req('GET', '/recurring/occurrences?from=2026-02-31&to=2026-03-31')
+  assert('impossible date in projection -> 400', fakeDay.status === 400, `status=${fakeDay.status}`)
+  const reversed = await req('GET', '/recurring/occurrences?from=2026-05-01&to=2026-04-01')
+  assert('reversed projection -> 400', reversed.status === 400, `status=${reversed.status}`)
+
+  // Partial PATCH: untouched columns keep their values.
+  const patched = await req('PATCH', `/recurring/${ruleId}`, { body: { amount: 12.5 } })
+  assert('partial PATCH ok', patched.status === 200, `status=${patched.status}`)
+  assert('PATCH changed amount', near(patched.json?.amount, 12.5), `${patched.json?.amount}`)
+  assert('PATCH kept note', patched.json?.note === 'Audit Sub', JSON.stringify(patched.json?.note))
+  assert('PATCH kept anchor', patched.json?.billing_anchor_day === 31 && patched.json?.start_date === '2027-01-31', `${patched.json?.billing_anchor_day}/${patched.json?.start_date}`)
+  assert('PATCH without schedule change kept next_date', patched.json?.next_date === '2027-01-31', `${patched.json?.next_date}`)
+  const emptyPatch = await req('PATCH', `/recurring/${ruleId}`, { body: {} })
+  assert('empty PATCH -> 400', emptyPatch.status === 400, `status=${emptyPatch.status}`)
+
+  // Pay / undo cycle.
+  const paidOnce = await req('POST', '/recurring/occurrences/pay', { body: { rule_id: ruleId, date: '2027-06-30' } })
+  assert('pay scheduled occurrence -> 201', paidOnce.status === 201, `status=${paidOnce.status} body=${JSON.stringify(paidOnce.json).slice(0, 140)}`)
+  assert('pay moved the balance', near(bal(await getAccounts(), ruleAcc), 1000 - 12.5), `${bal(await getAccounts(), ruleAcc)}`)
+  const paidTwice = await req('POST', '/recurring/occurrences/pay', { body: { rule_id: ruleId, date: '2027-06-30' } })
+  assert('repay same date -> 400 (no duplicate)', paidTwice.status === 400, `status=${paidTwice.status}`)
+  const offSchedule = await req('POST', '/recurring/occurrences/pay', { body: { rule_id: ruleId, date: '2027-06-15' } })
+  assert('pay a date the schedule does not have -> 400', offSchedule.status === 400, `status=${offSchedule.status}`)
+  const paidSeen = await occs('2027-06-01', '2027-06-30')
+  assert('projection marks the paid date', paidSeen.list.some(o => o.date === '2027-06-30' && o.paid === true), JSON.stringify(datesOf(paidSeen.list)))
+  const undone = await req('DELETE', '/recurring/occurrences/pay', { body: { rule_id: ruleId, date: '2027-06-30' } })
+  assert('undo pay -> 200', undone.status === 200, `status=${undone.status} body=${JSON.stringify(undone.json).slice(0, 140)}`)
+  assert('undo restored the balance', near(bal(await getAccounts(), ruleAcc), 1000), `${bal(await getAccounts(), ruleAcc)}`)
+  const paidGone = await occs('2027-06-01', '2027-06-30')
+  assert('projection unmarked after undo', paidGone.list.every(o => o.paid === false), JSON.stringify(paidGone.list.map(o => o.paid)))
+  const undoMissing = await req('DELETE', '/recurring/occurrences/pay', { body: { rule_id: ruleId, date: '2027-06-30' } })
+  assert('undo of an unpaid date -> 400', undoMissing.status === 400, `status=${undoMissing.status}`)
+
+  // Skip / unskip: exception only, the ledger stays untouched.
+  const skipped = await req('POST', '/recurring/occurrences/skip', { body: { rule_id: ruleId, date: '2027-07-31' } })
+  assert('skip scheduled occurrence -> 201', skipped.status === 201, `status=${skipped.status}`)
+  assert('skip left the balance alone', near(bal(await getAccounts(), ruleAcc), 1000), `${bal(await getAccounts(), ruleAcc)}`)
+  const skipSeen = await occs('2027-07-01', '2027-07-31')
+  assert('projection marks the skipped date', skipSeen.list.some(o => o.date === '2027-07-31' && o.skipped === true), JSON.stringify(datesOf(skipSeen.list)))
+  const skipOff = await req('POST', '/recurring/occurrences/skip', { body: { rule_id: ruleId, date: '2027-07-15' } })
+  assert('skip off-schedule date -> 400', skipOff.status === 400, `status=${skipOff.status}`)
+  const unskipped = await req('DELETE', '/recurring/occurrences/skip', { body: { rule_id: ruleId, date: '2027-07-31' } })
+  assert('unskip -> 200', unskipped.status === 200 && unskipped.json?.deleted === true, JSON.stringify(unskipped.json))
+  const skipGone = await occs('2027-07-01', '2027-07-31')
+  assert('projection unmarked after unskip', skipGone.list.every(o => o.skipped === false), JSON.stringify(skipGone.list.map(o => o.skipped)))
+
+  // run-now twice: the cursor advances, one transaction per date, no repeat.
+  const run1 = await req('POST', `/recurring/${ruleId}/run-now`, { body: {} })
+  assert('run-now creates the due occurrence', run1.status === 200 && run1.json?.created === true && run1.json?.occurrence === '2027-01-31', `status=${run1.status} body=${JSON.stringify(run1.json).slice(0, 140)}`)
+  const run2 = await req('POST', `/recurring/${ruleId}/run-now`, { body: {} })
+  assert('second run-now moves to the clamped next date', run2.status === 200 && run2.json?.occurrence === '2027-02-28', `body=${JSON.stringify(run2.json).slice(0, 140)}`)
+  const run3 = await req('POST', `/recurring/${ruleId}/run-now`, { body: {} })
+  assert('third run-now moves again, never repeats a date', run3.json?.occurrence === '2027-03-31', `body=${JSON.stringify(run3.json).slice(0, 140)}`)
+  const runWindow = await occs('2027-01-01', '2027-03-31')
+  const paidDates = runWindow.list.filter(o => o.paid).map(o => o.date)
+  assert('exactly three paid occurrences, none duplicated', paidDates.length === 3 && new Set(paidDates).size === 3, JSON.stringify(paidDates))
+  assert('run-now moved the balance three times', near(bal(await getAccounts(), ruleAcc), 1000 - 37.5), `${bal(await getAccounts(), ruleAcc)}`)
+  const rulesList = await req('GET', '/recurring')
+  const mine = (rulesList.json || []).find(r => r.id === ruleId)
+  assert('list enriches with status/monthly equivalent', !!mine && mine.status === 'scheduled' && near(mine.monthly_equivalent, 12.5), JSON.stringify(mine && { status: mine.status, me: mine.monthly_equivalent }))
+  assert('list counts paid occurrences', mine?.occurrences_paid === 3, `${mine?.occurrences_paid}`)
+  assert('list reports the next occurrence after the ledger cursor', mine?.next_occurrence === '2027-04-30', `${mine?.next_occurrence}`)
+
+  const history = await req('GET', `/recurring/${ruleId}/history`)
+  const kinds = (history.json || []).map(h => h.event_type)
+  assert('history records created/price_changed/skipped/paid', history.status === 200 && ['created', 'price_changed', 'skipped', 'paid'].every(k => kinds.includes(k)), JSON.stringify(kinds))
+
+  const expired = await req('POST', '/recurring', {
+    body: { account_id: ruleAcc, amount: 5, type: 'expense', interval_unit: 'month', interval_value: 1, start_date: '2026-03-15', end_date: '2026-04-30', next_date: '2026-04-15' }
+  })
+  const expiredId = expired.json?.id
+  const afterCreate = await req('GET', '/recurring')
+  const limited = (afterCreate.json || []).find(r => r.id === expiredId)
+  assert('rule past end_date reports finished', !!limited && limited.status === 'finished', JSON.stringify(limited && { status: limited.status, next: limited.next_date }))
+
+  for (const id of [ruleId, expiredId]) {
+    const cleaned = await req('DELETE', `/recurring/${id}`)
+    assert(`rule ${id} delete -> 204`, cleaned.status === 204, `status=${cleaned.status}`)
+  }
+  const afterDelete = await req('GET', `/recurring/${ruleId}/history`)
+  assert('deleted rule history -> 404', afterDelete.status === 404, `status=${afterDelete.status}`)
+  const goneFromList = await req('GET', '/recurring')
+  assert('deleted rules leave the list', !(goneFromList.json || []).some(r => r.id === ruleId || r.id === expiredId), `${(goneFromList.json || []).length} rules left`)
+}
+
 console.log(results.join('\n'))
 console.log(`\nRESULT: ${PASS} passed, ${FAIL} failed`)
 process.exit(FAIL > 0 ? 1 : 0)
