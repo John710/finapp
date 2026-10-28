@@ -289,7 +289,8 @@ refresh.
 >
 > The alternative is dropping query strings from every logged request
 > (`--accesslog.fields.queryparameters.defaultmode=drop`), which also hides them while debugging.
-
+---
+ 
 ## 📁 Project Structure
  
 ```
