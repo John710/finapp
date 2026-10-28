@@ -74,13 +74,21 @@ async function recurringRoutes(fastify, opts) {
     }
   }
 
-  async function ensureAccount(userId, accountId, lang, reply) {
-    const { rows } = await fastify.db.query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [accountId, userId])
+  // Every booking path (cron, pay, run-now) moves the account balance by the
+  // rule's amount as-is, so a rule's currency has to be its account's currency;
+  // anything else would debit 10 RUB for a "10 USD" rule.
+  async function ensureAccount(userId, accountId, currency, lang, reply) {
+    const { rows } = await fastify.db.query('SELECT id, currency FROM accounts WHERE id = $1 AND user_id = $2', [accountId, userId])
     if (rows.length === 0) {
       reply.code(404)
       return { error: t('errors.account_not_found', {}, lang) }
     }
-    return null
+    const account = rows[0]
+    if (currency != null && currency !== account.currency) {
+      reply.code(400)
+      return { error: t('errors.rule_currency_mismatch', { currency: account.currency }, lang) }
+    }
+    return { account }
   }
 
   async function ensureCategory(categoryId, lang, reply) {
@@ -161,8 +169,9 @@ async function recurringRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const body = request.body
-    const accountError = await ensureAccount(userId, body.account_id, lang, reply)
-    if (accountError) return accountError
+    const accountCheck = await ensureAccount(userId, body.account_id, body.currency, lang, reply)
+    if (accountCheck.error) return accountCheck
+    const { account } = accountCheck
     const categoryError = await ensureCategory(body.category_id, lang, reply)
     if (categoryError) return categoryError
 
@@ -198,7 +207,7 @@ async function recurringRoutes(fastify, opts) {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          RETURNING ${ruleColumns('')}`,
         [
-          userId, body.account_id, body.category_id ?? null, body.amount, body.currency || 'USD', body.type,
+          userId, body.account_id, body.category_id ?? null, body.amount, account.currency, body.type,
           toLegacyFrequency(unit, value), nextDate, body.note ?? null, unit, value,
           rule.billing_anchor_day, startDate, rule.end_date, rule.cancellation_date, rule.auto_renew,
           rule.payment_limit, body.notify_days_before ?? 0
@@ -241,9 +250,13 @@ async function recurringRoutes(fastify, opts) {
       reply.code(400)
       return { error: t('errors.no_fields_to_update', {}, lang) }
     }
-    if (body.account_id !== undefined) {
-      const accountError = await ensureAccount(userId, body.account_id, lang, reply)
-      if (accountError) return accountError
+    // Only a request that touches the account or the currency is held to the
+    // match, so pausing or renaming a rule saved before the check keeps working.
+    if (body.account_id !== undefined || body.currency !== undefined) {
+      const accountCheck = await ensureAccount(
+        userId, body.account_id ?? rule.account_id, body.currency ?? rule.currency, lang, reply
+      )
+      if (accountCheck.error) return accountCheck
     }
     const categoryError = await ensureCategory(body.category_id, lang, reply)
     if (categoryError) return categoryError
@@ -384,11 +397,27 @@ async function recurringRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
-    await fastify.db.query("DELETE FROM entity_shares WHERE entity_type = 'recurring' AND entity_id = $1", [id])
-    const result = await fastify.db.query('DELETE FROM recurring_rules WHERE id = $1 AND user_id = $2', [id, userId])
-    if (result.rowCount === 0) {
-      reply.code(404)
-      return { error: t('errors.rule_not_found', {}, lang) }
+    // The owned delete decides; the shares go only once it removed a row, and
+    // only the owner's own shares — never another user's rows on a guessed id.
+    const client = await fastify.db.connect()
+    try {
+      await client.query('BEGIN')
+      const result = await client.query('DELETE FROM recurring_rules WHERE id = $1 AND user_id = $2 RETURNING id', [id, userId])
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK')
+        reply.code(404)
+        return { error: t('errors.rule_not_found', {}, lang) }
+      }
+      await client.query(
+        "DELETE FROM entity_shares WHERE entity_type = 'recurring' AND entity_id = $1 AND owner_id = $2",
+        [id, userId]
+      )
+      await client.query('COMMIT')
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
     }
     reply.code(204)
   })
@@ -492,19 +521,22 @@ async function recurringRoutes(fastify, opts) {
     if (owned.error) return owned
     const { rule, lang } = owned
     const { date } = request.body
-    const { rows } = await fastify.db.query(
-      'SELECT id, account_id, amount::text AS amount, type FROM transactions WHERE recurring_rule_id = $1 AND date = $2',
-      [rule.id, date]
-    )
-    const tx = rows[0]
-    if (!tx) {
-      reply.code(400)
-      return { error: t('errors.occurrence_not_paid', {}, lang) }
-    }
     const client = await fastify.db.connect()
     try {
       await client.query('BEGIN')
-      await client.query('DELETE FROM transactions WHERE id = $1', [tx.id])
+      // The DELETE is the check: of two concurrent undos only one gets the row
+      // back, so the balance is reverted exactly once.
+      const { rows } = await client.query(
+        `DELETE FROM transactions WHERE recurring_rule_id = $1 AND date = $2
+         RETURNING id, account_id, amount::text AS amount, type`,
+        [rule.id, date]
+      )
+      const tx = rows[0]
+      if (!tx) {
+        await client.query('ROLLBACK')
+        reply.code(400)
+        return { error: t('errors.occurrence_not_paid', {}, lang) }
+      }
       await client.query('UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3', [
         new Decimal(signedAmount(tx.amount, tx.type)).negated().toString(), tx.account_id, rule.user_id
       ])
@@ -679,7 +711,9 @@ async function recurringRoutes(fastify, opts) {
   const FEED_RATE_LIMIT = {
     config: {
       public: true,
-      rateLimit: { max: 30, timeWindow: '1 minute', keyGenerator: req => crypto.createHash('sha256').update(req.query?.token ?? '').digest('hex').slice(0, 16) }
+      // Keyed by client address: a per-token key would hand every guessed
+      // token a fresh bucket and stop nothing.
+      rateLimit: { max: 30, timeWindow: '1 minute', keyGenerator: req => req.ip }
     }
   }
 

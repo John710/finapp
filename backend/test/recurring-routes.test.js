@@ -95,6 +95,21 @@ describe('GET /recurring', () => {
   })
 })
 
+describe('shared rule account names', () => {
+  it('names the account only for a user who can see the account itself', async () => {
+    const { app, queries } = buildServer([
+      CURRENT_DATE,
+      { match: /FROM recurring_rules/, rows: () => [] }
+    ])
+    await app.inject({ method: 'GET', url: '/recurring' })
+    const sql = queries.find(q => /FROM recurring_rules/.test(q.sql)).sql
+    // A bare a.name would leak the owner's account name to everyone the rule is shared with.
+    expect(sql).not.toMatch(/(^|[\s,])a\.name AS account_name/)
+    expect(sql).toMatch(/CASE WHEN a\.user_id = \$1 OR EXISTS \(SELECT 1 FROM entity_shares es2 WHERE es2\.entity_type = 'account' AND es2\.entity_id = a\.id AND es2\.owner_id = a\.user_id AND \(es2\.shared_with = \$1 OR es2\.shared_with IS NULL\)\) THEN a\.name END AS account_name/)
+    await app.close()
+  })
+})
+
 describe('GET /recurring/occurrences', () => {
   it('projects the window and flags paid and skipped dates', async () => {
     const { app } = buildServer([
@@ -141,7 +156,7 @@ describe('POST /recurring', () => {
   it('derives the interval columns from a legacy frequency body', async () => {
     const { app, queries } = buildServer([
       CURRENT_DATE,
-      { match: /FROM accounts/, rows: () => [{ id: 3 }] },
+      { match: /FROM accounts/, rows: () => [{ id: 3, currency: 'USD' }] },
       { match: /INSERT INTO recurring_rules/, rows: () => [baseRule()] }
     ])
     const res = await app.inject({
@@ -163,7 +178,7 @@ describe('POST /recurring', () => {
   it('keeps an explicit interval and writes a coherent legacy frequency for rollback', async () => {
     const { app, queries } = buildServer([
       CURRENT_DATE,
-      { match: /FROM accounts/, rows: () => [{ id: 3 }] },
+      { match: /FROM accounts/, rows: () => [{ id: 3, currency: 'USD' }] },
       { match: /INSERT INTO recurring_rules/, rows: () => [baseRule()] }
     ])
     const res = await app.inject({
@@ -191,7 +206,7 @@ describe('POST /recurring', () => {
   it('rejects a date the calendar does not have', async () => {
     const { app } = buildServer([
       CURRENT_DATE,
-      { match: /FROM accounts/, rows: () => [{ id: 3 }] }
+      { match: /FROM accounts/, rows: () => [{ id: 3, currency: 'USD' }] }
     ])
     const res = await app.inject({
       method: 'POST',
@@ -205,7 +220,7 @@ describe('POST /recurring', () => {
   it('rejects a schedule that has nothing left to pay', async () => {
     const { app } = buildServer([
       CURRENT_DATE,
-      { match: /FROM accounts/, rows: () => [{ id: 3 }] }
+      { match: /FROM accounts/, rows: () => [{ id: 3, currency: 'USD' }] }
     ])
     const res = await app.inject({
       method: 'POST',
@@ -232,7 +247,7 @@ describe('PATCH /recurring/:id', () => {
     CURRENT_DATE,
     { match: /FROM recurring_rules/, rows: () => [rule] },
     { match: /UPDATE recurring_rules/, rows: () => [rule] },
-    { match: /FROM accounts/, rows: () => [{ id: 3 }] }
+    { match: /FROM accounts/, rows: () => [{ id: 3, currency: 'USD' }] }
   ]
 
   it('answers an empty patch instead of writing nothing', async () => {
@@ -306,7 +321,7 @@ describe('PUT /recurring/:id', () => {
       CURRENT_DATE,
       { match: /FROM recurring_rules/, rows: () => [baseRule()] },
       { match: /UPDATE recurring_rules/, rows: () => [baseRule()] },
-      { match: /FROM accounts/, rows: () => [{ id: 3 }] }
+      { match: /FROM accounts/, rows: () => [{ id: 3, currency: 'USD' }] }
     ])
     const res = await app.inject({
       method: 'PUT',
@@ -330,7 +345,7 @@ describe('occurrence payments', () => {
     { match: /INSERT INTO recurring_exceptions/, rows: () => [{ id: 11 }] },
     { match: /FROM transactions/, rows: () => paid },
     { match: /FROM recurring_exceptions/, rows: () => [] },
-    { match: /FROM accounts/, rows: () => [{ id: 3 }] }
+    { match: /FROM accounts/, rows: () => [{ id: 3, currency: 'USD' }] }
   ]
 
   it('refuses to pay a date the schedule never generates', async () => {
@@ -428,6 +443,137 @@ describe('occurrence payments', () => {
     expect(deny.statusCode).toBe(403)
     expect(owned.queries.some(q => /INSERT INTO transactions/.test(q.sql))).toBe(false)
     await owned.app.close()
+  })
+})
+
+describe('rule currency follows its account', () => {
+  const RUB_ACCOUNT = { match: /FROM accounts/, rows: () => [{ id: 3, currency: 'RUB' }] }
+
+  it('refuses a rule whose currency is not its account currency', async () => {
+    const { app, queries } = buildServer([CURRENT_DATE, RUB_ACCOUNT])
+    const res = await app.inject({
+      method: 'POST',
+      url: '/recurring',
+      payload: { account_id: 3, amount: 10, currency: 'USD', type: 'expense', frequency: 'monthly' }
+    })
+    expect(res.statusCode).toBe(400)
+    expect(res.json().error).toMatch('RUB')
+    expect(queries.some(q => /INSERT INTO recurring_rules/.test(q.sql))).toBe(false)
+    await app.close()
+  })
+
+  it('stores the account currency when the body names none', async () => {
+    const { app, queries } = buildServer([
+      CURRENT_DATE,
+      RUB_ACCOUNT,
+      { match: /INSERT INTO recurring_rules/, rows: () => [baseRule({ currency: 'RUB' })] }
+    ])
+    const res = await app.inject({
+      method: 'POST',
+      url: '/recurring',
+      payload: { account_id: 3, amount: 10, type: 'expense', frequency: 'monthly' }
+    })
+    expect(res.statusCode).toBe(201)
+    const insert = queries.find(q => /INSERT INTO recurring_rules/.test(q.sql))
+    expect(insert.params[4]).toBe('RUB')
+    expect(insert.params).not.toContain('USD')
+    await app.close()
+  })
+
+  const patchServer = (rule = baseRule()) => buildServer([
+    CURRENT_DATE,
+    { match: /FROM recurring_rules/, rows: () => [rule] },
+    { match: /UPDATE recurring_rules/, rows: () => [rule] },
+    RUB_ACCOUNT
+  ])
+
+  it('refuses moving a USD rule onto a RUB account', async () => {
+    const { app, queries } = patchServer()
+    const res = await app.inject({ method: 'PATCH', url: '/recurring/1', payload: { account_id: 3 } })
+    expect(res.statusCode).toBe(400)
+    expect(queries.some(q => /UPDATE recurring_rules/.test(q.sql))).toBe(false)
+    await app.close()
+  })
+
+  it('accepts relabelling a legacy rule with its account currency', async () => {
+    const { app, queries } = patchServer()
+    const res = await app.inject({ method: 'PATCH', url: '/recurring/1', payload: { currency: 'RUB' } })
+    expect(res.statusCode).toBe(200)
+    expect(queries.find(q => /UPDATE recurring_rules/.test(q.sql)).params).toContain('RUB')
+    await app.close()
+  })
+
+  it('still lets the owner pause a legacy rule whose currency differs', async () => {
+    const { app } = patchServer()
+    const res = await app.inject({ method: 'PATCH', url: '/recurring/1', payload: { is_active: false } })
+    expect(res.statusCode).toBe(200)
+    await app.close()
+  })
+})
+
+describe('DELETE /recurring/:id', () => {
+  it('leaves every share alone when the caller does not own the rule', async () => {
+    const { app, queries } = buildServer([{ match: /DELETE FROM recurring_rules/, rows: () => [] }])
+    const res = await app.inject({ method: 'DELETE', url: '/recurring/1' })
+    expect(res.statusCode).toBe(404)
+    expect(queries.some(q => /entity_shares/.test(q.sql))).toBe(false)
+    expect(queries.some(q => q.sql === 'ROLLBACK')).toBe(true)
+    await app.close()
+  })
+
+  it('drops only the owner\'s shares, after the owned delete, in one transaction', async () => {
+    const { app, queries } = buildServer([{ match: /DELETE FROM recurring_rules/, rows: () => [{ id: 1 }] }])
+    const res = await app.inject({ method: 'DELETE', url: '/recurring/1' })
+    expect(res.statusCode).toBe(204)
+    const sqls = queries.map(q => q.sql)
+    const ruleAt = sqls.findIndex(sql => /DELETE FROM recurring_rules WHERE id = \$1 AND user_id = \$2/.test(sql))
+    const sharesAt = sqls.findIndex(sql => /DELETE FROM entity_shares/.test(sql))
+    expect(sqls.indexOf('BEGIN')).toBeLessThan(ruleAt)
+    expect(ruleAt).toBeLessThan(sharesAt)
+    expect(sharesAt).toBeLessThan(sqls.indexOf('COMMIT'))
+    expect(sqls[sharesAt]).toMatch('owner_id = $2')
+    expect(queries[sharesAt].params).toEqual([1, USER])
+    await app.close()
+  })
+})
+
+describe('undoing a payment', () => {
+  const undoServer = deleted => buildServer([
+    CURRENT_DATE,
+    { match: /FROM recurring_rules/, rows: () => [baseRule()] },
+    { match: /DELETE FROM transactions/, rows: () => deleted },
+    { match: /FROM recurring_exceptions/, rows: () => [] }
+  ])
+
+  it('reverts the balance only for the undo whose DELETE got the row', async () => {
+    const { app, queries } = undoServer([])
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/recurring/occurrences/pay',
+      payload: { rule_id: 1, date: '2026-03-31' }
+    })
+    expect(res.statusCode).toBe(400)
+    expect(queries.some(q => /UPDATE accounts/.test(q.sql))).toBe(false)
+    expect(queries.some(q => /occurrences_paid - 1/.test(q.sql))).toBe(false)
+    await app.close()
+  })
+
+  it('deletes inside the transaction and reverts by the returned row', async () => {
+    const { app, queries } = undoServer([{ id: 9, account_id: 4, amount: '31.500000000000', type: 'expense' }])
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/recurring/occurrences/pay',
+      payload: { rule_id: 1, date: '2026-03-31' }
+    })
+    expect(res.statusCode).toBe(200)
+    const sqls = queries.map(q => q.sql)
+    const deleteAt = sqls.findIndex(sql => /DELETE FROM transactions .*RETURNING/.test(sql))
+    expect(sqls.indexOf('BEGIN')).toBeLessThan(deleteAt)
+    // no separate read of the transaction before the transaction opens
+    expect(sqls.some(sql => /SELECT .* FROM transactions WHERE recurring_rule_id = \$1 AND date = \$2/.test(sql))).toBe(false)
+    const balance = queries.find(q => /UPDATE accounts SET balance/.test(q.sql))
+    expect(balance.params).toEqual(['31.5', 4, USER])
+    await app.close()
   })
 })
 
