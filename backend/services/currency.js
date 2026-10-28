@@ -33,8 +33,10 @@ export function convertAmountDecimal(amount, fromCurrency, toCurrency, rates) {
     return value.times(direct)
   }
 
-  // Via USD
-  const fromToUsd = rateOf(fromCurrency, 'USD')
+  // Via USD. Rates are stored as USD->fiat and crypto->USD, so a USD source
+  // has no USD->USD row: its USD leg is the identity (USD -> BTC would
+  // otherwise find neither a direct nor an inverse path).
+  const fromToUsd = fromCurrency === 'USD' ? new Decimal(1) : rateOf(fromCurrency, 'USD')
 
   let usdToTarget = null
   if (toCurrency === 'USD') {
