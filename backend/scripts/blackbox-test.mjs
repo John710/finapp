@@ -415,21 +415,56 @@ let eurRate = null
   assert('history records created/price_changed/skipped/paid', history.status === 200 && ['created', 'price_changed', 'skipped', 'paid'].every(k => kinds.includes(k)), JSON.stringify(kinds))
 
   const expired = await req('POST', '/recurring', {
-    body: { account_id: ruleAcc, amount: 5, type: 'expense', interval_unit: 'month', interval_value: 1, start_date: '2026-03-15', end_date: '2026-04-30', next_date: '2026-04-15' }
+    body: { account_id: ruleAcc, amount: 5, type: 'expense', interval_unit: 'month', interval_value: 1, start_date: '2026-03-15', end_date: '2026-04-30', next_date: '2026-04-15', note: 'Expired Sub' }
   })
   const expiredId = expired.json?.id
   const afterCreate = await req('GET', '/recurring')
   const limited = (afterCreate.json || []).find(r => r.id === expiredId)
   assert('rule past end_date reports finished', !!limited && limited.status === 'finished', JSON.stringify(limited && { status: limited.status, next: limited.next_date }))
 
-  for (const id of [ruleId, expiredId]) {
+  // ---------- V: calendar feed ----------
+  // The feed projects from the server's today, so this fixture is anchored to
+  // the clock instead to a fixed year like the rest of section U.
+  const soon = new Date(Date.now() + 3 * 86400000)
+  const soonDate = soon.toISOString().slice(0, 10)
+  const feedRule = await req('POST', '/recurring', {
+    body: { account_id: ruleAcc, amount: 9.99, type: 'expense', interval_unit: 'month', interval_value: 1, start_date: soonDate, note: 'Feed Sub' }
+  })
+  const feedRuleId = feedRule.json?.id
+  assert('feed fixture rule created', feedRule.status === 201 && !!feedRuleId, `status=${feedRule.status}`)
+
+  const issued = await req('POST', '/recurring/feed-tokens', { body: { name: 'Blackbox calendar' } })
+  const feedToken = issued.json?.token
+  assert('feed token created and shown once', issued.status === 201 && typeof feedToken === 'string' && feedToken.length >= 16, `status=${issued.status}`)
+  const feedList = await req('GET', '/recurring/feed-tokens')
+  assert('feed token list never repeats the secret', feedList.status === 200 && !feedList.text.includes(feedToken) && !/"token(_hash)?"/.test(feedList.text), `status=${feedList.status} body=${String(feedList.text).slice(0, 200)}`)
+
+  const feedRes = await fetch(`${BASE}/recurring.ics?token=${encodeURIComponent(feedToken)}`, { signal: AbortSignal.timeout(20000) })
+  const feedBody = await feedRes.text()
+  assert('feed -> 200 text/calendar', feedRes.status === 200 && String(feedRes.headers.get('content-type')).startsWith('text/calendar'), `status=${feedRes.status} type=${feedRes.headers.get('content-type')}`)
+  assert('feed is a valid calendar envelope', feedBody.startsWith('BEGIN:VCALENDAR') && feedBody.includes('VERSION:2.0') && feedBody.trimEnd().endsWith('END:VCALENDAR'), feedBody.slice(0, 80).replace(/\r/g, '\\r'))
+  const dtstart = `DTSTART;VALUE=DATE:${soonDate.replace(/-/g, '')}`
+  assert('feed projects the upcoming occurrence as an all-day event', feedBody.includes(dtstart), `missing ${dtstart}`)
+  assert('feed summarises the rule', feedBody.includes('SUMMARY:Feed Sub'), 'no SUMMARY for the rule note')
+  assert('feed excludes the finished rule', !feedBody.includes('SUMMARY:Expired Sub'), 'a past-end-date rule leaked into the feed')
+  assert('feed events carry a stable UID and no RRULE', /^UID:finapp-\d+-\d+-\d{8}@/m.test(feedBody) && !feedBody.includes('RRULE'), 'UID shape or RRULE presence')
+  assert('feed folds lines under 76 octets', feedBody.split('\r\n').every(l => Buffer.byteLength(l, 'utf8') <= 75), 'a long unfolded line')
+
+  const revoked = await req('DELETE', `/recurring/feed-tokens/${issued.json?.id}`)
+  assert('feed token revoke -> 204', revoked.status === 204, `status=${revoked.status}`)
+  const afterRevoke = await fetch(`${BASE}/recurring.ics?token=${encodeURIComponent(feedToken)}`, { signal: AbortSignal.timeout(20000) })
+  assert('revoked token no longer serves the feed', afterRevoke.status === 401, `status=${afterRevoke.status}`)
+  const junk = await fetch(`${BASE}/recurring.ics?token=0000000000aaaaaaaabbbbbbbb`, { signal: AbortSignal.timeout(20000) })
+  assert('unknown token -> 401', junk.status === 401, `status=${junk.status}`)
+
+  for (const id of [ruleId, expiredId, feedRuleId]) {
     const cleaned = await req('DELETE', `/recurring/${id}`)
     assert(`rule ${id} delete -> 204`, cleaned.status === 204, `status=${cleaned.status}`)
   }
   const afterDelete = await req('GET', `/recurring/${ruleId}/history`)
   assert('deleted rule history -> 404', afterDelete.status === 404, `status=${afterDelete.status}`)
   const goneFromList = await req('GET', '/recurring')
-  assert('deleted rules leave the list', !(goneFromList.json || []).some(r => r.id === ruleId || r.id === expiredId), `${(goneFromList.json || []).length} rules left`)
+  assert('deleted rules leave the list', !(goneFromList.json || []).some(r => [ruleId, expiredId, feedRuleId].includes(r.id)), `${(goneFromList.json || []).length} rules left`)
 }
 
 console.log(results.join('\n'))
