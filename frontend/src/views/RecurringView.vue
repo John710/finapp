@@ -146,11 +146,11 @@
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
-              <CurrencySelect
-v-model="form.currency" required
-                :placeholder="$t('common.currency')"
-                :search-placeholder="$t('common.search')"
-                :empty-text="$t('common.empty')" />
+              <!-- A rule is booked in its account's currency, so the account decides it. -->
+              <div class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-sm text-slate-500 dark:text-slate-400" :title="$t('recurring.currency_from_account')">
+                {{ form.currency || '—' }}
+              </div>
+              <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ $t('recurring.currency_from_account') }}</p>
             </div>
           </div>
           <div>
@@ -238,7 +238,7 @@ v-model="form.currency" required
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, computed } from 'vue'
+import { ref, onMounted, reactive, computed, watch } from 'vue'
 import { useRecurringStore } from '../stores/recurring'
 import { useAccountsStore } from '../stores/accounts'
 import { useCategoriesStore } from '../stores/categories'
@@ -250,7 +250,6 @@ import { formatDate as formatDateValue, parseAmount } from '@/utils/format'
 import { scheduleLabel } from '@/utils/recurring'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import QuickCategoryModal from '../components/QuickCategoryModal.vue'
-import CurrencySelect from '../components/CurrencySelect.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import BaseSkeleton from '@/components/BaseSkeleton.vue'
 import ShareModal from '@/components/ShareModal.vue'
@@ -323,6 +322,16 @@ onMounted(() => {
 })
 
 const filteredCategories = computed(() => categoriesStore.categories.filter(c => c.type === form.type))
+
+// The server books a rule in its account's currency and rejects any other, so
+// the currency follows the selected account. Editing a rule saved before that
+// rule existed relabels it with the currency it was always booked in.
+const accountCurrency = computed(() =>
+  accountsStore.accounts.find(acc => String(acc.id) === String(form.account_id))?.currency || ''
+)
+watch(accountCurrency, currency => {
+  if (currency) form.currency = currency
+}, { immediate: true })
 
 const visibleRules = computed(() => {
   const query = filters.search.trim().toLowerCase()
@@ -425,7 +434,8 @@ function openModal() {
   isEditing.value = false
   editing.value = null
   anchorTouched.value = false
-  Object.assign(form, blankForm(), { currency: baseCurrency.value, account_id: accountsStore.accounts[0]?.id || null })
+  Object.assign(form, blankForm(), { account_id: accountsStore.accounts[0]?.id || null })
+  form.currency = accountCurrency.value
   form.billing_anchor_day = Number(form.start_date.slice(8, 10))
   showModal.value = true
 }
@@ -441,6 +451,8 @@ function editRule(rule) {
   }
   // A date input shows an empty field only for the empty string, not for null.
   form.end_date = valueOf(rule, 'end_date') ?? ''
+  // The watcher does not fire when the account stays the same as last time.
+  if (accountCurrency.value) form.currency = accountCurrency.value
   showModal.value = true
 }
 

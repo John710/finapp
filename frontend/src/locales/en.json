@@ -146,6 +146,7 @@
     "title": "Recurring",
     "empty": "No recurring rules",
     "amount": "Amount",
+    "currency_from_account": "Taken from the selected account",
     "frequency": "Frequency",
     "next_date": "Next date",
     "next": "Next",
