@@ -55,7 +55,7 @@ async function handleLogin() {
   try {
     await auth.login(form.login, form.password, form.totp_code)
     // Return the user to the page they were trying to open (set by the router guard)
-    const redirect = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/')
+    const redirect = typeof route.query.redirect === 'string' && /^\/(?![/\\])/.test(route.query.redirect)
       ? route.query.redirect
       : '/'
     router.push(redirect)
