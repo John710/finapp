@@ -167,17 +167,24 @@ export function occurrenceAllowed(rawRule, dateStr) {
   return occurrenceAtIndex(s, firstIndexAtOrAfter(s, dateStr)) === dateStr
 }
 
+export function dueOccurrence(rawRule, todayStr, paidSet = new Set(), skipSet = new Set()) {
+  const s = scheduleOf(rawRule)
+  let cursor = isDateStr(rawRule?.next_date) ? rawRule.next_date : occurrenceAtIndex(s, 0)
+  if (!cursor) return null
+  for (let guard = 0; guard < MAX_SCAN; guard++) {
+    if (!paidSet.has(cursor) && !skipSet.has(cursor)) return cursor
+    cursor = nextOccurrenceAfter(rawRule, cursor)
+    if (!cursor) return null
+  }
+  return cursor
+}
+
 export function statusOf(rawRule, todayStr, paidSet = new Set(), skipSet = new Set()) {
   if (rawRule?.is_active === false) return 'paused'
   const s = scheduleOf(rawRule)
   if (s.endDate && isDateStr(todayStr) && todayStr > s.endDate) return 'finished'
-  let cursor = isDateStr(rawRule?.next_date) ? rawRule.next_date : occurrenceAtIndex(s, 0)
+  const cursor = dueOccurrence(rawRule, todayStr, paidSet, skipSet)
   if (!cursor) return 'finished'
-  for (let guard = 0; guard < MAX_SCAN; guard++) {
-    if (!paidSet.has(cursor) && !skipSet.has(cursor)) break
-    cursor = nextOccurrenceAfter(rawRule, cursor)
-    if (!cursor) return 'finished'
-  }
   if (!isDateStr(todayStr)) return 'scheduled'
   if (cursor < todayStr) return 'overdue'
   if (cursor === todayStr) return 'due_today'
@@ -188,4 +195,56 @@ export function monthlyEquivalent(rawRule) {
   const s = scheduleOf(rawRule)
   const daysPerOccurrence = new Decimal(s.value).times(UNIT_FACTORS[s.unit] ?? '1')
   return new Decimal(rawRule?.amount || 0).times(AVG_DAYS_PER_MONTH).div(daysPerOccurrence).toFixed(2)
+}
+
+const LEGACY_BY_UNIT = { day: 'daily', week: 'weekly', month: 'monthly', year: 'yearly' }
+
+export function toLegacyFrequency(unit, value) {
+  if (unit === 'week' && value === 2) return 'biweekly'
+  return LEGACY_BY_UNIT[unit] || 'monthly'
+}
+
+export function initialNextDate(rawRule, todayStr) {
+  const s = scheduleOf(rawRule)
+  if (!s.startDate || !isDateStr(todayStr)) return null
+  return occurrenceAtIndex(s, firstIndexAtOrAfter(s, todayStr))
+}
+
+function isRealDateStr(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const { year, month, day } = parts(value)
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month)
+}
+
+// occurrenceDates stops scanning after MAX_SCAN iterations, so the endpoints
+// that project must never be handed an unbounded window.
+const MAX_WINDOW_DAYS = 400
+
+export function resolveProjectionWindow(from, to) {
+  if (!isRealDateStr(from) || !isRealDateStr(to)) return { ok: false, error: 'invalid_date_range' }
+  const days = dayNum(to) - dayNum(from) + 1
+  if (days < 1 || days > MAX_WINDOW_DAYS) return { ok: false, error: 'invalid_date_range' }
+  return { ok: true, from, to }
+}
+
+export const PATCHABLE_COLUMNS = [
+  'account_id', 'category_id', 'amount', 'currency', 'type', 'note', 'is_active',
+  'interval_unit', 'interval_value', 'billing_anchor_day', 'start_date', 'end_date',
+  'cancellation_date', 'auto_renew', 'payment_limit', 'notify_days_before'
+]
+
+export function buildSchedulePatch(body) {
+  const fields = []
+  const values = []
+  for (const column of PATCHABLE_COLUMNS) {
+    if (!body || body[column] === undefined) continue
+    fields.push(`${column} = $${values.length + 1}`)
+    values.push(body[column])
+  }
+  return { fields, values, empty: fields.length === 0 }
+}
+
+export function frequencyToSchedule(frequency) {
+  const legacy = LEGACY_FREQUENCIES[frequency]
+  return legacy ? { unit: legacy.unit, value: legacy.value } : null
 }

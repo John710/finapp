@@ -5,7 +5,13 @@ import {
   occurrenceAllowed,
   nthOccurrence,
   statusOf,
-  monthlyEquivalent
+  monthlyEquivalent,
+  toLegacyFrequency,
+  frequencyToSchedule,
+  initialNextDate,
+  resolveProjectionWindow,
+  dueOccurrence,
+  buildSchedulePatch
 } from '../services/recurring-schedule.js'
 
 // All dates are 'YYYY-MM-DD' strings — the same shape the routes read with `::text`
@@ -257,5 +263,141 @@ describe('legacy frequency rules', () => {
     // the 28th until the user re-sets the anchor day.
     const drifted = { frequency: 'monthly', next_date: '2026-03-28', is_active: true, amount: '50' }
     expect(occurrenceDates(drifted, '2026-03-01', '2026-06-30')).toEqual(['2026-03-28', '2026-04-28', '2026-05-28', '2026-06-28'])
+  })
+})
+
+describe('toLegacyFrequency', () => {
+  it('round-trips the five frequencies the 1.3.2 cron understood', () => {
+    expect(toLegacyFrequency('day', 1)).toBe('daily')
+    expect(toLegacyFrequency('week', 1)).toBe('weekly')
+    expect(toLegacyFrequency('week', 2)).toBe('biweekly')
+    expect(toLegacyFrequency('month', 1)).toBe('monthly')
+    expect(toLegacyFrequency('year', 1)).toBe('yearly')
+  })
+
+  it('keeps the unit and drops the multiplier for intervals 1.3.2 cannot express', () => {
+    // `frequency` is kept only so rolling the container back to finapp:1.3.2
+    // still generates something; the exact interval lives in the new columns
+    // and survives a re-upgrade.
+    expect(toLegacyFrequency('day', 14)).toBe('daily')
+    expect(toLegacyFrequency('month', 3)).toBe('monthly')
+    expect(toLegacyFrequency('year', 2)).toBe('yearly')
+  })
+
+  it('falls back to monthly for an unknown unit', () => {
+    expect(toLegacyFrequency('fortnight', 1)).toBe('monthly')
+    expect(toLegacyFrequency(null, null)).toBe('monthly')
+  })
+})
+
+describe('initialNextDate', () => {
+  it('returns the first occurrence on or after today', () => {
+    expect(initialNextDate(rule({ start_date: '2026-01-31' }), '2026-03-05')).toBe('2026-03-31')
+    expect(initialNextDate(rule({ start_date: '2026-01-31' }), '2026-03-31')).toBe('2026-03-31')
+  })
+
+  it('keeps a start date that has not happened yet', () => {
+    expect(initialNextDate(rule({ start_date: '2026-05-31' }), '2026-01-01')).toBe('2026-05-31')
+  })
+
+  it('returns null once the schedule is exhausted', () => {
+    const ended = rule({ start_date: '2026-01-15', end_date: '2026-03-15' })
+    expect(initialNextDate(ended, '2026-06-01')).toBeNull()
+    expect(initialNextDate(rule({ start_date: '2026-01-15', payment_limit: 1 }), '2026-06-01')).toBeNull()
+    expect(initialNextDate(rule({ start_date: '2026-01-15', auto_renew: false }), '2026-06-01')).toBeNull()
+  })
+
+  it('derives from the legacy frequency when the new fields are absent', () => {
+    const legacy = { frequency: 'weekly', next_date: '2026-01-05', is_active: true }
+    expect(initialNextDate(legacy, '2026-01-08')).toBe('2026-01-12')
+  })
+})
+
+describe('resolveProjectionWindow', () => {
+  it('accepts a window of at most 400 calendar days inclusive', () => {
+    expect(resolveProjectionWindow('2026-01-01', '2026-02-09')).toEqual({ ok: true, from: '2026-01-01', to: '2026-02-09' })
+    expect(resolveProjectionWindow('2026-01-01', '2027-02-04').ok).toBe(true)
+  })
+
+  it('rejects a window one day longer than the cap', () => {
+    expect(resolveProjectionWindow('2026-01-01', '2027-02-05')).toEqual({ ok: false, error: 'invalid_date_range' })
+  })
+
+  it('rejects inverted windows and bounds that are not real dates', () => {
+    expect(resolveProjectionWindow('2026-03-01', '2026-01-01').ok).toBe(false)
+    expect(resolveProjectionWindow('2026-13-01', '2027-01-01').ok).toBe(false)
+    expect(resolveProjectionWindow('2026-02-30', '2026-03-01').ok).toBe(false)
+    expect(resolveProjectionWindow(null, null).ok).toBe(false)
+  })
+
+  it('keeps a single-day window', () => {
+    expect(resolveProjectionWindow('2026-05-05', '2026-05-05')).toEqual({ ok: true, from: '2026-05-05', to: '2026-05-05' })
+  })
+})
+
+describe('buildSchedulePatch', () => {
+  it('collects only whitelisted, defined columns', () => {
+    const { fields, values } = buildSchedulePatch({ amount: '25', is_active: false, bogus: 'x', note: undefined })
+    expect(fields).toEqual(['amount = $1', 'is_active = $2'])
+    expect(values).toEqual(['25', false])
+  })
+
+  it('lets a nullable column be cleared with null', () => {
+    const { fields, values } = buildSchedulePatch({ end_date: null, payment_limit: null })
+    expect(fields).toEqual(['end_date = $1', 'payment_limit = $2'])
+    expect(values).toEqual([null, null])
+  })
+
+  it('reports an empty patch instead of building invalid SQL', () => {
+    expect(buildSchedulePatch({})).toEqual({ fields: [], values: [], empty: true })
+    expect(buildSchedulePatch({ nothing_whitelisted: 1 }).empty).toBe(true)
+  })
+
+  it('keeps a stable column order regardless of key insertion order', () => {
+    const a = buildSchedulePatch({ amount: 1, account_id: 2, currency: 'USD' })
+    const b = buildSchedulePatch({ currency: 'USD', amount: 1, account_id: 2 })
+    expect(a.fields).toEqual(b.fields)
+  })
+
+  it('refuses to hand-set next_date — the cursor is derived from the schedule', () => {
+    expect(buildSchedulePatch({ next_date: '2026-01-01' }).empty).toBe(true)
+  })
+})
+
+describe('frequencyToSchedule', () => {
+  it('maps each legacy frequency to a unit and multiplier', () => {
+    expect(frequencyToSchedule('daily')).toEqual({ unit: 'day', value: 1 })
+    expect(frequencyToSchedule('weekly')).toEqual({ unit: 'week', value: 1 })
+    expect(frequencyToSchedule('biweekly')).toEqual({ unit: 'week', value: 2 })
+    expect(frequencyToSchedule('monthly')).toEqual({ unit: 'month', value: 1 })
+    expect(frequencyToSchedule('yearly')).toEqual({ unit: 'year', value: 1 })
+  })
+
+  it('returns null for anything the old column never meant', () => {
+    expect(frequencyToSchedule('fortnightly')).toBeNull()
+    expect(frequencyToSchedule(undefined)).toBeNull()
+  })
+})
+
+describe('dueOccurrence', () => {
+  it('reports the stored cursor while it is unpaid', () => {
+    const r = rule({ start_date: '2026-03-01', next_date: '2026-03-01' })
+    expect(dueOccurrence(r, '2026-03-05', new Set(), new Set())).toBe('2026-03-01')
+  })
+
+  it('walks past paid and skipped occurrences', () => {
+    const r = rule({ start_date: '2026-03-01', next_date: '2026-03-01' })
+    expect(dueOccurrence(r, '2026-03-05', new Set(['2026-03-01']), new Set())).toBe('2026-04-01')
+    expect(dueOccurrence(r, '2026-03-05', new Set(), new Set(['2026-03-01']))).toBe('2026-04-01')
+  })
+
+  it('returns null once nothing is left', () => {
+    const r = rule({ start_date: '2026-03-01', next_date: '2026-03-01', auto_renew: false })
+    expect(dueOccurrence(r, '2026-03-05', new Set(['2026-03-01']), new Set())).toBeNull()
+  })
+
+  it('still reports a cursor for a paused rule — paying one occurrence by hand stays possible', () => {
+    const r = rule({ start_date: '2026-03-01', next_date: '2026-03-01', is_active: false })
+    expect(dueOccurrence(r, '2026-03-05', new Set(), new Set())).toBe('2026-03-01')
   })
 })

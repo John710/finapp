@@ -640,6 +640,12 @@ async function transactionRoutes(fastify, opts) {
       return transaction
     } catch (err) {
       await client.query('ROLLBACK')
+      // (recurring_rule_id, date) is unique — moving an auto-transaction onto a
+      // date the same rule already paid is a user error, not a crash.
+      if (err.code === '23505' && err.constraint === 'transactions_recurring_occ_uniq') {
+        reply.code(400)
+        return { error: t('errors.occurrence_date_taken', { date }, lang) }
+      }
       throw err
     } finally {
       client.release()
