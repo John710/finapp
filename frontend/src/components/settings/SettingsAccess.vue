@@ -80,6 +80,42 @@
       </div>
     </div>
 
+    <!-- Calendar feed (iCal) -->
+    <div class="p-5">
+      <div class="mb-3">
+        <p class="font-medium">{{ $t('settings.feed_title') }}</p>
+        <p class="text-sm text-slate-500">{{ $t('settings.feed_desc') }}</p>
+      </div>
+      <div v-if="feedLink" class="mb-3 p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border-0">
+        <p class="text-xs text-emerald-700 dark:text-emerald-300 mb-1">{{ $t('settings.feed_created_once') }}</p>
+        <div class="flex items-start gap-2">
+          <code class="text-xs break-all flex-1">{{ feedLink }}</code>
+          <button @click="copyFeedLink" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 shrink-0">
+            {{ $t('settings.feed_copy') }}
+          </button>
+        </div>
+      </div>
+      <ul v-if="recurring.feedTokens.length" class="space-y-2 mb-3">
+        <li v-for="feed in recurring.feedTokens" :key="feed.id" class="flex items-center justify-between p-3 rounded-lg bg-slate-100 dark:bg-slate-800 bg-slate-50 dark:bg-slate-800/50">
+          <div class="text-sm min-w-0">
+            <span class="font-medium truncate block">{{ feed.name }}</span>
+            <span v-if="feed.revoked_at" class="text-xs text-red-500">{{ $t('settings.feed_revoked') }}</span>
+            <span v-else class="text-xs text-slate-500">{{ $t('settings.feed_last_used') }}: {{ feed.last_used_at ? formatDateTime(feed.last_used_at) : '—' }}</span>
+          </div>
+          <button v-if="!feed.revoked_at" @click="revokeFeed(feed.id)" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600">
+            {{ $t('common.delete') }}
+          </button>
+        </li>
+      </ul>
+      <p v-else class="text-sm text-slate-500 mb-3">{{ $t('settings.feed_empty') }}</p>
+      <div class="flex gap-2 max-w-sm">
+        <input v-model="newFeedName" type="text" :placeholder="$t('settings.feed_name')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+        <button @click="createFeed" :disabled="feedLoading || !newFeedName.trim()" class="px-4 py-2 rounded-full bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
+          {{ feedLoading ? $t('common.loading') : $t('common.add') }}
+        </button>
+      </div>
+    </div>
+
     <!-- User management (admin only) -->
     <div v-if="isAdmin" class="p-5">
       <div class="mb-3">
@@ -121,10 +157,13 @@ import { useI18n } from 'vue-i18n'
 import { api } from '@/utils/api.js'
 import { formatDateTime as formatDateTimeValue } from '@/utils/format.js'
 import { logger } from '@/utils/logger.js'
+import { feedUrl } from '@/utils/recurring.js'
 import { useAuthStore } from '../../stores/auth'
+import { useRecurringStore } from '../../stores/recurring'
 
 const { locale, t } = useI18n()
 const auth = useAuthStore()
+const recurring = useRecurringStore()
 
 const isAdmin = computed(() => auth.user?.role === 'admin')
 
@@ -146,8 +185,14 @@ const newLogin = ref('')
 const newPassword = ref('')
 const userLoading = ref(false)
 
+const newFeedName = ref('')
+const feedLink = ref('')
+const feedLinkId = ref(null)
+const feedLoading = ref(false)
+
 onMounted(() => {
   loadTokens()
+  loadFeedTokens()
   if (isAdmin.value) loadUsers()
 })
 
@@ -235,6 +280,52 @@ async function revokeToken(id) {
   } catch (e) {
     logger.error('Failed to revoke API token', e)
     window.$toast?.error(e.message || t('common.error'))
+  }
+}
+
+async function loadFeedTokens() {
+  try {
+    await recurring.fetchFeedTokens()
+  } catch (e) {
+    logger.error('Failed to load calendar feed links', e)
+  }
+}
+
+async function createFeed() {
+  feedLoading.value = true
+  try {
+    const created = await recurring.createFeedToken(newFeedName.value.trim())
+    feedLink.value = feedUrl(created.token)
+    feedLinkId.value = created.id
+    newFeedName.value = ''
+  } catch (e) {
+    logger.error('Failed to create calendar feed link', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    feedLoading.value = false
+  }
+}
+
+async function revokeFeed(id) {
+  try {
+    await recurring.revokeFeedToken(id)
+    if (id === feedLinkId.value) {
+      feedLink.value = ''
+      feedLinkId.value = null
+    }
+  } catch (e) {
+    logger.error('Failed to revoke calendar feed link', e)
+    window.$toast?.error(e.message || t('common.error'))
+  }
+}
+
+async function copyFeedLink() {
+  try {
+    await navigator.clipboard.writeText(feedLink.value)
+    window.$toast?.success(t('settings.feed_copied'))
+  } catch (e) {
+    logger.error('Clipboard unavailable for calendar feed link', e)
+    window.$toast?.error(t('settings.feed_copy_manual'))
   }
 }
 

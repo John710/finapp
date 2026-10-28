@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scheduleLabel } from './recurring'
+import { scheduleLabel, feedUrl } from './recurring'
 
 function makeT(messages) {
   return (key, named = {}) => {
@@ -40,5 +40,22 @@ describe('scheduleLabel', () => {
   it('falls back to a monthly schedule for legacy rows without interval columns', () => {
     expect(scheduleLabel(enT, {})).toBe('Monthly')
     expect(scheduleLabel(enT, null)).toBe('Monthly')
+  })
+})
+
+describe('feedUrl', () => {
+  it('points a calendar client at the token-authenticated feed', () => {
+    expect(feedUrl('3f2b1c9a-7d4e-4c1b-9a6f-0e2d5b8c1a44', 'https://fin.example.test'))
+      .toBe('https://fin.example.test/api/v1/recurring.ics?token=3f2b1c9a-7d4e-4c1b-9a6f-0e2d5b8c1a44')
+  })
+
+  it('escapes the token instead of trusting its shape', () => {
+    expect(feedUrl('a b&c', 'https://fin.example.test'))
+      .toBe('https://fin.example.test/api/v1/recurring.ics?token=a%20b%26c')
+  })
+
+  it('has no trailing slash to duplicate when the origin carries one', () => {
+    expect(feedUrl('t', 'https://fin.example.test/'))
+      .toBe('https://fin.example.test/api/v1/recurring.ics?token=t')
   })
 })

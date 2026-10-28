@@ -80,6 +80,7 @@
     "merge_same_target": "Cannot merge a category into itself",
     "merge_type_mismatch": "Categories of different types cannot be merged",
     "token_not_found": "API token not found",
+    "invalid_feed_token": "This calendar feed link is invalid or was revoked",
     "not_found": "Not found",
     "not_allowed": "You do not have permission to modify this item",
     "admin_only": "Only the administrator can manage users",
@@ -118,5 +119,8 @@
     "account_overdrawn_body": "Account \"{name}\" is overdrawn: {balance}",
     "login_failed": "Failed login attempt",
     "login_failed_body": "User {login} failed to sign in. IP: {ip}"
+  },
+  "feed": {
+    "calendar_name": "FinApp subscriptions"
   }
 }

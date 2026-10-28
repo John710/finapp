@@ -1,6 +1,8 @@
 import Decimal from 'decimal.js'
-import { t, getUserLang } from '../services/i18n.js'
+import crypto from 'node:crypto'
+import { t, getUserLang, getReqLang } from '../services/i18n.js'
 import { loadOccurrenceFlags, loadRule, loadVisibleRules } from '../services/recurring-rules.js'
+import { buildFeed } from '../services/ical.js'
 import {
   nextOccurrenceAfter,
   occurrenceAllowed,
@@ -13,6 +15,7 @@ import {
   resolveProjectionWindow,
   buildSchedulePatch,
   frequencyToSchedule,
+  shiftDays,
   ruleColumns,
   PATCHABLE_COLUMNS
 } from '../services/recurring-schedule.js'
@@ -21,6 +24,10 @@ const SCHEDULE_COLUMNS = new Set([
   'interval_unit', 'interval_value', 'billing_anchor_day', 'start_date', 'end_date',
   'cancellation_date', 'auto_renew', 'payment_limit'
 ])
+
+// How far ahead a calendar client may look. Long enough for a yearly bill to
+// show up, short enough that the feed stays a projection and not a history.
+const FEED_WINDOW_DAYS = 180
 
 const PROJECTION_RATE_LIMIT = {
   config: { rateLimit: { max: 30, timeWindow: '1 minute', keyGenerator: req => req.user?.userId ?? req.ip } }
@@ -662,6 +669,107 @@ async function recurringRoutes(fastify, opts) {
       [rule.id, limit]
     )
     return rows
+  })
+
+  // Calendar feed. The token is a credential that a calendar client can only
+  // carry in the URL, so the route is declared public (the auth hook would
+  // otherwise log the full URL with the token) and returns no body a client
+  // could cache. Digest lookup mirrors routes/tokens.js: the plaintext is never
+  // stored, only shown once at creation.
+  const FEED_RATE_LIMIT = {
+    config: {
+      public: true,
+      rateLimit: { max: 30, timeWindow: '1 minute', keyGenerator: req => crypto.createHash('sha256').update(req.query?.token ?? '').digest('hex').slice(0, 16) }
+    }
+  }
+
+  fastify.get('/recurring.ics', {
+    ...FEED_RATE_LIMIT,
+    schema: {
+      querystring: {
+        type: 'object',
+        required: ['token'],
+        properties: { token: { type: 'string', minLength: 16, maxLength: 64 } }
+      }
+    }
+  }, async (request, reply) => {
+    const tokenHash = crypto.createHash('sha256').update(request.query.token).digest('hex')
+    const { rows } = await fastify.db.query(
+      'SELECT id, user_id FROM recurring_feed_tokens WHERE token_hash = $1 AND revoked_at IS NULL',
+      [tokenHash]
+    )
+    if (rows.length === 0) {
+      reply.code(401)
+      return { error: t('errors.invalid_feed_token', {}, getReqLang(request)) }
+    }
+    const token = rows[0]
+    fastify.db.query('UPDATE recurring_feed_tokens SET last_used_at = NOW() WHERE token_hash = $1', [tokenHash]).catch(() => {})
+
+    const today = await serverToday()
+    const to = shiftDays(today, FEED_WINDOW_DAYS)
+    const rules = (await loadVisibleRules(fastify.db, token.user_id)).filter(rule => rule.is_active)
+    const flags = await loadOccurrenceFlags(fastify.db, rules.map(rule => rule.id))
+    const occurrences = projectOccurrences(rules, flags, today, to)
+
+    reply.header('Content-Type', 'text/calendar; charset=utf-8')
+    reply.header('Cache-Control', 'no-store')
+    reply.header('X-Content-Type-Options', 'nosniff')
+    return buildFeed(occurrences, {
+      calendarName: t('feed.calendar_name', {}, getReqLang(request)),
+      uidHost: 'finapp',
+      generatedAt: new Date().toISOString()
+    })
+  })
+
+  fastify.get('/recurring/feed-tokens', async (request) => {
+    const { rows } = await fastify.db.query(
+      'SELECT id, name, created_at, last_used_at, revoked_at FROM recurring_feed_tokens WHERE user_id = $1 ORDER BY created_at DESC',
+      [request.user.userId]
+    )
+    return rows
+  })
+
+  fastify.post('/recurring/feed-tokens', {
+    schema: {
+      body: {
+        type: 'object',
+        required: ['name'],
+        properties: { name: { type: 'string', minLength: 1, maxLength: 100 } }
+      }
+    }
+  }, async (request, reply) => {
+    // A feed URL is typed and pasted, so it stays a UUID rather than 64 hex chars.
+    const token = crypto.randomUUID()
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+    const { rows } = await fastify.db.query(
+      'INSERT INTO recurring_feed_tokens (user_id, name, token_hash) VALUES ($1, $2, $3) RETURNING id, name, created_at',
+      [request.user.userId, request.body.name, tokenHash]
+    )
+    reply.code(201)
+    return { ...rows[0], token }
+  })
+
+  // Revoking keeps the row: the audit value of "this link was alive until X" is
+  // worth more than the storage the row costs.
+  fastify.delete('/recurring/feed-tokens/:id', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: { id: { type: 'integer', minimum: 1 } }
+      }
+    }
+  }, async (request, reply) => {
+    const { rowCount } = await fastify.db.query(
+      'UPDATE recurring_feed_tokens SET revoked_at = NOW() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL',
+      [request.params.id, request.user.userId]
+    )
+    if (rowCount === 0) {
+      const lang = await getUserLang(fastify.db, request.user.userId)
+      reply.code(404)
+      return { error: t('errors.token_not_found', {}, lang) }
+    }
+    reply.code(204)
   })
 }
 

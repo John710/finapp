@@ -160,6 +160,9 @@ export function projectOccurrences(rules, flags = {}, from, to) {
     for (const date of occurrenceDates(rule, from, to)) {
       occurrences.push({
         rule_id: rule.id,
+        // A shared rule reaches one calendar feed per owner, so the UID needs the
+        // owner id, not only the rule id.
+        user_id: rule.user_id,
         name: rule.note || rule.category_name || rule.account_name,
         date,
         amount: rule.amount,

@@ -8,3 +8,10 @@ export function scheduleLabel(t, rule) {
   if (value === 1) return t(`recurring.frequencies.${SINGLE_WORD[unit] || 'monthly'}`)
   return t(`recurring.interval.every.${unit}`, { count: value })
 }
+
+// Calendar clients accept nothing but a URL, so the feed credential is carried in
+// the query string. The origin is a parameter because the app can be served from
+// any host, including a path-prefixed one.
+export function feedUrl(token, origin = window.location.origin) {
+  return `${String(origin).replace(/\/+$/, '')}/api/v1/recurring.ics?token=${encodeURIComponent(token)}`
+}

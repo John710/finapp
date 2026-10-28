@@ -92,11 +92,30 @@ export const useRecurringStore = defineStore('recurring', () => {
     return api(`/recurring/${id}/history`)
   }
 
+  const feedTokens = ref([])
+
+  // A feed token is shown once, at creation, and never comes back from the
+  // server — the list only carries metadata.
+  async function fetchFeedTokens() {
+    feedTokens.value = await api('/recurring/feed-tokens')
+  }
+
+  async function createFeedToken(name) {
+    const created = await api('/recurring/feed-tokens', { method: 'POST', body: JSON.stringify({ name }) })
+    await fetchFeedTokens()
+    return created
+  }
+
+  async function revokeFeedToken(id) {
+    await api(`/recurring/feed-tokens/${id}`, { method: 'DELETE' })
+    await fetchFeedTokens()
+  }
+
   return {
-    rules, occurrences, projectionWindow, loading, occurrencesLoading,
+    rules, occurrences, projectionWindow, loading, occurrencesLoading, feedTokens,
     fetchRules, fetchOccurrences, refresh,
     createRule, patchRule, deleteRule,
     payOccurrence, unpayOccurrence, skipOccurrence, unskipOccurrence,
-    runNow, fetchHistory
+    runNow, fetchHistory, fetchFeedTokens, createFeedToken, revokeFeedToken
   }
 })

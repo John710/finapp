@@ -62,6 +62,7 @@
 - **Web Push Notifications** — get browser notifications
 - **Shoutrrr Integration** — send notifications to Telegram, Discord, Gotify and more
 - **Smart Reminders** — automatic notifications about upcoming due dates, budget limits exceeded, etc.
+- **Calendar Feed (iCal)** — subscribe to your upcoming subscription payments in any calendar app
 ### Import & Export
 - **CSV Import** — import data from other finance apps
 - **CSV Export** — save your data for backup purposes
@@ -255,6 +256,34 @@ The app sends automatic notifications for:
 - Failed login attempt
 ---
  
+## 📅 Calendar feed (iCal)
+
+**Settings → Access → Calendar feed** creates a personal iCal link you can paste into any
+calendar app (Apple Calendar, Google Calendar, Thunderbird, DAVx⁵…). The feed is read-only and
+lists the projected occurrences of your active recurring rules for the next 180 days — paid and
+skipped dates are marked, your transactions and balances are never exposed.
+
+Each link is a separate token. The full URL is shown once when it is created and only its hash is
+stored, so revoke and re-create instead of sharing an old link. Revoking takes effect on the next
+refresh.
+
+> **Warning:** the token travels in the query string, which is where most proxies log requests. Put the
+> feed behind a route that disables access logging, otherwise the link ends up in your reverse proxy's
+> log file and in anything that reads it. With Traefik 3.x, add a dedicated router for the path —
+> a longer rule wins over the Host-only router, so no explicit priority is needed:
+>
+> ```yaml
+> labels:
+>   - "traefik.http.routers.finapp-ics.rule=Host(`fin.example.com`) && PathPrefix(`/api/v1/recurring.ics`)"
+>   - "traefik.http.routers.finapp-ics.entrypoints=websecure-internal"
+>   - "traefik.http.routers.finapp-ics.tls=true"
+>   - "traefik.http.routers.finapp-ics.service=finapp"
+>   - "traefik.http.routers.finapp-ics.observability.accesslogs=false"
+> ```
+>
+> The alternative is dropping query strings globally
+> (`--accesslog.fields.queryparameters.defaultmode=drop`), which also hides them from debugging.
+
 ## 📁 Project Structure
  
 ```

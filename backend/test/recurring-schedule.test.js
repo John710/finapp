@@ -532,6 +532,11 @@ describe('projectOccurrences', () => {
     expect(typeof row.amount).toBe('string')
   })
 
+  it('carries the owning user so a shared rule keeps unique calendar UIDs', () => {
+    const rows = projectOccurrences([rule({ id: 7, user_id: 42 })], {}, '2026-01-01', '2026-01-31')
+    expect(rows[0].user_id).toBe(42)
+  })
+
   it('contributes nothing for a window past the end date or the payment limit', () => {
     expect(projectOccurrences([rule({ id: 5, start_date: '2026-01-31', end_date: '2026-02-01' })], {}, '2026-03-01', '2026-06-30')).toEqual([])
     expect(projectOccurrences([rule({ id: 6, start_date: '2026-01-31', payment_limit: 1 })], {}, '2026-03-01', '2026-06-30')).toEqual([])
