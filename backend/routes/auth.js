@@ -5,22 +5,63 @@ import QRCode from 'qrcode'
 import { notify, checkDuplicateNotification } from '../services/notify.js'
 import { t, getUserLang, getReqLang } from '../services/i18n.js'
 import { encrypt, decrypt } from '../services/crypto.js'
+import { passwordTooLong, revokeUserCredentials } from '../services/credentials.js'
 
 // otplib v13 (verified against current docs via Context7): the OTP class with
 // explicit plugins replaced the old authenticator singleton. verify() takes
-// {secret, token} and returns a VerifyResult object; generateURI() builds the
-// otpauth:// URL for the QR code.
+// {secret, token, afterTimeStep?} and returns a VerifyResult object whose
+// timeStep is the RFC 6238 counter of the matched code; generateURI() builds
+// the otpauth:// URL for the QR code.
 const otpCrypto = new NobleCryptoPlugin()
 const otpBase32 = new ScureBase32Plugin()
 
-async function verifyTotp(secret, token) {
+// Returns the matched time step, or null when the code is wrong. With
+// `afterTimeStep` set, codes from that step or earlier are rejected (replay).
+export async function verifyTotp(secret, token, afterTimeStep = null) {
   try {
     const otp = new OTP({ crypto: otpCrypto, base32: otpBase32 })
-    const result = await otp.verify({ secret, token: String(token || '').trim() })
-    return Boolean(result?.valid)
+    const options = { secret, token: String(token || '').trim() }
+    if (afterTimeStep !== null && afterTimeStep !== undefined) {
+      options.afterTimeStep = Number(afterTimeStep)
+    }
+    const result = await otp.verify(options)
+    return result?.valid ? result.timeStep : null
   } catch {
-    return false
+    // otplib throws on a malformed secret, or when afterTimeStep lies ahead of
+    // the current step (clock moved back): both mean "not accepted".
+    return null
   }
+}
+
+// Consecutive wrong second-factor codes before the account's TOTP check locks.
+export const TOTP_MAX_FAILURES = 5
+export const TOTP_LOCK_MINUTES = 15
+
+// Rate limits of the credential-checking routes. Each route-level config gets a
+// counter of its own (see server.js), separate from the general API limit.
+const CREDENTIAL_RATE_LIMIT = { max: 10, timeWindow: '1 minute' }
+
+// Consumes a refresh token for rotation in one statement (the row lock makes
+// concurrent refreshes safe). A fresh token is stamped consumed_at = NOW() and
+// its expiry cut to 30 seconds later; a token already consumed passes only
+// while still inside 30 seconds of its FIRST consumption, and a reuse never
+// moves consumed_at or expires_at forward. In SET, column references read the
+// row's values from before the update.
+export const REFRESH_GRACE_SECONDS = 30
+export const REFRESH_CONSUME_SQL = `UPDATE refresh_tokens
+  SET consumed_at = COALESCE(consumed_at, NOW()),
+      expires_at = LEAST(expires_at, COALESCE(consumed_at, NOW()) + INTERVAL '${REFRESH_GRACE_SECONDS} seconds')
+  WHERE user_id = $1 AND token_hash = $2 AND expires_at > NOW()
+    AND (consumed_at IS NULL OR consumed_at > NOW() - INTERVAL '${REFRESH_GRACE_SECONDS} seconds')
+  RETURNING id`
+
+// bcrypt hash (same cost as real ones) of a random string. A login for an
+// unknown user, or a user without a password, is compared against it so the
+// response time does not reveal which logins exist.
+let dummyHashPromise = null
+function dummyPasswordHash() {
+  dummyHashPromise ??= bcrypt.hash(crypto.randomBytes(16).toString('hex'), 12)
+  return dummyHashPromise
 }
 
 const ACCESS_TOKEN_NAME = 'accessToken'
@@ -60,8 +101,77 @@ async function authRoutes(fastify, opts) {
     return { required: result.rows.length === 0 }
   })
 
+  // Computed at registration so the first unknown-login request is not slower.
+  dummyPasswordHash()
+
+  // Security notifications must never delay or fail the login response: the
+  // duplicate check and the push/shoutrrr delivery run in the background.
+  function notifyInBackground(userId, lang, { entityId, titleKey, bodyKey, params }) {
+    const type = 'login_failed'
+    ;(async () => {
+      const dup = await checkDuplicateNotification(fastify, { userId, type, entityId, hours: 1 })
+      if (dup) return
+      await notify(fastify, userId, {
+        type,
+        title: t(titleKey, {}, lang),
+        message: t(bodyKey, params, lang),
+        data: { entity_id: entityId, url: '/settings' },
+        channels: ['push', 'shoutrrr']
+      })
+    })().catch(err => fastify.log.warn(err, 'Security notification error'))
+  }
+
+  // Second-factor check shared by login and 2FA disable. It refuses a code
+  // whose time step was already accepted (replay), counts consecutive wrong
+  // codes and locks the check for TOTP_LOCK_MINUTES after TOTP_MAX_FAILURES,
+  // and tells the owner about wrong codes: one that follows a correct password
+  // means somebody knows the password.
+  // `user` needs id, login, language, totp_secret, totp_last_step, totp_locked.
+  // Returns 'ok', 'invalid' or 'locked'.
+  async function checkUserTotp(user, code, ip) {
+    if (user.totp_locked) return 'locked'
+    const secret = decrypt(user.totp_secret)
+    const step = secret ? await verifyTotp(secret, code, user.totp_last_step) : null
+    if (step !== null) {
+      // Conditional on the stored step: two concurrent requests carrying the
+      // same code cannot both pass.
+      const accepted = await fastify.db.query(
+        `UPDATE users SET totp_last_step = $2, totp_failed_attempts = 0, totp_locked_until = NULL
+         WHERE id = $1 AND (totp_last_step IS NULL OR totp_last_step < $2)
+         RETURNING id`,
+        [user.id, step]
+      )
+      if (accepted.rowCount > 0) return 'ok'
+    }
+    const { rows } = await fastify.db.query(
+      `UPDATE users SET
+         totp_locked_until = CASE WHEN totp_failed_attempts + 1 >= $2
+           THEN NOW() + make_interval(mins => $3) ELSE totp_locked_until END,
+         totp_failed_attempts = CASE WHEN totp_failed_attempts + 1 >= $2
+           THEN 0 ELSE totp_failed_attempts + 1 END
+       WHERE id = $1
+       RETURNING (totp_locked_until IS NOT NULL AND totp_locked_until > NOW()) AS locked`,
+      [user.id, TOTP_MAX_FAILURES, TOTP_LOCK_MINUTES]
+    )
+    const locked = Boolean(rows[0]?.locked)
+    fastify.log.warn({ userId: user.id, ip, reason: locked ? 'totp_locked' : 'invalid_totp' }, 'Second factor rejected')
+    notifyInBackground(user.id, user.language || process.env.DEFAULT_LANG || 'en', {
+      entityId: `totp:${user.login}`,
+      titleKey: 'notifications.totp_failed',
+      bodyKey: 'notifications.totp_failed_body',
+      params: { login: user.login, ip: ip || 'unknown' }
+    })
+    return locked ? 'locked' : 'invalid'
+  }
+
+  function totpLockedReply(reply, lang) {
+    reply.code(423)
+    reply.header('Retry-After', String(TOTP_LOCK_MINUTES * 60))
+    return { error: t('auth.totp_locked', { minutes: TOTP_LOCK_MINUTES }, lang), totp_required: true, totp_locked: true }
+  }
+
   fastify.post('/auth/register', {
-    config: { public: true },
+    config: { public: true, rateLimit: CREDENTIAL_RATE_LIMIT },
     schema: {
       body: {
         type: 'object',
@@ -75,6 +185,10 @@ async function authRoutes(fastify, opts) {
     }
   }, async (request, reply) => {
     const { login, password, language } = request.body
+    if (passwordTooLong(password)) {
+      reply.code(400)
+      return { error: t('auth.password_too_long', {}, language || process.env.DEFAULT_LANG || 'en') }
+    }
     const client = await fastify.db.connect()
     try {
       await client.query('BEGIN')
@@ -106,7 +220,7 @@ async function authRoutes(fastify, opts) {
   })
 
   fastify.post('/auth/login', {
-    config: { public: true },
+    config: { public: true, rateLimit: CREDENTIAL_RATE_LIMIT },
     schema: {
       body: {
         type: 'object',
@@ -123,39 +237,33 @@ async function authRoutes(fastify, opts) {
     const { login, password } = request.body
     const lang = getReqLang(request)
     fastify.log.info({ login, ip: request.ip }, 'Login attempt')
-    const result = await fastify.db.query('SELECT * FROM users WHERE login = $1', [login])
-    if (result.rows.length === 0) {
-      fastify.log.warn({ login, ip: request.ip, reason: 'user_not_found' }, 'Login failed')
-      reply.code(401)
-      return { error: t('auth.invalid_credentials', {}, lang) }
-    }
-
+    const result = await fastify.db.query(
+      `SELECT *, (totp_locked_until IS NOT NULL AND totp_locked_until > NOW()) AS totp_locked
+       FROM users WHERE login = $1`,
+      [login]
+    )
     const user = result.rows[0]
-    if (!user.password_hash) {
-      fastify.log.warn({ login, userId: user.id, ip: request.ip, reason: 'no_password_hash' }, 'Login failed')
+
+    // Every failed branch costs one query plus one bcrypt comparison, so the
+    // response time does not tell an unknown login from a wrong password.
+    if (!user?.password_hash) {
+      await bcrypt.compare(password, await dummyPasswordHash())
+      fastify.log.warn({ login, userId: user?.id, ip: request.ip, reason: user ? 'no_password_hash' : 'user_not_found' }, 'Login failed')
       reply.code(401)
       return { error: t('auth.invalid_credentials', {}, lang) }
     }
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) {
       fastify.log.warn({ login, userId: user.id, ip: request.ip, reason: 'invalid_password' }, 'Login failed')
-      try {
-        const lang = await getUserLang(fastify.db, user.id)
-        const dup = await checkDuplicateNotification(fastify, { userId: user.id, type: 'login_failed', entityId: login, hours: 1 })
-        if (!dup) {
-          const title = t('notifications.login_failed', {}, lang)
-          const message = t('notifications.login_failed_body', { login, ip: request.ip || 'unknown' }, lang)
-          await notify(fastify, user.id, {
-            type: 'login_failed', title, message,
-            data: { entity_id: login, url: '/settings' },
-            channels: ['push', 'shoutrrr']
-          })
-        }
-      } catch (notifErr) {
-        fastify.log.warn(notifErr, 'Login failed notification error')
-      }
-      const lang = await getUserLang(fastify.db, user.id)
+      notifyInBackground(user.id, user.language || lang, {
+        entityId: login,
+        titleKey: 'notifications.login_failed',
+        bodyKey: 'notifications.login_failed_body',
+        params: { login, ip: request.ip || 'unknown' }
+      })
       reply.code(401)
+      // Request language, not the account's: a reply in the account's language
+      // would itself reveal that the login exists.
       return { error: t('auth.invalid_credentials', {}, lang) }
     }
 
@@ -163,13 +271,19 @@ async function authRoutes(fastify, opts) {
     // The first response without a code carries totp_required so the client
     // can show the code input and retry.
     if (user.totp_enabled) {
-      const secret = decrypt(user.totp_secret)
       const code = request.body?.totp_code
+      if (user.totp_locked) {
+        return totpLockedReply(reply, lang)
+      }
       if (!code) {
         reply.code(401)
         return { error: t('auth.totp_required', {}, lang), totp_required: true }
       }
-      if (!secret || !(await verifyTotp(secret, code))) {
+      const verdict = await checkUserTotp(user, code, request.ip)
+      if (verdict === 'locked') {
+        return totpLockedReply(reply, lang)
+      }
+      if (verdict !== 'ok') {
         reply.code(401)
         return { error: t('auth.invalid_totp_code', {}, lang), totp_required: true }
       }
@@ -240,28 +354,21 @@ async function authRoutes(fastify, opts) {
       // in one transaction. The old token is NOT deleted — it keeps a 30-second
       // grace validity so a second browser tab refreshing at the same moment is
       // benign (each gets its own new token) instead of tripping replay
-      // detection and revoking every session. A token consumed BEYOND the grace
-      // window is still treated as stolen: all sessions are revoked.
+      // detection and revoking every session. The grace window is counted from
+      // the FIRST consumption (consumed_at) and is never extended by a reuse.
+      // A token presented BEYOND the grace window is treated as stolen: all
+      // sessions are revoked.
       let rotated = false
       const client = await fastify.db.connect()
       try {
         await client.query('BEGIN')
-        const tokenRes = await client.query(
-          'SELECT id FROM refresh_tokens WHERE user_id = $1 AND token_hash = $2 AND expires_at > NOW()',
-          [payload.userId, tokenHash]
-        )
-        if (tokenRes.rows.length > 0) {
-          const consumed = await client.query(
-            'UPDATE refresh_tokens SET expires_at = NOW() + INTERVAL \'30 seconds\' WHERE id = $1 AND user_id = $2 RETURNING id',
-            [tokenRes.rows[0].id, payload.userId]
+        const consumed = await client.query(REFRESH_CONSUME_SQL, [payload.userId, tokenHash])
+        if (consumed.rowCount > 0) {
+          await client.query(
+            'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+            [user.id, newRefreshTokenHash, refreshExpires]
           )
-          if (consumed.rowCount > 0) {
-            await client.query(
-              'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
-              [user.id, newRefreshTokenHash, refreshExpires]
-            )
-            rotated = true
-          }
+          rotated = true
         }
         await client.query(rotated ? 'COMMIT' : 'ROLLBACK')
       } catch (err) {
@@ -407,6 +514,7 @@ async function authRoutes(fastify, opts) {
   })
 
   fastify.post('/users/change-password', {
+    config: { rateLimit: CREDENTIAL_RATE_LIMIT },
     schema: {
       body: {
         type: 'object',
@@ -421,6 +529,10 @@ async function authRoutes(fastify, opts) {
     const userId = request.user.userId
     const { current_password, new_password } = request.body
     const lang = await getUserLang(fastify.db, userId)
+    if (passwordTooLong(new_password)) {
+      reply.code(400)
+      return { error: t('auth.password_too_long', {}, lang) }
+    }
     const { rows } = await fastify.db.query('SELECT password_hash FROM users WHERE id = $1', [userId])
     if (rows.length === 0) {
       reply.code(404)
@@ -443,16 +555,15 @@ async function authRoutes(fastify, opts) {
 
     const newHash = await bcrypt.hash(new_password, 12)
     const currentHash = hashToken(currentRefresh)
-    // Hash update and session revocation must land together: a crash between
-    // the two would leave orphaned sessions valid with the old password's authority.
+    // Hash update and revocation must land together: a crash between the two
+    // would leave orphaned sessions valid with the old password's authority.
+    // Other sessions, personal API tokens and calendar feed tokens all go; only
+    // this browser session survives.
     const client = await fastify.db.connect()
     try {
       await client.query('BEGIN')
       await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, userId])
-      await client.query(
-        'DELETE FROM refresh_tokens WHERE user_id = $1 AND token_hash != $2',
-        [userId, currentHash]
-      )
+      await revokeUserCredentials(client, userId, { keepRefreshHash: currentHash })
       await client.query('COMMIT')
     } catch (err) {
       await client.query('ROLLBACK')
@@ -489,7 +600,7 @@ async function authRoutes(fastify, opts) {
     const { rows } = await fastify.db.query(
       `SELECT id, token_hash, created_at, expires_at
        FROM refresh_tokens
-       WHERE user_id = $1 AND expires_at > NOW()
+       WHERE user_id = $1 AND expires_at > NOW() AND consumed_at IS NULL
        ORDER BY created_at DESC`,
       [userId]
     )
@@ -594,10 +705,19 @@ async function authRoutes(fastify, opts) {
     }
   })
 
-  fastify.post('/users/logout', async (request, reply) => {
-    const userId = request.user.viewerUserId || request.user.userId
+  // Public on purpose: logout must work with an expired (or missing) access
+  // token, otherwise the refresh row survives and the cookies stay set. The
+  // refresh cookie alone identifies the session to end; deleting by its hash
+  // can only ever remove the session that cookie belongs to.
+  fastify.post('/users/logout', { config: { public: true } }, async (request, reply) => {
     const refreshToken = request.cookies?.refreshToken
+    let userId = null
     if (refreshToken) {
+      try {
+        userId = fastify.verifyRefreshToken(refreshToken).userId
+      } catch {
+        // Expired or invalid: the row (if any) is still removed below
+      }
       const tokenHash = hashToken(refreshToken)
       await fastify.db.query('DELETE FROM refresh_tokens WHERE token_hash = $1', [tokenHash])
     }
@@ -610,6 +730,7 @@ async function authRoutes(fastify, opts) {
   // ---------- Two-factor authentication (TOTP) ----------
 
   fastify.post('/users/2fa/setup', {
+    config: { rateLimit: CREDENTIAL_RATE_LIMIT },
     schema: {
       body: {
         type: 'object',
@@ -634,13 +755,18 @@ async function authRoutes(fastify, opts) {
     }
     const otp = new OTP({ crypto: otpCrypto, base32: otpBase32 })
     const secret = otp.generateSecret()
-    await fastify.db.query('UPDATE users SET totp_secret = $1 WHERE id = $2', [encrypt(secret), userId])
+    await fastify.db.query(
+      `UPDATE users SET totp_secret = $1, totp_last_step = NULL, totp_failed_attempts = 0, totp_locked_until = NULL
+       WHERE id = $2`,
+      [encrypt(secret), userId]
+    )
     const otpauthUrl = otp.generateURI({ issuer: 'FinApp', label: user.login || 'finapp', secret })
     const qr = await QRCode.toDataURL(otpauthUrl)
     return { secret, otpauth_url: otpauthUrl, qr }
   })
 
   fastify.post('/users/2fa/enable', {
+    config: { rateLimit: CREDENTIAL_RATE_LIMIT },
     schema: {
       body: {
         type: 'object',
@@ -653,21 +779,28 @@ async function authRoutes(fastify, opts) {
   }, async (request, reply) => {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
-    const { rows } = await fastify.db.query('SELECT totp_secret FROM users WHERE id = $1', [userId])
+    const { rows } = await fastify.db.query('SELECT totp_secret, totp_last_step FROM users WHERE id = $1', [userId])
     const secret = decrypt(rows[0]?.totp_secret)
     if (!secret) {
       reply.code(400)
       return { error: t('errors.totp_not_setup', {}, lang) }
     }
-    if (!(await verifyTotp(secret, request.body.code))) {
+    const step = await verifyTotp(secret, request.body.code, rows[0].totp_last_step)
+    if (step === null) {
       reply.code(400)
       return { error: t('auth.invalid_totp_code', {}, lang) }
     }
-    await fastify.db.query('UPDATE users SET totp_enabled = true WHERE id = $1', [userId])
+    // The confirming code is spent: it cannot be replayed at the next login.
+    await fastify.db.query(
+      `UPDATE users SET totp_enabled = true, totp_last_step = $2, totp_failed_attempts = 0, totp_locked_until = NULL
+       WHERE id = $1`,
+      [userId, step]
+    )
     return { success: true }
   })
 
   fastify.post('/users/2fa/disable', {
+    config: { rateLimit: CREDENTIAL_RATE_LIMIT },
     schema: {
       body: {
         type: 'object',
@@ -681,18 +814,32 @@ async function authRoutes(fastify, opts) {
   }, async (request, reply) => {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
-    const { rows } = await fastify.db.query('SELECT password_hash, totp_secret FROM users WHERE id = $1', [userId])
+    const { rows } = await fastify.db.query(
+      `SELECT id, login, language, password_hash, totp_secret, totp_last_step,
+              (totp_locked_until IS NOT NULL AND totp_locked_until > NOW()) AS totp_locked
+       FROM users WHERE id = $1`,
+      [userId]
+    )
     const user = rows[0]
     if (!user || !(await bcrypt.compare(request.body.password, user.password_hash))) {
       reply.code(401)
       return { error: t('auth.invalid_current_password', {}, lang) }
     }
-    const secret = decrypt(user.totp_secret)
-    if (!secret || !(await verifyTotp(secret, request.body.code))) {
+    // Same lockout, replay protection and owner notification as at login
+    const verdict = await checkUserTotp(user, request.body.code, request.ip)
+    if (verdict === 'locked') {
+      return totpLockedReply(reply, lang)
+    }
+    if (verdict !== 'ok') {
       reply.code(400)
       return { error: t('auth.invalid_totp_code', {}, lang) }
     }
-    await fastify.db.query('UPDATE users SET totp_enabled = false, totp_secret = NULL WHERE id = $1', [userId])
+    await fastify.db.query(
+      `UPDATE users SET totp_enabled = false, totp_secret = NULL, totp_last_step = NULL,
+              totp_failed_attempts = 0, totp_locked_until = NULL
+       WHERE id = $1`,
+      [userId]
+    )
     return { success: true }
   })
 

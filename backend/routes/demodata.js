@@ -16,6 +16,9 @@ async function demodataRoutes(fastify, opts) {
       await client.query('DELETE FROM notifications WHERE user_id = $1', [userId])
       await client.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId])
       await client.query('DELETE FROM accounts WHERE user_id = $1', [userId])
+      // entity_shares has no FK to the shared entity: the caller's grants on the
+      // accounts/budgets/debts/rules deleted above would linger as orphans.
+      await client.query('DELETE FROM entity_shares WHERE owner_id = $1', [userId])
       await client.query('COMMIT')
       return { success: true, message: 'Database cleared successfully' }
     } catch (err) {
@@ -79,13 +82,27 @@ async function demodataRoutes(fastify, opts) {
         { name: 'Subscriptions', type: 'expense', color: '#6366f1', icon: 'creditCard' }
       ]
 
+      // Categories and tags are global: only an admin may create them. An
+      // existing category/tag with the same name is reused; a missing one is
+      // created for an admin and left out (null) for anyone else.
+      const isAdmin = request.user.role === 'admin'
       const categoryIds = []
       for (const cat of categories) {
-        const result = await client.query(
-          'INSERT INTO categories (name, type, color, icon) VALUES ($1, $2, $3, $4) RETURNING id',
-          [cat.name, cat.type, cat.color, cat.icon]
+        const existing = await client.query(
+          'SELECT id FROM categories WHERE lower(name) = lower($1) AND type = $2 ORDER BY id LIMIT 1',
+          [cat.name, cat.type]
         )
-        categoryIds.push(result.rows[0].id)
+        if (existing.rows.length > 0) {
+          categoryIds.push(existing.rows[0].id)
+        } else if (isAdmin) {
+          const result = await client.query(
+            'INSERT INTO categories (name, type, color, icon) VALUES ($1, $2, $3, $4) RETURNING id',
+            [cat.name, cat.type, cat.color, cat.icon]
+          )
+          categoryIds.push(result.rows[0].id)
+        } else {
+          categoryIds.push(null)
+        }
       }
 
       // --- Tags ---
@@ -98,11 +115,19 @@ async function demodataRoutes(fastify, opts) {
 
       const tagIds = []
       for (const tag of tags) {
-        const result = await client.query(
-          'INSERT INTO tags (name, color) VALUES ($1, $2) RETURNING id',
-          [tag.name, tag.color]
+        const existing = await client.query(
+          'SELECT id FROM tags WHERE lower(name) = lower($1) ORDER BY id LIMIT 1',
+          [tag.name]
         )
-        tagIds.push(result.rows[0].id)
+        if (existing.rows.length > 0) {
+          tagIds.push(existing.rows[0].id)
+        } else if (isAdmin) {
+          const result = await client.query(
+            'INSERT INTO tags (name, color) VALUES ($1, $2) RETURNING id',
+            [tag.name, tag.color]
+          )
+          tagIds.push(result.rows[0].id)
+        }
       }
 
       // --- Transactions ---
@@ -301,18 +326,14 @@ async function demodataRoutes(fastify, opts) {
       }
 
       // --- Budgets ---
-      await client.query(
-        'INSERT INTO budgets (user_id, category_id, amount, currency, period, start_date) VALUES ($1, $2, $3, $4, $5, $6)',
-        [userId, categoryIds[2], 600, 'USD', 'month', today.toISOString().split('T')[0]]
-      )
-      await client.query(
-        'INSERT INTO budgets (user_id, category_id, amount, currency, period, start_date) VALUES ($1, $2, $3, $4, $5, $6)',
-        [userId, categoryIds[4], 200, 'USD', 'month', today.toISOString().split('T')[0]]
-      )
-      await client.query(
-        'INSERT INTO budgets (user_id, category_id, amount, currency, period, start_date) VALUES ($1, $2, $3, $4, $5, $6)',
-        [userId, categoryIds[5], 250, 'USD', 'month', today.toISOString().split('T')[0]]
-      )
+      // A budget needs a target: one whose demo category is unavailable is skipped
+      for (const [categoryId, amount] of [[categoryIds[2], 600], [categoryIds[4], 200], [categoryIds[5], 250]]) {
+        if (categoryId === null) continue
+        await client.query(
+          'INSERT INTO budgets (user_id, category_id, amount, currency, period, start_date) VALUES ($1, $2, $3, $4, $5, $6)',
+          [userId, categoryId, amount, 'USD', 'month', today.toISOString().split('T')[0]]
+        )
+      }
 
       // --- Debts ---
       await client.query(
