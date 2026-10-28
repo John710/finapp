@@ -1,6 +1,7 @@
 import Decimal from 'decimal.js'
 import { loadRates, convertAmountDecimal } from '../services/currency.js'
 import { visibleAccountIds } from '../services/visibility.js'
+import { FLOW_TYPE_SQL, flowSign } from '../services/flows.js'
 import { t, getUserLang } from '../services/i18n.js'
 import { loadOccurrenceFlags, loadVisibleRules } from '../services/recurring-rules.js'
 import { projectOccurrences, resolveProjectionWindow } from '../services/recurring-schedule.js'
@@ -53,14 +54,16 @@ async function reportRoutes(fastify, opts) {
   // transaction rows into memory and summed them in JS.
   // Flow totals (summary/trend/net-worth) count parent+regular rows and skip
   // split children, which are bookkeeping rows with no balance effect.
+  // The paired income leg of a transfer comes back as type 'transfer_in'
+  // (FLOW_TYPE_SQL): it is not income, but balance walks still need it.
   async function fetchTotalsByTypeCurrency(visible, whereClause, params) {
     const result = await fastify.db.query(`
-      SELECT t.type, a.currency as account_currency, a.type as account_type,
+      SELECT ${FLOW_TYPE_SQL} as type, a.currency as account_currency, a.type as account_type,
              COALESCE(SUM(t.amount), 0) as sum, COUNT(*)::int as count
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id
       WHERE t.account_id = ANY($1) AND t.parent_id IS NULL AND ${whereClause}
-      GROUP BY t.type, a.currency, a.type
+      GROUP BY 1, 2, 3
     `, [visible, ...params])
     return result.rows
   }
@@ -70,25 +73,25 @@ async function reportRoutes(fastify, opts) {
     // skip split parents, whose category is NULL.
     const result = await fastify.db.query(`
       SELECT t.category_id, c.name as category_name, c.color as category_color,
-             t.type, a.currency as account_currency,
+             ${FLOW_TYPE_SQL} as type, a.currency as account_currency,
              COALESCE(SUM(t.amount), 0) as sum, COUNT(*)::int as count
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id
       LEFT JOIN categories c ON c.id = t.category_id
       WHERE t.account_id = ANY($1) AND NOT t.is_split AND ${whereClause}
-      GROUP BY t.category_id, c.name, c.color, t.type, a.currency
+      GROUP BY 1, 2, 3, 4, 5
     `, [visible, ...params])
     return result.rows
   }
 
   async function fetchTotalsByMonth(visible, whereClause, params) {
     const result = await fastify.db.query(`
-      SELECT to_char(t.date, 'YYYY-MM') as month, t.type, a.currency as account_currency,
+      SELECT to_char(t.date, 'YYYY-MM') as month, ${FLOW_TYPE_SQL} as type, a.currency as account_currency,
              COALESCE(SUM(t.amount), 0) as sum
       FROM transactions t
       JOIN accounts a ON a.id = t.account_id
       WHERE t.account_id = ANY($1) AND t.parent_id IS NULL AND ${whereClause}
-      GROUP BY 1, t.type, a.currency
+      GROUP BY 1, 2, 3
     `, [visible, ...params])
     return result.rows
   }
@@ -117,6 +120,9 @@ async function reportRoutes(fastify, opts) {
     let unconvertedCount = 0
 
     for (const g of groups) {
+      // The incoming leg is the other half of a transfer already counted
+      // once as its outgoing row.
+      if (g.type === 'transfer_in') continue
       count += g.count
       const val = sumInBase(g.sum, g.account_currency, base_currency, rates)
       if (g.account_type === 'crypto' && g.account_currency && g.account_currency !== base_currency) {
@@ -159,16 +165,18 @@ async function reportRoutes(fastify, opts) {
       loadRates(fastify.db)
     ])
 
+    // Income and expense of the same category are different money: rows are
+    // keyed by type + category, and each percentage is a share of its own
+    // type's total. Transfer legs are not income and drop out entirely.
     const categoryMap = new Map()
-    let grandTotal = new Decimal(0)
+    const totalsByType = new Map()
 
     for (const g of groups) {
+      if (g.type === 'transfer_in') continue
       const val = sumInBase(g.sum, g.account_currency, base_currency, rates)
-      // Transfers are not spending/income — including them in grandTotal skews
-      // every category percentage.
-      if (g.type !== 'transfer') grandTotal = grandTotal.plus(val)
+      totalsByType.set(g.type, (totalsByType.get(g.type) || new Decimal(0)).plus(val))
 
-      const key = g.category_id || 'uncategorized'
+      const key = `${g.type}:${g.category_id ?? 'uncategorized'}`
       if (!categoryMap.has(key)) {
         categoryMap.set(key, {
           id: g.category_id,
@@ -184,14 +192,13 @@ async function reportRoutes(fastify, opts) {
       cat.count += g.count
     }
 
-    const grand = grandTotal.toNumber()
     const rows = Array.from(categoryMap.values())
       .map(r => {
-        const total = r.total.toNumber()
+        const typeTotal = totalsByType.get(r.type)
         return {
           ...r,
-          total: parseFloat(total.toFixed(2)),
-          percentage: grand > 0 ? parseFloat(((total / grand) * 100).toFixed(1)) : 0
+          total: parseFloat(r.total.toFixed(2)),
+          percentage: typeTotal && typeTotal.gt(0) ? parseFloat(r.total.div(typeTotal).times(100).toFixed(1)) : 0
         }
       })
       .sort((a, b) => b.total - a.total)
@@ -274,14 +281,13 @@ async function reportRoutes(fastify, opts) {
       currentTotal = currentTotal.plus(sumInBase(acc.balance, acc.currency, base_currency, rates))
     }
 
-    // Signed monthly flow aggregated in SQL: income adds (the paired leg of a
-    // transfer is an income row, so incoming transfers count too),
-    // expense/transfer-out subtract.
+    // Signed monthly flow aggregated in SQL: income and the incoming leg of a
+    // transfer add, expense/transfer-out subtract.
     const flowGroups = await fetchTotalsByMonth(visible, '1=1', [])
     const flowByMonth = new Map()
     for (const g of flowGroups) {
       const val = sumInBase(g.sum, g.account_currency, base_currency, rates)
-      const sign = g.type === 'income' ? 1 : -1
+      const sign = flowSign(g.type)
       const month = g.month
       flowByMonth.set(month, (flowByMonth.get(month) || new Decimal(0)).plus(val.times(sign)))
     }

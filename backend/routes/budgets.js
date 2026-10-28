@@ -14,9 +14,11 @@ async function budgetRoutes(fastify, opts) {
         FROM budgets b
         LEFT JOIN categories c ON c.id = b.category_id
         JOIN users ou ON ou.id = b.user_id
-        LEFT JOIN entity_shares es ON es.entity_type = 'budget' AND es.entity_id = b.id
-          AND es.owner_id = b.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
-        WHERE b.is_active = true AND (b.user_id = $1 OR es.id IS NOT NULL)
+        WHERE b.is_active = true AND (b.user_id = $1 OR EXISTS (
+          SELECT 1 FROM entity_shares es
+          WHERE es.entity_type = 'budget' AND es.entity_id = b.id AND es.owner_id = b.user_id
+            AND (es.shared_with = $1 OR es.shared_with IS NULL)
+        ))
         ORDER BY b.created_at DESC
       `, [userId]),
       loadRates(fastify.db)
@@ -24,14 +26,16 @@ async function budgetRoutes(fastify, opts) {
 
     const budgets = budgetsResult.rows
     if (budgets.length === 0) return []
+    const budgetIds = budgets.map(b => b.id)
 
-    // Attach tag targets (a budget matches its category OR any of its tags)
+    // Attach tag targets (a budget matches its category OR any of its tags).
+    // Tags are global since migration 29 — there is no per-user tag scope.
     const tagsRes = await fastify.db.query(
       `SELECT bt.budget_id, tg.id, tg.name, tg.color
        FROM budget_tags bt
-       JOIN tags tg ON tg.id = bt.tag_id AND tg.user_id = $1
-       WHERE bt.budget_id = ANY($2)`,
-      [userId, budgets.map(b => b.id)]
+       JOIN tags tg ON tg.id = bt.tag_id
+       WHERE bt.budget_id = ANY($1)`,
+      [budgetIds]
     )
     const tagsByBudget = {}
     for (const row of tagsRes.rows) {
@@ -44,11 +48,13 @@ async function budgetRoutes(fastify, opts) {
     // budget created months ago still shows live progress instead of freezing
     // after its first period elapsed. Split children carry the categories;
     // split parents are excluded to avoid double counting.
+    // Spending is the budget OWNER's ledger (transactions belong to their
+    // account's owner), so a family member viewing a shared budget sees the
+    // same progress as its owner.
     const txResult = await fastify.db.query(`
       SELECT t.amount, a.currency as account_currency, b.id as budget_id, b.currency as budget_currency
-      FROM transactions t
-      JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-      JOIN budgets b ON b.user_id = t.user_id
+      FROM budgets b
+      JOIN transactions t ON t.user_id = b.user_id
         AND (
           (b.category_id IS NOT NULL AND b.category_id = t.category_id)
           OR EXISTS (
@@ -57,18 +63,13 @@ async function budgetRoutes(fastify, opts) {
             WHERE bt.budget_id = b.id
           )
         )
-      WHERE t.type = 'expense'
+      JOIN accounts a ON a.id = t.account_id
+      WHERE b.id = ANY($1)
+        AND t.type = 'expense'
         AND NOT t.is_split
-        AND b.user_id IN (
-          SELECT b2.user_id FROM budgets b2
-          LEFT JOIN entity_shares es2 ON es2.entity_type = 'budget' AND es2.entity_id = b2.id
-            AND es2.owner_id = b2.user_id AND (es2.shared_with = $1 OR es2.shared_with IS NULL)
-          WHERE b2.is_active = true AND (b2.user_id = $1 OR es2.id IS NOT NULL)
-        )
         AND t.date >= CASE WHEN b.period = 'week' THEN date_trunc('week', CURRENT_DATE) ELSE date_trunc('month', CURRENT_DATE) END
         AND t.date < CASE WHEN b.period = 'week' THEN date_trunc('week', CURRENT_DATE) + INTERVAL '7 days' ELSE date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' END
-        AND b.is_active = true
-    `, [userId])
+    `, [budgetIds])
 
     const spentByBudget = {}
     for (const tx of txResult.rows) {
@@ -136,8 +137,8 @@ async function budgetRoutes(fastify, opts) {
         }
       }
       const result = await client.query(
-        'INSERT INTO budgets (user_id, category_id, amount, currency, period, start_date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-        [userId, category_id || null, amount, currency || 'USD', period, start_date || new Date().toISOString().split('T')[0]]
+        'INSERT INTO budgets (user_id, category_id, amount, currency, period, start_date) VALUES ($1, $2, $3, $4, $5, COALESCE($6::date, CURRENT_DATE)) RETURNING *',
+        [userId, category_id || null, amount, currency || 'USD', period, start_date || null]
       )
       const budget = result.rows[0]
       for (const tagId of tag_ids || []) {
@@ -204,9 +205,11 @@ async function budgetRoutes(fastify, opts) {
           return { error: t('errors.invalid_tags', {}, lang) }
         }
       }
+      // currency, start_date and is_active are optional in the body and NOT
+      // NULL in the table: an omitted field keeps its stored value.
       const result = await client.query(
-        'UPDATE budgets SET category_id = $1, amount = $2, currency = $3, period = $4, start_date = $5, is_active = $6 WHERE id = $7 AND user_id = $8 RETURNING *',
-        [category_id || null, amount, currency, period, start_date, is_active, id, userId]
+        'UPDATE budgets SET category_id = $1, amount = $2, currency = COALESCE($3, currency), period = $4, start_date = COALESCE($5, start_date), is_active = COALESCE($6, is_active) WHERE id = $7 AND user_id = $8 RETURNING *',
+        [category_id || null, amount, currency ?? null, period, start_date ?? null, is_active ?? null, id, userId]
       )
       if (result.rows.length === 0) {
         await client.query('ROLLBACK')
@@ -240,11 +243,27 @@ async function budgetRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
-    await fastify.db.query("DELETE FROM entity_shares WHERE entity_type = 'budget' AND entity_id = $1", [id])
-    const result = await fastify.db.query('DELETE FROM budgets WHERE id = $1 AND user_id = $2', [id, userId])
-    if (result.rowCount === 0) {
-      reply.code(404)
-      return { error: t('errors.budget_not_found', {}, lang) }
+    // Only the owner deletes, and only the owner's share rows go with it —
+    // checked by the owned DELETE first, in one transaction.
+    const client = await fastify.db.connect()
+    try {
+      await client.query('BEGIN')
+      const result = await client.query('DELETE FROM budgets WHERE id = $1 AND user_id = $2', [id, userId])
+      if (result.rowCount === 0) {
+        await client.query('ROLLBACK')
+        reply.code(404)
+        return { error: t('errors.budget_not_found', {}, lang) }
+      }
+      await client.query(
+        "DELETE FROM entity_shares WHERE entity_type = 'budget' AND entity_id = $1 AND owner_id = $2",
+        [id, userId]
+      )
+      await client.query('COMMIT')
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
     }
     reply.code(204)
   })

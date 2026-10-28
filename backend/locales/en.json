@@ -49,6 +49,8 @@
     "import_row_no_account": "No account found",
     "import_row_failed": "Failed to import row",
     "failed_to_fetch_rates": "Failed to fetch rates",
+    "rates_refresh_throttled": "Exchange rates were refreshed less than {minutes} minutes ago. Try again later.",
+    "debt_has_payments": "This debt already has payments: its amount, currency, type and account can no longer be changed",
     "push_not_configured": "Push notifications not configured",
     "shoutrrr_not_configured": "Shoutrrr is not configured",
     "encryption_key_missing": "Encryption key is not configured on the server",

@@ -3,10 +3,20 @@ import { loadRates, convertAmountDecimal } from '../services/currency.js'
 import { visibleAccountIds } from '../services/visibility.js'
 import { loadOccurrenceFlags, loadVisibleRules } from '../services/recurring-rules.js'
 import { monthlyEquivalent, projectOccurrences, shiftDays } from '../services/recurring-schedule.js'
+import { FLOW_TYPE_SQL, flowSign } from '../services/flows.js'
+import { paidInDebtCurrency, remainingOnDebt } from '../services/debt-payments.js'
 
 // The dashboard card answers "what is coming next", so it looks a horizon ahead
 // instead of the whole calendar window the projection endpoint allows.
 const RECURRING_HORIZON_DAYS = 60
+
+// 'YYYY-MM' shifted by whole months — pure string arithmetic, so no process
+// timezone can move a month boundary.
+export function shiftMonth(key, delta) {
+  const index = Number(key.slice(0, 4)) * 12 + Number(key.slice(5, 7)) - 1 + delta
+  const year = Math.floor(index / 12)
+  return `${year}-${String(index - year * 12 + 1).padStart(2, '0')}`
+}
 
 async function dashboardRoutes(fastify, opts) {
   // One endpoint for the dashboard mount instead of ~11 parallel requests.
@@ -27,8 +37,18 @@ async function dashboardRoutes(fastify, opts) {
   }, async (request, reply) => {
     const userId = request.user.userId
     const { base_currency = 'USD', trend_months = 6, networth_months = 12, recent_limit = 5, upcoming_limit = 6 } = request.query
-    const rates = await loadRates(fastify.db)
-    const visible = await visibleAccountIds(fastify.db, userId)
+    // Calendar days come from the database clock (the container runs in a
+    // different timezone than PostgreSQL): the month window, the trend window
+    // and the recurring card all agree on which day is today.
+    const [rates, visible, todayRes] = await Promise.all([
+      loadRates(fastify.db),
+      visibleAccountIds(fastify.db, userId),
+      fastify.db.query('SELECT CURRENT_DATE::text AS today')
+    ])
+    const serverToday = todayRes.rows[0].today
+    const currentMonth = serverToday.slice(0, 7)
+    const monthStart = `${currentMonth}-01`
+    const trendStart = `${shiftMonth(currentMonth, -(trend_months - 1))}-01`
 
     const toBase = (amount, currency) => {
       if (!currency || currency === base_currency) return new Decimal(amount)
@@ -36,47 +56,50 @@ async function dashboardRoutes(fastify, opts) {
       return converted !== null ? converted : new Decimal(amount)
     }
 
-    const now = new Date()
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
-    const trendStart = new Date(now.getFullYear(), now.getMonth() - (trend_months - 1), 1).toISOString().slice(0, 10)
-    const today = now.toISOString().slice(0, 10)
-
-    const [monthTotals, trendGroups, accountsRes, recentRes, recurringRules, debtsRes, todayRes] = await Promise.all([
-      // Current-month income/expense (split children excluded: parents carry the flow)
+    const [monthTotals, trendGroups, accountsRes, recentRes, recurringRules, debtsRes] = await Promise.all([
+      // Current-month income/expense (split children excluded: parents carry
+      // the flow; transfer legs come back as 'transfer_in' and are not income)
       fastify.db.query(
-        `SELECT t.type, a.currency, COALESCE(SUM(t.amount), 0) as sum
+        `SELECT ${FLOW_TYPE_SQL} as type, a.currency, COALESCE(SUM(t.amount), 0) as sum
          FROM transactions t
          JOIN accounts a ON a.id = t.account_id
          WHERE t.account_id = ANY($1) AND t.parent_id IS NULL AND t.date >= $2 AND t.date <= $3
-         GROUP BY t.type, a.currency`,
-        [visible, monthStart, today]
+         GROUP BY 1, 2`,
+        [visible, monthStart, serverToday]
       ),
       // Monthly trend
       fastify.db.query(
-        `SELECT to_char(t.date, 'YYYY-MM') as month, t.type, a.currency, COALESCE(SUM(t.amount), 0) as sum
+        `SELECT to_char(t.date, 'YYYY-MM') as month, ${FLOW_TYPE_SQL} as type, a.currency, COALESCE(SUM(t.amount), 0) as sum
          FROM transactions t
          JOIN accounts a ON a.id = t.account_id
          WHERE t.account_id = ANY($1) AND t.parent_id IS NULL AND t.date >= $2 AND t.date <= $3
-         GROUP BY 1, t.type, a.currency`,
-        [visible, trendStart, today]
+         GROUP BY 1, 2, 3`,
+        [visible, trendStart, serverToday]
       ),
+      // One row per account even when it is shared both to the whole family
+      // and to the user directly; the most permissive grant wins.
       fastify.db.query(
         `SELECT a.id, a.name, a.type, a.currency, a.balance, a.color, a.icon, a.is_archived,
                 CASE WHEN a.user_id = $1 THEN NULL ELSE ou.login END AS owner_login,
-                CASE WHEN a.user_id = $1 THEN COALESCE((SELECT true FROM entity_shares es WHERE es.entity_type = 'account' AND es.entity_id = a.id AND es.owner_id = a.user_id LIMIT 1), false) ELSE false END AS is_shared,
+                CASE WHEN a.user_id = $1 THEN EXISTS (SELECT 1 FROM entity_shares es2 WHERE es2.entity_type = 'account' AND es2.entity_id = a.id AND es2.owner_id = a.user_id) ELSE false END AS is_shared,
                 CASE WHEN a.user_id = $1 THEN 'owner' ELSE COALESCE(es.permission, 'view') END AS access
          FROM accounts a
          JOIN users ou ON ou.id = a.user_id
-         LEFT JOIN entity_shares es ON es.entity_type = 'account' AND es.entity_id = a.id
-           AND es.owner_id = a.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
-         WHERE a.user_id = $1 OR es.id IS NOT NULL
+         LEFT JOIN LATERAL (
+           SELECT es1.permission FROM entity_shares es1
+           WHERE es1.entity_type = 'account' AND es1.entity_id = a.id AND es1.owner_id = a.user_id
+             AND (es1.shared_with = $1 OR es1.shared_with IS NULL)
+           ORDER BY (es1.permission = 'edit') DESC
+           LIMIT 1
+         ) es ON true
+         WHERE a.user_id = $1 OR es.permission IS NOT NULL
          ORDER BY a.is_archived, a.sort_order, a.created_at DESC`,
         [userId]
       ),
       fastify.db.query(
         `SELECT t.id, t.amount, t.type, t.date, t.note, t.is_split, t.account_id, t.transfer_to_account_id,
                 a.name as account_name, a.currency as account_currency, c.name as category_name, c.color as category_color, c.icon as category_icon,
-                CASE WHEN t.user_id = $1 THEN NULL ELSE ou.login END AS owner_login
+                CASE WHEN t.user_id = $3 THEN NULL ELSE ou.login END AS owner_login
          FROM transactions t
          LEFT JOIN accounts a ON a.id = t.account_id
          LEFT JOIN categories c ON c.id = t.category_id
@@ -84,7 +107,7 @@ async function dashboardRoutes(fastify, opts) {
          WHERE t.account_id = ANY($1)
          ORDER BY t.date DESC, t.created_at DESC
          LIMIT $2`,
-        [visible, recent_limit]
+        [visible, recent_limit, userId]
       ),
       // The schedule contract lives in the recurring service modules: rules read
       // through ruleColumns() give text dates, so no container timezone moves a day.
@@ -94,15 +117,14 @@ async function dashboardRoutes(fastify, opts) {
                 CASE WHEN d.user_id = $1 THEN NULL ELSE ou.login END AS owner_login
          FROM debts d
          JOIN users ou ON ou.id = d.user_id
-         LEFT JOIN entity_shares es ON es.entity_type = 'debt' AND es.entity_id = d.id
-           AND es.owner_id = d.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
-         WHERE d.user_id = $1 OR es.id IS NOT NULL
+         WHERE d.user_id = $1 OR EXISTS (
+           SELECT 1 FROM entity_shares es
+           WHERE es.entity_type = 'debt' AND es.entity_id = d.id AND es.owner_id = d.user_id
+             AND (es.shared_with = $1 OR es.shared_with IS NULL)
+         )
          ORDER BY d.due_date ASC NULLS LAST`,
         [userId]
-      ),
-      // The schedule contract is defined against the database clock, so the card
-      // and the Recurring page cannot disagree about which day is today.
-      fastify.db.query('SELECT CURRENT_DATE::text AS today')
+      )
     ])
 
     // Month summary
@@ -127,32 +149,27 @@ async function dashboardRoutes(fastify, opts) {
 
     // Net worth anchored to current balances, walked backwards
     let currentTotal = new Decimal(0)
-    const balancesByMonth = new Map()
     for (const acc of accountsRes.rows) {
       currentTotal = currentTotal.plus(toBase(acc.balance, acc.currency))
     }
+    // trendGroups only cover the trend window; net worth needs ALL flows,
+    // including the incoming legs of transfers (they do move balances).
     const flowByMonth = new Map()
-    for (const g of trendGroups.rows) {
-      // trendGroups only cover the trend window; net worth needs ALL flows
-    }
     const allFlowGroups = await fastify.db.query(
-      `SELECT to_char(t.date, 'YYYY-MM') as month, t.type, a.currency, COALESCE(SUM(t.amount), 0) as sum
+      `SELECT to_char(t.date, 'YYYY-MM') as month, ${FLOW_TYPE_SQL} as type, a.currency, COALESCE(SUM(t.amount), 0) as sum
        FROM transactions t
        JOIN accounts a ON a.id = t.account_id
        WHERE t.account_id = ANY($1) AND t.parent_id IS NULL
-       GROUP BY 1, t.type, a.currency`,
+       GROUP BY 1, 2, 3`,
       [visible]
     )
     for (const g of allFlowGroups.rows) {
-      const val = toBase(g.sum, g.currency).times(g.type === 'income' ? 1 : -1)
+      const val = toBase(g.sum, g.currency).times(flowSign(g.type))
       flowByMonth.set(g.month, (flowByMonth.get(g.month) || new Decimal(0)).plus(val))
     }
 
-    const start = new Date(now.getFullYear(), now.getMonth() - (networth_months - 1), 1)
     const monthsList = []
-    for (let d = new Date(start); d <= now; d.setMonth(d.getMonth() + 1)) {
-      monthsList.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
-    }
+    for (let i = networth_months - 1; i >= 0; i--) monthsList.push(shiftMonth(currentMonth, -i))
     const lastMonth = monthsList[monthsList.length - 1]
     let suffixFlow = new Decimal(0)
     for (const [m, f] of flowByMonth) {
@@ -165,12 +182,25 @@ async function dashboardRoutes(fastify, opts) {
       bal = bal.minus(flowByMonth.get(monthsList[i]) || new Decimal(0))
     }
 
-    // Debts (unpaid totals in base currency)
+    // Debts: what is still outstanding (amount minus payments) in base currency
+    const openDebts = debtsRes.rows.filter(d => d.status !== 'paid')
+    const paymentsRes = openDebts.length
+      ? await fastify.db.query(
+        'SELECT debt_id, amount, currency FROM debt_payments WHERE debt_id = ANY($1)',
+        [openDebts.map(d => d.id)]
+      )
+      : { rows: [] }
+    const paymentsByDebt = new Map()
+    for (const p of paymentsRes.rows) {
+      if (!paymentsByDebt.has(p.debt_id)) paymentsByDebt.set(p.debt_id, [])
+      paymentsByDebt.get(p.debt_id).push(p)
+    }
     let owed = new Decimal(0)
     let lent = new Decimal(0)
-    for (const d of debtsRes.rows) {
-      if (d.status === 'paid') continue
-      const val = toBase(d.amount, d.currency || base_currency)
+    for (const d of openDebts) {
+      const debtCurrency = d.currency || base_currency
+      const paid = paidInDebtCurrency(paymentsByDebt.get(d.id) || [], debtCurrency, rates)
+      const val = toBase(remainingOnDebt(d.amount, paid), debtCurrency)
       if (d.type === 'borrow') owed = owed.plus(val)
       else lent = lent.plus(val)
     }
@@ -178,7 +208,6 @@ async function dashboardRoutes(fastify, opts) {
     // Recurring: what the active schedules are worth per month, and what they
     // ask for next. Paid and skipped occurrences are settled business, so the
     // list only carries the ones still outstanding.
-    const serverToday = todayRes.rows[0]?.today ?? today
     const activeRules = recurringRules.filter(r => r.is_active)
     const flags = await loadOccurrenceFlags(fastify.db, activeRules.map(r => r.id))
     let commitments = new Decimal(0)
@@ -218,7 +247,7 @@ async function dashboardRoutes(fastify, opts) {
       debts_summary: {
         owed: parseFloat(owed.toNumber().toFixed(2)),
         lent: parseFloat(lent.toNumber().toFixed(2)),
-        count: debtsRes.rows.filter(d => d.status !== 'paid').length
+        count: openDebts.length
       },
       base_currency
     }
