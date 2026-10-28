@@ -31,6 +31,7 @@ const routes = [
       { path: 'budgets', name: 'Budgets', component: () => import('../views/BudgetsView.vue') },
       { path: 'debts', name: 'Debts', component: () => import('../views/DebtsView.vue') },
       { path: 'recurring', name: 'Recurring', component: () => import('../views/RecurringView.vue') },
+      { path: 'recurring/calendar', name: 'RecurringCalendar', component: () => import('../views/RecurringCalendarView.vue') },
       { path: 'reports', name: 'Reports', component: () => import('../views/ReportsView.vue') },
       { path: 'tags', name: 'Tags', component: () => import('../views/TagsView.vue') },
       { path: 'settings', name: 'Settings', component: () => import('../views/SettingsView.vue') }

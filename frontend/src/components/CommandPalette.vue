@@ -67,6 +67,7 @@ const items = computed(() => [
   { name: t('nav.reports'), path: '/reports', icon: 'chart' },
   { name: t('nav.tags'), path: '/tags', icon: 'tag' },
   { name: t('nav.recurring'), path: '/recurring', icon: 'repeat' },
+  { name: t('nav.calendar'), path: '/recurring/calendar', icon: 'calendar' },
   { name: t('nav.settings'), path: '/settings', icon: 'settings' },
   { name: `${t('transactions.add')} (${t('command_palette.new_transaction')})`, path: '/transactions', icon: 'plus', shortcut: 'Ctrl+Shift+N' }
 ])

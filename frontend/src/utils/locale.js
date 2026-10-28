@@ -13,3 +13,9 @@ export function getUserLocale() {
   }
   return 'ru-RU'
 }
+
+// Intl.Locale weekInfo is not available in every browser we target, and both
+// shipped locales agree on their own week start.
+export function getFirstDayOfWeek() {
+  return getUserLocale().startsWith('ru') ? 1 : 0
+}

@@ -2,9 +2,18 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '../utils/api'
 
+function dayOffset(days) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return date.toLocaleDateString('sv-SE')
+}
+
 export const useRecurringStore = defineStore('recurring', () => {
   const rules = ref([])
+  const occurrences = ref([])
+  const projectionWindow = ref(null)
   const loading = ref(false)
+  const occurrencesLoading = ref(false)
 
   async function fetchRules() {
     loading.value = true
@@ -15,23 +24,79 @@ export const useRecurringStore = defineStore('recurring', () => {
     }
   }
 
-  async function createRule(data) {
-    const rule = await api('/recurring', { method: 'POST', body: JSON.stringify(data) })
-    rules.value.unshift(rule)
-    return rule
+  async function fetchOccurrences(from = dayOffset(-180), to = dayOffset(180)) {
+    occurrencesLoading.value = true
+    try {
+      const res = await api(`/recurring/occurrences?from=${from}&to=${to}`)
+      occurrences.value = res.occurrences
+      projectionWindow.value = { from: res.from, to: res.to }
+      return occurrences.value
+    } finally {
+      occurrencesLoading.value = false
+    }
   }
 
-  async function updateRule(id, data) {
-    const rule = await api(`/recurring/${id}`, { method: 'PUT', body: JSON.stringify(data) })
-    const idx = rules.value.findIndex(r => r.id === id)
-    if (idx !== -1) rules.value[idx] = rule
-    return rule
+  // Paying, skipping and generating all move the ledger cursor, so the rules
+  // and whatever projection is already on screen have to be re-read.
+  async function refresh() {
+    await fetchRules()
+    if (projectionWindow.value) await fetchOccurrences(projectionWindow.value.from, projectionWindow.value.to)
+  }
+
+  async function createRule(data) {
+    await api('/recurring', { method: 'POST', body: JSON.stringify(data) })
+    await refresh()
+  }
+
+  async function patchRule(id, patch) {
+    await api(`/recurring/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+    await refresh()
   }
 
   async function deleteRule(id) {
     await api(`/recurring/${id}`, { method: 'DELETE' })
-    rules.value = rules.value.filter(r => r.id !== id)
+    await refresh()
   }
 
-  return { rules, loading, fetchRules, createRule, updateRule, deleteRule }
+  async function payOccurrence({ ruleId, date, amount, note }) {
+    const body = { rule_id: ruleId, date }
+    if (amount !== undefined && amount !== null) body.amount = amount
+    if (note) body.note = note
+    await api('/recurring/occurrences/pay', { method: 'POST', body: JSON.stringify(body) })
+    await refresh()
+  }
+
+  async function unpayOccurrence({ ruleId, date }) {
+    await api('/recurring/occurrences/pay', { method: 'DELETE', body: JSON.stringify({ rule_id: ruleId, date }) })
+    await refresh()
+  }
+
+  async function skipOccurrence({ ruleId, date, note }) {
+    const body = { rule_id: ruleId, date }
+    if (note) body.note = note
+    await api('/recurring/occurrences/skip', { method: 'POST', body: JSON.stringify(body) })
+    await refresh()
+  }
+
+  async function unskipOccurrence({ ruleId, date }) {
+    await api('/recurring/occurrences/skip', { method: 'DELETE', body: JSON.stringify({ rule_id: ruleId, date }) })
+    await refresh()
+  }
+
+  async function runNow(id) {
+    await api(`/recurring/${id}/run-now`, { method: 'POST', body: JSON.stringify({}) })
+    await refresh()
+  }
+
+  async function fetchHistory(id) {
+    return api(`/recurring/${id}/history`)
+  }
+
+  return {
+    rules, occurrences, projectionWindow, loading, occurrencesLoading,
+    fetchRules, fetchOccurrences, refresh,
+    createRule, patchRule, deleteRule,
+    payOccurrence, unpayOccurrence, skipOccurrence, unskipOccurrence,
+    runNow, fetchHistory
+  }
 })

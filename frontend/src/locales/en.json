@@ -10,6 +10,7 @@
     "settings": "Settings",
     "tags": "Tags",
     "recurring": "Recurring",
+    "calendar": "Calendar",
     "accountdetail": "Account Details"
   },
   "auth": {
@@ -148,12 +149,107 @@
     "next": "Next",
     "income": "Income",
     "expense": "Expense",
+    "schedule": "Schedule",
+    "due": "Due",
+    "paid_count": "{count} paid",
+    "paid_toast": "Payment recorded for {date}",
+    "skipped_toast": "Occurrence on {date} skipped",
+    "unpaid_toast": "Payment for {date} cancelled",
+    "unskipped_toast": "Occurrence on {date} restored",
+    "ran_toast": "Occurrence generated",
     "frequencies": {
       "daily": "Daily",
       "weekly": "Weekly",
       "biweekly": "Biweekly",
       "monthly": "Monthly",
       "yearly": "Yearly"
+    },
+    "status": {
+      "scheduled": "Scheduled",
+      "due_today": "Due today",
+      "overdue": "Overdue",
+      "paused": "Paused",
+      "finished": "Finished"
+    },
+    "filters": {
+      "status": "Any status"
+    },
+    "sorts": {
+      "next": "Next date",
+      "amount": "Amount",
+      "name": "Name"
+    },
+    "amount_modes": {
+      "occurrence": "Per occurrence",
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "period": {
+      "monthly": "per month",
+      "yearly": "per year"
+    },
+    "interval": {
+      "label": "Every",
+      "anchor_day": "Anchor day",
+      "anchor_hint": "Day of the month the charge lands on. Short months use their last day.",
+      "units": {
+        "day": "days",
+        "week": "weeks",
+        "month": "months",
+        "year": "years"
+      },
+      "every": {
+        "day": "Every {count} days",
+        "week": "Every {count} weeks",
+        "month": "Every {count} months",
+        "year": "Every {count} years"
+      }
+    },
+    "fields": {
+      "start_date": "Start date",
+      "end_date": "End date",
+      "payment_limit": "Payment limit",
+      "unlimited": "Unlimited",
+      "notify_days_before": "Remind (days before)",
+      "auto_renew": "Renew automatically"
+    },
+    "actions": {
+      "pay": "Pay",
+      "skip": "Skip",
+      "unpay": "Cancel payment",
+      "unskip": "Restore payment",
+      "run_now": "Run now",
+      "history": "History"
+    },
+    "history": {
+      "title": "History",
+      "empty": "Nothing recorded yet",
+      "by": "by {login}",
+      "created": "Created",
+      "price_changed": "Amount changed",
+      "schedule_changed": "Schedule changed",
+      "currency_changed": "Currency changed",
+      "paused": "Paused",
+      "resumed": "Resumed",
+      "skipped": "Occurrence skipped",
+      "paid": "Payment recorded",
+      "ended": "Ended",
+      "created_detail": "{amount}, {schedule}",
+      "schedule_changed_detail": "New schedule: {schedule}",
+      "paid_detail": "{date} — {amount}",
+      "skipped_detail": "{date}",
+      "ended_detail": "Last payment {date}"
+    },
+    "calendar": {
+      "prev_month": "Previous month",
+      "next_month": "Next month",
+      "today": "Today",
+      "legend_upcoming": "Upcoming",
+      "legend_due": "Due today",
+      "legend_overdue": "Overdue",
+      "legend_paid": "Paid",
+      "legend_skipped": "Skipped",
+      "occurrence": "Scheduled payment"
     }
   },
   "import": {

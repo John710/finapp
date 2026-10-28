@@ -432,6 +432,7 @@ const navItems = [
   { path: '/budgets', name: 'budgets', labelKey: 'nav.budgets', icon: 'wallet', iconClass: 'w-5 h-5' },
   { path: '/debts', name: 'debts', labelKey: 'nav.debts', icon: 'briefcase', iconClass: 'w-5 h-5' },
   { path: '/recurring', name: 'recurring', labelKey: 'nav.recurring', icon: 'repeat', iconClass: 'w-5 h-5' },
+  { path: '/recurring/calendar', name: 'recurring-calendar', labelKey: 'nav.calendar', icon: 'calendar', iconClass: 'w-5 h-5' },
   { path: '/reports', name: 'reports', labelKey: 'nav.reports', icon: 'chart', iconClass: 'w-5 h-5' },
   { path: '/tags', name: 'tags', labelKey: 'nav.tags', icon: 'tag', iconClass: 'w-5 h-5' }
 ]

@@ -10,6 +10,7 @@
     "settings": "Настройки",
     "tags": "Теги",
     "recurring": "Регулярные",
+    "calendar": "Календарь",
     "accountdetail": "Детали счёта"
   },
   "auth": {
@@ -148,12 +149,107 @@
     "next": "Следующий",
     "income": "Доход",
     "expense": "Расход",
+    "schedule": "График",
+    "due": "К оплате",
+    "paid_count": "Оплачено: {count}",
+    "paid_toast": "Платёж за {date} внесён",
+    "skipped_toast": "Платёж за {date} пропущен",
+    "unpaid_toast": "Платёж за {date} отменён",
+    "unskipped_toast": "Платёж за {date} возвращён",
+    "ran_toast": "Платёж создан",
     "frequencies": {
       "daily": "Ежедневно",
       "weekly": "Еженедельно",
       "biweekly": "Каждые 2 недели",
       "monthly": "Ежемесячно",
       "yearly": "Ежегодно"
+    },
+    "status": {
+      "scheduled": "По графику",
+      "due_today": "Сегодня",
+      "overdue": "Просрочено",
+      "paused": "Пауза",
+      "finished": "Завершено"
+    },
+    "filters": {
+      "status": "Любой статус"
+    },
+    "sorts": {
+      "next": "По дате",
+      "amount": "По сумме",
+      "name": "По названию"
+    },
+    "amount_modes": {
+      "occurrence": "За период",
+      "monthly": "В месяц",
+      "yearly": "В год"
+    },
+    "period": {
+      "monthly": "в месяц",
+      "yearly": "в год"
+    },
+    "interval": {
+      "label": "Интервал",
+      "anchor_day": "День оплаты",
+      "anchor_hint": "День месяца, на который приходится платёж. В коротких месяцах берётся последний день.",
+      "units": {
+        "day": "дней",
+        "week": "недель",
+        "month": "месяцев",
+        "year": "лет"
+      },
+      "every": {
+        "day": "{count}-дневный цикл",
+        "week": "{count}-недельный цикл",
+        "month": "{count}-месячный цикл",
+        "year": "{count}-летний цикл"
+      }
+    },
+    "fields": {
+      "start_date": "Дата начала",
+      "end_date": "Дата окончания",
+      "payment_limit": "Максимум платежей",
+      "unlimited": "Без ограничений",
+      "notify_days_before": "Напоминание за, дней",
+      "auto_renew": "Продлевать автоматически"
+    },
+    "actions": {
+      "pay": "Оплатить",
+      "skip": "Пропустить",
+      "unpay": "Отменить платёж",
+      "unskip": "Вернуть платёж",
+      "run_now": "Выполнить",
+      "history": "История"
+    },
+    "history": {
+      "title": "История",
+      "empty": "Записей пока нет",
+      "by": "от {login}",
+      "created": "Создано",
+      "price_changed": "Изменена сумма",
+      "schedule_changed": "Изменён график",
+      "currency_changed": "Изменена валюта",
+      "paused": "Приостановлено",
+      "resumed": "Возобновлено",
+      "skipped": "Пропущен платёж",
+      "paid": "Платёж внесён",
+      "ended": "Завершено",
+      "created_detail": "{amount}, {schedule}",
+      "schedule_changed_detail": "Новый график: {schedule}",
+      "paid_detail": "{date} — {amount}",
+      "skipped_detail": "{date}",
+      "ended_detail": "Последний платёж {date}"
+    },
+    "calendar": {
+      "prev_month": "Предыдущий месяц",
+      "next_month": "Следующий месяц",
+      "today": "Сегодня",
+      "legend_upcoming": "Скоро",
+      "legend_due": "Сегодня",
+      "legend_overdue": "Просрочено",
+      "legend_paid": "Оплачено",
+      "legend_skipped": "Пропущено",
+      "occurrence": "Запланированный платёж"
     }
   },
   "import": {

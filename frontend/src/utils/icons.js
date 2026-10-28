@@ -42,6 +42,8 @@ export const uiIconImports = {
   boat: () => import('@hugeicons/core-free-icons/dist/esm/BoatIcon'),
   arrowDown: () => import('@hugeicons/core-free-icons/dist/esm/ArrowDown01Icon'),
   money: () => import('@hugeicons/core-free-icons/dist/esm/Money01Icon'),
+  calendar: () => import('@hugeicons/core-free-icons/dist/esm/Calendar01Icon'),
+  clock: () => import('@hugeicons/core-free-icons/dist/esm/Clock01Icon'),
 }
 
 export const categoryIconImports = {
