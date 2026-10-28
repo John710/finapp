@@ -115,6 +115,9 @@ async function recurringRoutes(fastify, opts) {
       ...rule,
       status: statusOf(rule, today, paidSet, skipSet),
       monthly_equivalent: monthlyEquivalent(rule),
+      // The occurrence pay/skip/run-now act on — overdue rules point backwards
+      // from today here, while next_occurrence always looks forwards.
+      due_date: dueOccurrence(rule, today, paidSet, skipSet),
       next_occurrence: upcoming(rule, today, paidSet, skipSet)
     }
   }

@@ -45,6 +45,24 @@ function buildServer(handlers = []) {
 const CURRENT_DATE = { match: /CURRENT_DATE/, rows: () => [{ today: '2026-03-05' }] }
 
 describe('GET /recurring', () => {
+  it('exposes the owed occurrence the row buttons and run-now act on', async () => {
+    const { app } = buildServer([
+      CURRENT_DATE,
+      // next_date is in the past and already paid: the owed date is the first
+      // unpaid one from that cursor forwards, not the one after today.
+      { match: /FROM recurring_rules/, rows: () => [baseRule({ next_date: '2026-02-28' })] },
+      { match: /FROM transactions/, rows: () => [{ rule_id: 1, date: '2026-02-28' }] },
+      { match: /FROM recurring_exceptions/, rows: () => [] }
+    ])
+    const res = await app.inject({ method: 'GET', url: '/recurring' })
+    expect(res.statusCode).toBe(200)
+    const [rule] = res.json()
+    expect(rule.due_date).toBe('2026-03-31')
+    expect(rule.next_occurrence).toBe('2026-03-31')
+    expect(rule.status).toBe('scheduled')
+    await app.close()
+  })
+
   it('returns calendar days as text and adds the computed schedule state', async () => {
     const { app } = buildServer([
       CURRENT_DATE,

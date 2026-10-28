@@ -406,6 +406,7 @@ let eurRate = null
   assert('list enriches with status/monthly equivalent', !!mine && mine.status === 'scheduled' && near(mine.monthly_equivalent, 12.5), JSON.stringify(mine && { status: mine.status, me: mine.monthly_equivalent }))
   assert('list counts paid occurrences', mine?.occurrences_paid === 3, `${mine?.occurrences_paid}`)
   assert('list reports the next occurrence after the ledger cursor', mine?.next_occurrence === '2027-04-30', `${mine?.next_occurrence}`)
+  assert('list reports the owed occurrence for the row buttons', mine?.due_date === '2027-04-30', `${mine?.due_date}`)
 
   const history = await req('GET', `/recurring/${ruleId}/history`)
   const historyRows = Array.isArray(history.json) ? history.json : []
