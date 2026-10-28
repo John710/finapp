@@ -23,7 +23,7 @@
         <select v-model="delimiter" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm">
           <option value=";">;</option>
           <option value=",">,</option>
-          <option value="\t">Tab</option>
+          <option :value="'\t'">{{ $t('import.delimiter_tab') }}</option>
         </select>
       </div>
 
@@ -58,7 +58,7 @@
       </div>
 
       <!-- Result -->
-      <div v-if="result" class="mb-4 p-3 rounded-lg" :class="result.errors?.length ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800'">
+      <div v-if="result" class="mb-4 p-3 rounded-lg" :class="result.stats?.errors?.length ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800'">
         <p class="font-medium">{{ $t('import.created') }}: {{ result.stats.created }} / {{ result.total }}</p>
         <p v-if="result.stats.skipped">{{ $t('import.skipped') }}: {{ result.stats.skipped }}</p>
         <details v-if="result.stats.errors?.length">
@@ -114,8 +114,11 @@ const mappingLabels = computed(() => ({
 
 watch(() => props.modelValue, async (val) => {
   if (val) {
-    const data = await api('/import/profiles')
-    profiles.value = data
+    try {
+      profiles.value = await api('/import/profiles')
+    } catch (e) {
+      window.$toast?.error(e.message || t('import.failed'))
+    }
     reset()
   }
 })
@@ -151,25 +154,28 @@ async function previewFile() {
 }
 
 async function importFile() {
-  if (!file.value) return
+  if (!file.value || importing.value) return
   importing.value = true
   try {
-    await upload({ previewOnly: false })
+    // Refresh the parent list only when the import actually went through
+    if (await upload({ previewOnly: false })) emit('imported')
   } finally {
     importing.value = false
   }
-  emit('imported')
 }
 
+// Returns true when the request succeeded
 async function upload(opts) {
   const formData = new FormData()
-  formData.append('file', file.value)
+  // Multipart parsers stream fields in order: `options` must precede `file`
+  // so the server has the options by the time it reads the file part
   formData.append('options', JSON.stringify({
     profile: profile.value,
     delimiter: delimiter.value,
     mapping: mapping.value,
     previewOnly: opts.previewOnly
   }))
+  formData.append('file', file.value)
 
   try {
     // api() handles 401/refresh for the multipart upload too (raw fetch did not)
@@ -182,8 +188,10 @@ async function upload(opts) {
       result.value = data
       window.$toast?.success(t('import.completed'))
     }
+    return true
   } catch (e) {
     window.$toast?.error(e.message || t('import.failed'))
+    return false
   }
 }
 </script>

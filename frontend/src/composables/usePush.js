@@ -4,7 +4,7 @@ import { api } from '@/utils/api.js'
 import { logger } from '@/utils/logger.js'
 
 const isSupported = 'serviceWorker' in navigator && 'PushManager' in window && window.isSecureContext
-logger.log('[push] isSupported:', isSupported, 'secureContext:', window.isSecureContext, 'hasSW:', 'serviceWorker' in navigator, 'hasPush:', 'PushManager' in window, 'permission:', Notification.permission)
+logger.log('[push] isSupported:', isSupported, 'secureContext:', window.isSecureContext, 'hasSW:', 'serviceWorker' in navigator, 'hasPush:', 'PushManager' in window, 'permission:', typeof Notification !== 'undefined' ? Notification.permission : 'unsupported')
 
 const subscription = ref(null)
 const loading = ref(false)
@@ -127,6 +127,33 @@ export function usePush() {
   }
 
   return { isSupported, serverConfigured, subscription, loading, getSubscription, subscribe, unsubscribe, checkServerConfigured }
+}
+
+// Used on logout (outside any component, so no i18n/toasts): remove this
+// device's push subscription from the server and the browser. Best-effort and
+// bounded, a failure here must never block signing out.
+export async function releasePushSubscription() {
+  if (!isSupported) return
+  try {
+    const reg = await navigator.serviceWorker.getRegistration()
+    const sub = await reg?.pushManager.getSubscription()
+    if (sub) {
+      try {
+        await api('/unsubscribe', {
+          method: 'POST',
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+          signal: AbortSignal.timeout(3000)
+        })
+      } catch (err) {
+        // Still drop the browser side: the server prunes dead endpoints on its own
+        logger.warn('[push] server unsubscribe failed on logout:', err)
+      }
+      await sub.unsubscribe().catch(() => {})
+    }
+    subscription.value = null
+  } catch (err) {
+    logger.warn('[push] release on logout failed:', err)
+  }
 }
 
 function urlBase64ToUint8Array(base64String) {

@@ -103,7 +103,7 @@ v-model="form.currency" required
           </div>
           <div class="flex gap-3 mt-6">
             <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closeModal">{{ $t('common.cancel') }}</button>
-            <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
+            <button type="submit" :disabled="saving" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">{{ $t('common.save') }}</button>
           </div>
         </form>
       </BaseModal>
@@ -139,7 +139,7 @@ v-model="paymentForm.currency" required
           </div>
           <div class="flex gap-3 mt-6">
             <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closePaymentModal">{{ $t('common.cancel') }}</button>
-            <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
+            <button type="submit" :disabled="saving" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">{{ $t('common.save') }}</button>
           </div>
         </form>
       </BaseModal>
@@ -187,6 +187,7 @@ import { useI18n } from 'vue-i18n'
 import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { formatDate, parseAmount } from '@/utils/format'
+import { logger } from '@/utils/logger.js'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import BaseSkeleton from '@/components/BaseSkeleton.vue'
@@ -214,6 +215,8 @@ const showPaymentModal = ref(false)
 const showHistoryModal = ref(false)
 const showQuickAccount = ref(false)
 const isEditing = ref(false)
+const saving = ref(false)
+const deleting = ref(false)
 const currentDebtId = ref(null)
 const historyPayments = ref([])
 const historyDebt = ref(null)
@@ -261,39 +264,77 @@ function onQuickAccountCreated(account) {
 }
 
 async function saveDebt() {
+  // Re-entry guard: double click / Ctrl+Enter while a request is in flight
+  if (saving.value) return
   form.amount = parseAmount(form.amount)
-  if (isEditing.value) {
-    await debtsStore.updateDebt(form.id, { ...form })
-  } else {
-    await debtsStore.createDebt({ ...form })
+  saving.value = true
+  try {
+    if (isEditing.value) {
+      await debtsStore.updateDebt(form.id, { ...form })
+    } else {
+      await debtsStore.createDebt({ ...form })
+    }
+    closeModal()
+  } catch (e) {
+    logger.error('Failed to save debt', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    saving.value = false
   }
-  closeModal()
 }
 
 async function savePayment() {
+  if (saving.value) return
   paymentForm.amount = parseAmount(paymentForm.amount)
-  await debtsStore.addPayment(currentDebtId.value, { ...paymentForm })
-  closePaymentModal()
+  saving.value = true
+  try {
+    await debtsStore.addPayment(currentDebtId.value, { ...paymentForm })
+    closePaymentModal()
+  } catch (e) {
+    logger.error('Failed to save payment', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    saving.value = false
+  }
 }
 
 async function deleteDebt(id) {
-  if (!(await window.$confirm({ message: t('common.confirm_delete') }))) return
+  if (deleting.value) return
+  if (!(await window.$confirm({ message: t('common.confirm_delete'), danger: true }))) return
   const item = debtsStore.debts.find(d => d.id === id)
-  await debtsStore.deleteDebt(id)
-  if (item) {
-    undo.push({
-      message: t('common.undo_delete'),
-      action: async () => {
-        await debtsStore.createDebt({ ...item })
-      }
-    })
+  deleting.value = true
+  try {
+    await debtsStore.deleteDebt(id)
+    if (item) {
+      undo.push({
+        message: t('common.undo_delete'),
+        action: async () => {
+          try {
+            await debtsStore.createDebt({ ...item })
+          } catch (e) {
+            logger.error('Failed to restore debt', e)
+            window.$toast?.error(e.message || t('common.error'))
+          }
+        }
+      })
+    }
+  } catch (e) {
+    logger.error('Failed to delete debt', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    deleting.value = false
   }
 }
 
 async function openHistory(debt) {
-  historyDebt.value = debt
-  const payments = await debtsStore.getPayments(debt.id)
-  historyPayments.value = payments
-  showHistoryModal.value = true
+  try {
+    const payments = await debtsStore.getPayments(debt.id)
+    historyDebt.value = debt
+    historyPayments.value = payments
+    showHistoryModal.value = true
+  } catch (e) {
+    logger.error('Failed to load payments', e)
+    window.$toast?.error(e.message || t('common.error'))
+  }
 }
 </script>

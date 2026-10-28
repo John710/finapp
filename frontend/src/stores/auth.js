@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useRatesStore } from './rates'
 import { api, clearRefreshDead } from '@/utils/api.js'
+import { releasePushSubscription } from '@/composables/usePush.js'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -37,6 +38,9 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = data.user
       if (data.user?.language) {
         localStorage.setItem('lang', data.user.language)
+      }
+      if (data.user?.base_currency) {
+        useRatesStore().setBaseCurrency(data.user.base_currency)
       }
     } catch (e) {
       // A network failure is not a logout: fetch rejects with TypeError, while
@@ -87,6 +91,9 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout() {
     try {
+      // While the session is still valid: drop this device's push subscription
+      // so it stops receiving the previous user's notifications.
+      await releasePushSubscription()
       await api('/users/logout', { method: 'POST' })
     } finally {
       user.value = null

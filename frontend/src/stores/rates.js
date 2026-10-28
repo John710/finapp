@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { api } from '../utils/api'
 import { getUserLocale } from '../utils/locale'
 import { logger } from '../utils/logger.js'
+import { formatCurrency } from '../utils/format.js'
 
 export const useRatesStore = defineStore('rates', () => {
   const rates = ref([])
@@ -61,12 +62,14 @@ export const useRatesStore = defineStore('rates', () => {
     if (Number.isNaN(num)) return '-'
 
     const converted = convert(num, fromCurrency, baseCurrency.value)
-    const baseFormatted = new Intl.NumberFormat(getUserLocale(), { style: 'currency', currency: baseCurrency.value }).format(converted !== null ? converted : num)
+    // No rate: show the amount in its own currency. Formatting the raw number
+    // with the base-currency symbol would present a wrong figure as correct.
+    if (converted === null) return formatCurrency(num, fromCurrency)
 
-    if (!showOriginal || fromCurrency === baseCurrency.value || converted === null) return baseFormatted
+    const baseFormatted = formatCurrency(converted, baseCurrency.value)
+    if (!showOriginal || fromCurrency === baseCurrency.value) return baseFormatted
 
-    const origFormatted = new Intl.NumberFormat(getUserLocale(), { style: 'currency', currency: fromCurrency }).format(num)
-    return `${origFormatted} ≈ ${baseFormatted}`
+    return `${formatCurrency(num, fromCurrency)} ≈ ${baseFormatted}`
   }
 
   // Rates change at most daily — a short TTL avoids refetching /currencies on

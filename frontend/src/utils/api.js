@@ -25,13 +25,24 @@ export function clearRefreshDead() {
   refreshDead = false
 }
 
+// Full reload to /login, remembering where the user was so login can return
+// them there (LoginView reads ?redirect=).
+function redirectToLogin() {
+  const { pathname, search } = window.location
+  const onAuthPage = pathname === '/login' || pathname === '/register'
+  const here = `${pathname}${search}`
+  window.location.href = onAuthPage || here === '/'
+    ? '/login'
+    : `/login?redirect=${encodeURIComponent(here)}`
+}
+
 async function refreshSession() {
   // Deduplicate: many parallel requests can hit 401 at once (dashboard load),
   // but the refresh cookie is one-time use — a second concurrent refresh with
   // the already-consumed cookie would falsely log the user out and trip the
   // backend's replay protection.
   if (refreshDead) {
-    throw new Error('Session expired')
+    throw new Error(t('errors.session_expired'))
   }
   if (!refreshPromise) {
     refreshPromise = (async () => {
@@ -41,7 +52,7 @@ async function refreshSession() {
       })
       if (!res.ok) {
         refreshDead = true
-        throw new Error('Session expired')
+        throw new Error(t('errors.session_expired'))
       }
       return res.json()
     })().finally(() => {
@@ -51,7 +62,11 @@ async function refreshSession() {
   return refreshPromise
 }
 
+// `options.responseType === 'blob'` returns the response body as a Blob (file
+// downloads) instead of parsing JSON; everything else is passed to fetch.
 export async function api(path, options = {}) {
+  const { responseType, ...fetchOptions } = options
+  options = fetchOptions
   const url = `${API_URL}${path}`
 
   const headers = { ...options.headers }
@@ -70,8 +85,8 @@ export async function api(path, options = {}) {
     try {
       await refreshSession()
     } catch {
-      window.location.href = '/login'
-      throw new Error('Session expired')
+      redirectToLogin()
+      throw new Error(t('errors.session_expired'))
     }
     res = await fetch(url, {
       ...options,
@@ -79,8 +94,8 @@ export async function api(path, options = {}) {
       credentials: 'include'
     })
     if (res.status === 401) {
-      window.location.href = '/login'
-      throw new Error('Session expired')
+      redirectToLogin()
+      throw new Error(t('errors.session_expired'))
     }
   }
 
@@ -95,7 +110,7 @@ export async function api(path, options = {}) {
     if (res.status === 429 || err.statusCode === 429) {
       throw new Error(t('errors.rate_limited'))
     }
-    const e = new Error(err.error || `HTTP ${res.status}`)
+    const e = new Error(err.error || t('errors.http_status', { status: res.status }))
     // Expose extra API flags (e.g. totp_required on login) to callers
     for (const key of Object.keys(err)) {
       if (key !== 'error') e[key] = err[key]
@@ -104,5 +119,6 @@ export async function api(path, options = {}) {
   }
 
   if (res.status === 204) return null
+  if (responseType === 'blob') return res.blob()
   return res.json()
 }

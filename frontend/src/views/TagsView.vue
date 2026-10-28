@@ -126,7 +126,7 @@ function goToTransactions(tagId) {
 }
 
 async function deleteTag(id) {
-  if (!(await window.$confirm({ message: t('common.confirm_delete') }))) return
+  if (!(await window.$confirm({ message: t('common.confirm_delete'), danger: true }))) return
   const item = tagsStore.tags.find(t => t.id === id)
   deletingId.value = id
   try {
@@ -135,7 +135,11 @@ async function deleteTag(id) {
       undo.push({
         message: t('common.undo_delete'),
         action: async () => {
-          await tagsStore.createTag({ name: item.name, color: item.color })
+          try {
+            await tagsStore.createTag({ name: item.name, color: item.color })
+          } catch (e) {
+            window.$toast?.error(e.message || t('common.error'))
+          }
         }
       })
     }

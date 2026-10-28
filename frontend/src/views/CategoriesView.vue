@@ -158,7 +158,7 @@ function openMerge(cat) {
 
 async function confirmMerge() {
   if (!mergeSource.value || !mergeTargetId.value) return
-  const confirmed = await window.$confirm({ message: t('categories.merge_confirm', { name: mergeSource.value.name }) })
+  const confirmed = await window.$confirm({ message: t('categories.merge_confirm', { name: mergeSource.value.name }), danger: true })
   if (!confirmed) return
   try {
     await api(`/categories/${mergeSource.value.id}/merge`, { method: 'POST', body: JSON.stringify({ target_id: mergeTargetId.value }) })

@@ -27,7 +27,7 @@
       </div>
       <div v-else-if="!totpEnabled && setupStage === 'confirm'" class="space-y-3">
         <div class="flex flex-col items-center gap-3">
-          <img v-if="totpQr" :src="totpQr" alt="TOTP QR" class="w-44 h-44 rounded-2xl bg-white p-2" />
+          <img v-if="totpQr" :src="totpQr" :alt="$t('settings.totp_qr_alt')" class="w-44 h-44 rounded-2xl bg-white p-2" />
           <p class="text-xs text-slate-500 break-all text-center">{{ totpSecret }}</p>
         </div>
         <div class="flex gap-2 max-w-xs mx-auto">

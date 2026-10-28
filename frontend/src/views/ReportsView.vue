@@ -2,7 +2,7 @@
     <div>
       <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
         <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ $t('reports.title') }}</h1>
-        <button class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors self-start" @click="exportData">
+        <button class="bg-primary-500 hover:bg-primary-600 shadow-card text-white px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 transition-colors self-start disabled:opacity-50" :disabled="exporting" @click="exportData">
           <Icon name="upload" class="w-4 h-4" />
           {{ $t('reports.export_csv') }}
         </button>
@@ -304,6 +304,7 @@ import { logger } from '@/utils/logger.js'
   import { useDebtsStore } from '../stores/debts'
   import { useRecurringStore } from '../stores/recurring'
   import { useRatesStore } from '../stores/rates'
+  import { format as echartsFormat } from 'echarts/core'
   import { formatFull } from '@/utils/currency'
   import { getUserLocale } from '@/utils/locale'
   import { formatCurrency as formatCurrencyValue } from '@/utils/format'
@@ -452,31 +453,39 @@ const recurringPlanLegend = computed(() => [
   { label: `${t('reports.expense')} · ${t('reports.actual')}`, color: '#8fa2d8' }
 ])
 
+// Sankey node names are ECharts' node ids and must be unique: an income and an
+// expense category can share a name (that made the graph cyclic: "Sankey is a
+// DAG"). Nodes therefore use ids like `income:<categoryId>`, and the readable
+// name travels in `title` (shown by the label/tooltip formatters).
+const SANKEY_CASH_FLOW_ID = 'cash_flow'
+const encodeHTML = (value) => echartsFormat.encodeHTML(String(value ?? ''))
+
 const sankeyData = computed(() => {
   const nodes = []
   const links = []
-  const nodeNames = new Set()
   const nodeValues = {}
-  const cashFlowName = t('reports.cash_flow')
+  const titles = { [SANKEY_CASH_FLOW_ID]: t('reports.cash_flow') }
+  const categoryTitle = (cat) => cat.name || t('categories.uncategorized')
+  const categoryNodeId = (type, cat) => `${type}:${cat.id ?? 'none'}`
 
   // Build income nodes
   const incomeCategories = reportsStore.byCategoryAll.filter(c => c.type === 'income' && parseFloat(c.total) > 0)
   incomeCategories.forEach(cat => {
-    if (!nodeNames.has(cat.name)) {
-      const value = parseFloat(cat.total)
-      nodes.push({
-        name: cat.name,
-        value,
-        itemStyle: { color: cat.color || '#94a3b8' }
-      })
-      nodeNames.add(cat.name)
-      nodeValues[cat.name] = value
-    }
+    const id = categoryNodeId('income', cat)
+    const value = parseFloat(cat.total)
+    titles[id] = categoryTitle(cat)
+    nodes.push({
+      name: id,
+      title: titles[id],
+      value,
+      itemStyle: { color: cat.color || '#94a3b8' }
+    })
+    nodeValues[id] = value
     // Link income categories to Cash Flow
     links.push({
-      source: cat.name,
-      target: cashFlowName,
-      value: parseFloat(cat.total),
+      source: id,
+      target: SANKEY_CASH_FLOW_ID,
+      value,
       lineStyle: {
         color: cat.color || '#94a3b8',
         curveness: 0.3
@@ -485,35 +494,33 @@ const sankeyData = computed(() => {
   })
 
   // Add central Cash Flow node
-  if (!nodeNames.has(cashFlowName)) {
-    const totalIncome = incomeCategories.reduce((sum, c) => sum + parseFloat(c.total), 0)
-    nodes.push({
-      name: cashFlowName,
-      value: totalIncome,
-      itemStyle: { color: '#7c6fde' }
-    })
-    nodeNames.add(cashFlowName)
-    nodeValues[cashFlowName] = totalIncome
-  }
+  const totalIncome = incomeCategories.reduce((sum, c) => sum + parseFloat(c.total), 0)
+  nodes.push({
+    name: SANKEY_CASH_FLOW_ID,
+    title: titles[SANKEY_CASH_FLOW_ID],
+    value: totalIncome,
+    itemStyle: { color: '#7c6fde' }
+  })
+  nodeValues[SANKEY_CASH_FLOW_ID] = totalIncome
 
   // Build expense nodes
   const expenseCategories = reportsStore.byCategoryAll.filter(c => c.type === 'expense' && parseFloat(c.total) > 0)
   expenseCategories.forEach(cat => {
-    if (!nodeNames.has(cat.name)) {
-      const value = parseFloat(cat.total)
-      nodes.push({
-        name: cat.name,
-        value,
-        itemStyle: { color: cat.color || '#94a3b8' }
-      })
-      nodeNames.add(cat.name)
-      nodeValues[cat.name] = value
-    }
+    const id = categoryNodeId('expense', cat)
+    const value = parseFloat(cat.total)
+    titles[id] = categoryTitle(cat)
+    nodes.push({
+      name: id,
+      title: titles[id],
+      value,
+      itemStyle: { color: cat.color || '#94a3b8' }
+    })
+    nodeValues[id] = value
     // Link Cash Flow to expense categories
     links.push({
-      source: cashFlowName,
-      target: cat.name,
-      value: parseFloat(cat.total),
+      source: SANKEY_CASH_FLOW_ID,
+      target: id,
+      value,
       lineStyle: {
         color: cat.color || '#94a3b8',
         curveness: 0.3
@@ -521,28 +528,26 @@ const sankeyData = computed(() => {
     })
   })
 
-  return { nodes, links, nodeValues }
+  return { nodes, links, nodeValues, titles }
 })
 
 const sankeyChartOption = computed(() => {
-  const { nodes, links } = sankeyData.value
-  const cashFlowName = t('reports.cash_flow')
-  // Separate nodes by side
-  const incomeNodes = nodes.filter(n => {
-    return links.some(l => l.source === n.name && l.target === cashFlowName)
-  })
-  const expenseNodes = nodes.filter(n => {
-    return links.some(l => l.target === n.name && l.source === cashFlowName)
-  })
+  const { nodes, links, titles } = sankeyData.value
+  // Separate nodes by side: the label sits to the right of income/cash-flow
+  // nodes and to the left of expense nodes
+  const incomeNodeIds = new Set(
+    links.filter(l => l.target === SANKEY_CASH_FLOW_ID).map(l => l.source)
+  )
 
   return {
     tooltip: {
       trigger: 'item',
       formatter: (params) => {
+        // Names come from user data and ECharts renders this string as HTML
         if (params.dataType === 'edge') {
-          return `${params.data.source} → ${params.data.target}: ${formatFull(params.data.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}`
+          return `${encodeHTML(titles[params.data.source])} → ${encodeHTML(titles[params.data.target])}: ${formatFull(params.data.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}`
         }
-        return `${params.name}: ${formatFull(params.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}`
+        return `${encodeHTML(params.data?.title)}: ${formatFull(params.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}`
       }
     },
     series: [
@@ -563,9 +568,10 @@ const sankeyChartOption = computed(() => {
           ...node,
           label: {
             show: true,
-            position: (incomeNodes.find(n => n.name === node.name) || node.name === cashFlowName) ? 'right' : 'left',
+            position: (incomeNodeIds.has(node.name) || node.name === SANKEY_CASH_FLOW_ID) ? 'right' : 'left',
             formatter: (params) => {
-              return `${params.name}\n${formatFull(params.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}`
+              // Canvas text, not HTML: no escaping needed
+              return `${params.data?.title}\n${formatFull(params.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}`
             },
             color: isDark.value ? '#f1f5f9' : '#1e293b',
             fontSize: 12,
@@ -620,7 +626,18 @@ const sankeyChartOption = computed(() => {
     return formatCurrencyValue(value || 0, baseCurrency.value)
   }
 
-  function exportData() {
-    reportsStore.exportCsv({ from: filters.from, to: filters.to })
+  const exporting = ref(false)
+
+  async function exportData() {
+    if (exporting.value) return
+    exporting.value = true
+    try {
+      await reportsStore.exportCsv({ from: filters.from, to: filters.to })
+    } catch (e) {
+      logger.error('Export failed', e)
+      window.$toast?.error(e.message || t('common.error'))
+    } finally {
+      exporting.value = false
+    }
   }
   </script>

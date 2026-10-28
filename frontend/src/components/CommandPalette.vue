@@ -26,7 +26,7 @@
       <button
         v-for="(item, i) in filtered"
         :id="`command-option-${i}`"
-        :key="item.path"
+        :key="item.id"
         role="option"
         :aria-selected="i === selectedIndex"
         class="w-full text-left px-4 py-2.5 flex items-center gap-3 transition-colors"
@@ -58,18 +58,18 @@ const inputRef = ref(null)
 const selectedId = computed(() => filtered.value.length ? `command-option-${selectedIndex.value}` : undefined)
 
 const items = computed(() => [
-  { name: t('nav.dashboard'), path: '/', icon: 'home' },
-  { name: t('nav.transactions'), path: '/transactions', icon: 'calculator' },
-  { name: t('nav.accounts'), path: '/accounts', icon: 'creditCard' },
-  { name: t('nav.categories'), path: '/categories', icon: 'tag' },
-  { name: t('nav.budgets'), path: '/budgets', icon: 'wallet' },
-  { name: t('nav.debts'), path: '/debts', icon: 'bank' },
-  { name: t('nav.reports'), path: '/reports', icon: 'chart' },
-  { name: t('nav.tags'), path: '/tags', icon: 'tag' },
-  { name: t('nav.recurring'), path: '/recurring', icon: 'repeat' },
-  { name: t('nav.calendar'), path: '/recurring/calendar', icon: 'calendar' },
-  { name: t('nav.settings'), path: '/settings', icon: 'settings' },
-  { name: `${t('transactions.add')} (${t('command_palette.new_transaction')})`, path: '/transactions', icon: 'plus', shortcut: 'Ctrl+Shift+N' }
+  { id: 'dashboard', name: t('nav.dashboard'), path: '/', icon: 'home' },
+  { id: 'transactions', name: t('nav.transactions'), path: '/transactions', icon: 'calculator' },
+  { id: 'accounts', name: t('nav.accounts'), path: '/accounts', icon: 'creditCard' },
+  { id: 'categories', name: t('nav.categories'), path: '/categories', icon: 'tag' },
+  { id: 'budgets', name: t('nav.budgets'), path: '/budgets', icon: 'wallet' },
+  { id: 'debts', name: t('nav.debts'), path: '/debts', icon: 'bank' },
+  { id: 'reports', name: t('nav.reports'), path: '/reports', icon: 'chart' },
+  { id: 'tags', name: t('nav.tags'), path: '/tags', icon: 'tag' },
+  { id: 'recurring', name: t('nav.recurring'), path: '/recurring', icon: 'repeat' },
+  { id: 'calendar', name: t('nav.calendar'), path: '/recurring/calendar', icon: 'calendar' },
+  { id: 'settings', name: t('nav.settings'), path: '/settings', icon: 'settings' },
+  { id: 'new-transaction', name: `${t('transactions.add')} (${t('command_palette.new_transaction')})`, path: '/transactions', icon: 'plus', shortcut: 'Ctrl+Shift+N' }
 ])
 
 const filtered = computed(() => {
@@ -107,14 +107,14 @@ function onKeydown(e) {
   }
 }
 
-function select(item) {
+async function select(item) {
   close()
-  if (item.path === '/transactions' && item.shortcut) {
-    router.push('/transactions')
-    // Emit event for parent to open transaction modal
-    setTimeout(() => window.dispatchEvent(new CustomEvent('open-transaction-modal')), 100)
+  if (item.id === 'new-transaction') {
+    // The transactions view opens its "add" modal when it sees `?new=1`,
+    // both when it is freshly mounted and when it is already on screen
+    await router.push({ path: '/transactions', query: { new: '1' } })
   } else {
-    router.push(item.path)
+    await router.push(item.path)
   }
 }
 

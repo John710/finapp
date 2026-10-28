@@ -110,7 +110,7 @@ v-model="form.currency" required
           </div>
           <div class="flex gap-3 mt-6">
             <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closeModal">{{ $t('common.cancel') }}</button>
-            <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
+            <button type="submit" :disabled="saving" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">{{ $t('common.save') }}</button>
           </div>
         </form>
       </BaseModal>
@@ -136,6 +136,7 @@ import BaseSkeleton from '@/components/BaseSkeleton.vue'
 import ShareModal from '@/components/ShareModal.vue'
 import { useAuthStore } from '../stores/auth'
 import { parseAmount } from '@/utils/format'
+import { logger } from '@/utils/logger.js'
 
 const { t } = useI18n()
 const undo = useUndo('budgets')
@@ -152,6 +153,8 @@ const baseCurrency = computed(() => ratesStore.baseCurrency)
 const showModal = ref(false)
 const showQuickCategory = ref(false)
 const isEditing = ref(false)
+const saving = ref(false)
+const deleting = ref(false)
 const form = reactive({ category_id: null, tag_ids: [], amount: 0, currency: '', period: 'month' })
 
 onMounted(() => {
@@ -217,25 +220,49 @@ async function saveBudget() {
     return
   }
   const payload = { category_id: form.category_id || null, tag_ids: [...form.tag_ids], amount: form.amount, currency: form.currency, period: form.period, start_date: form.start_date, is_active: form.is_active !== false }
-  if (isEditing.value) {
-    await budgetsStore.updateBudget(form.id, payload)
-  } else {
-    await budgetsStore.createBudget(payload)
+  // Re-entry guard: double click / Ctrl+Enter while a request is in flight
+  if (saving.value) return
+  saving.value = true
+  try {
+    if (isEditing.value) {
+      await budgetsStore.updateBudget(form.id, payload)
+    } else {
+      await budgetsStore.createBudget(payload)
+    }
+    closeModal()
+  } catch (e) {
+    logger.error('Failed to save budget', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    saving.value = false
   }
-  closeModal()
 }
 
 async function deleteBudget(id) {
-  if (!(await window.$confirm({ message: t('common.confirm_delete') }))) return
+  if (deleting.value) return
+  if (!(await window.$confirm({ message: t('common.confirm_delete'), danger: true }))) return
   const item = budgetsStore.budgets.find(b => b.id === id)
-  await budgetsStore.deleteBudget(id)
-  if (item) {
-    undo.push({
-      message: t('common.undo_delete'),
-      action: async () => {
-        await budgetsStore.createBudget({ ...item })
-      }
-    })
+  deleting.value = true
+  try {
+    await budgetsStore.deleteBudget(id)
+    if (item) {
+      undo.push({
+        message: t('common.undo_delete'),
+        action: async () => {
+          try {
+            await budgetsStore.createBudget({ ...item })
+          } catch (e) {
+            logger.error('Failed to restore budget', e)
+            window.$toast?.error(e.message || t('common.error'))
+          }
+        }
+      })
+    }
+  } catch (e) {
+    logger.error('Failed to delete budget', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    deleting.value = false
   }
 }
 </script>

@@ -35,6 +35,17 @@ async function bootstrap() {
   }
 
   const app = createApp(App)
+  // Last line of defence for errors thrown in handlers/hooks that nobody caught:
+  // log the details and tell the user instead of failing silently. Throttled so
+  // a render loop cannot bury the screen in toasts.
+  let lastErrorToastAt = 0
+  app.config.errorHandler = (err, instance, info) => {
+    logger.error('[app] unhandled error:', info, err)
+    const now = Date.now()
+    if (now - lastErrorToastAt < 3000) return
+    lastErrorToastAt = now
+    window.$toast?.error(i18n.global.t('errors.unexpected'))
+  }
   app.use(createPinia())
   app.use(router)
   app.use(i18n)
