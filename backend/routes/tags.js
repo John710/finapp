@@ -1,14 +1,21 @@
 import { t, getUserLang } from '../services/i18n.js'
+import { visibleAccountIds } from '../services/visibility.js'
+import { catalogAdminOnly } from '../services/catalog-access.js'
 
 async function tagRoutes(fastify, opts) {
-  // List all tags (global — shared by every user of the instance)
+  // List all tags (global — shared by every user of the instance). The usage
+  // count only covers transactions the caller can see: tags are shared, other
+  // users' ledgers are not.
   fastify.get('/tags', async (request, reply) => {
+    const visible = await visibleAccountIds(fastify.db, request.user.userId)
     const result = await fastify.db.query(
-      `SELECT t.*, COUNT(tt.transaction_id)::int as transaction_count
+      `SELECT t.*, COUNT(tx.id)::int as transaction_count
        FROM tags t
        LEFT JOIN transaction_tags tt ON tt.tag_id = t.id
+       LEFT JOIN transactions tx ON tx.id = tt.transaction_id AND tx.account_id = ANY($1)
        GROUP BY t.id
-       ORDER BY transaction_count DESC, t.name ASC`
+       ORDER BY transaction_count DESC, t.name ASC`,
+      [visible]
     )
     return result.rows
   })
@@ -35,8 +42,9 @@ async function tagRoutes(fastify, opts) {
     return result.rows[0]
   })
 
-  // Update
+  // Update (admin only — the tag is shared by every user)
   fastify.put('/tags/:id', {
+    preHandler: catalogAdminOnly,
     schema: {
       params: {
         type: 'object',
@@ -68,8 +76,9 @@ async function tagRoutes(fastify, opts) {
     return result.rows[0]
   })
 
-  // Delete
+  // Delete (admin only — removes the tag from every user's transactions)
   fastify.delete('/tags/:id', {
+    preHandler: catalogAdminOnly,
     schema: {
       params: {
         type: 'object',

@@ -79,6 +79,7 @@
     "budget_target_required": "A budget needs a category or at least one tag",
     "merge_same_target": "Cannot merge a category into itself",
     "merge_type_mismatch": "Categories of different types cannot be merged",
+    "catalog_admin_only": "Only the administrator can change, merge or delete categories and tags",
     "token_not_found": "API token not found",
     "invalid_feed_token": "This calendar feed link is invalid or was revoked",
     "not_found": "Not found",

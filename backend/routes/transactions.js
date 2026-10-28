@@ -1,5 +1,6 @@
+import Decimal from 'decimal.js'
 import { t, getUserLang } from '../services/i18n.js'
-import { loadRates, convertAmount } from '../services/currency.js'
+import { loadRates, convertAmountDecimal } from '../services/currency.js'
 import { notify, checkDuplicateNotification } from '../services/notify.js'
 import { visibleAccountIds, accountForWrite, accountForRead, canModifyTransaction } from '../services/visibility.js'
 
@@ -26,6 +27,42 @@ export async function findTransferLeg(client, transfer) {
 
 function isPairedLeg(tx) {
   return tx.type === 'income' && !!tx.transfer_pair_id
+}
+
+// Balance effect of a transaction on its own account, as a numeric string
+function signedAmount(amount, type) {
+  return new Decimal(amount).times(type === 'income' ? 1 : -1).toString()
+}
+
+// Amount credited to the target account of a transfer, in its currency.
+// Returns null when no exchange rate links the two currencies.
+async function creditedTransferAmount(client, amount, sourceAccountId, targetAccountId) {
+  const [srcRes, tgtRes] = await Promise.all([
+    client.query('SELECT currency FROM accounts WHERE id = $1', [sourceAccountId]),
+    client.query('SELECT currency FROM accounts WHERE id = $1', [targetAccountId])
+  ])
+  const sourceCurrency = srcRes.rows[0]?.currency
+  const targetCurrency = tgtRes.rows[0]?.currency
+  if (!sourceCurrency || !targetCurrency || sourceCurrency === targetCurrency) {
+    return { amount: new Decimal(amount).toString() }
+  }
+  const rates = await loadRates(client)
+  const converted = convertAmountDecimal(amount, sourceCurrency, targetCurrency, rates)
+  if (converted === null) return { amount: null, sourceCurrency, targetCurrency }
+  return { amount: converted.toString() }
+}
+
+// A transfer's paired leg sits on (and credits) the counter account. Editing
+// or deleting the transfer rewrites that leg and that account's balance, so the
+// actor needs write access to the counter account too — edit rights on the
+// source account alone are not enough. Returns { leg } or { forbidden: true }.
+async function resolveTransferLeg(client, userId, tx) {
+  if (tx.type !== 'transfer' || !tx.transfer_to_account_id) return { leg: null }
+  const leg = await findTransferLeg(client, tx)
+  if (leg && !(await accountForWrite(client, userId, tx.transfer_to_account_id))) {
+    return { forbidden: true }
+  }
+  return { leg }
 }
 
 async function transactionRoutes(fastify, opts) {
@@ -77,8 +114,11 @@ async function transactionRoutes(fastify, opts) {
 
     const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : ''
 
+    // The list returns split children as their own rows (shown indented under
+    // the parent), so the total must count exactly the rows the list pages
+    // through — same WHERE, nothing extra.
     const countResult = await fastify.db.query(
-      `SELECT COUNT(*) FROM transactions t ${whereClause} AND t.parent_id IS NULL`,
+      `SELECT COUNT(*) FROM transactions t ${whereClause}`,
       params
     )
 
@@ -182,14 +222,14 @@ async function transactionRoutes(fastify, opts) {
           reply.code(400)
           return { error: t('errors.split_transfer', {}, lang) }
         }
-        const splitSum = splits.reduce((s, sp) => s + sp.amount, 0)
-        if (Math.abs(splitSum - amount) > 0.005) {
+        const splitSum = splits.reduce((s, sp) => s.plus(sp.amount), new Decimal(0))
+        if (!splitSum.equals(amount)) {
           await client.query('ROLLBACK')
           reply.code(400)
           return { error: t('errors.split_sum_mismatch', {}, lang) }
         }
         for (const sp of splits) {
-          const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [sp.category_id, userId])
+          const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [sp.category_id])
           if (catRes.rows.length === 0) {
             await client.query('ROLLBACK')
             reply.code(404)
@@ -220,7 +260,7 @@ async function transactionRoutes(fastify, opts) {
       }
 
       if (category_id) {
-        const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [category_id, userId])
+        const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [category_id])
         if (catRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
@@ -249,10 +289,9 @@ async function transactionRoutes(fastify, opts) {
       }
 
       // Update account balance (on the account owner's row)
-      const sign = type === 'income' ? 1 : -1
       await client.query(
         'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
-        [amount * sign, account_id, sourceOwner]
+        [signedAmount(amount, type), account_id, sourceOwner]
       )
 
       // Split children: same account/date/type as the parent, no balance effect
@@ -270,24 +309,13 @@ async function transactionRoutes(fastify, opts) {
       }
 
       if (type === 'transfer' && transfer_to_account_id) {
-        const [srcRes, tgtRes] = await Promise.all([
-          client.query('SELECT currency, type FROM accounts WHERE id = $1', [account_id]),
-          client.query('SELECT currency, type FROM accounts WHERE id = $1', [transfer_to_account_id])
-        ])
-        const sourceCurrency = srcRes.rows[0]?.currency
-        const targetCurrency = tgtRes.rows[0]?.currency
-
-        let targetAmount = amount
-        if (sourceCurrency && targetCurrency && sourceCurrency !== targetCurrency) {
-          const rates = await loadRates(client)
-          const converted = convertAmount(amount, sourceCurrency, targetCurrency, rates)
-          if (converted === null) {
-            await client.query('ROLLBACK')
-            reply.code(400)
-            return { error: t('errors.exchange_rate_missing', { from: sourceCurrency, to: targetCurrency }, lang) }
-          }
-          targetAmount = converted
+        const credit = await creditedTransferAmount(client, amount, account_id, transfer_to_account_id)
+        if (credit.amount === null) {
+          await client.query('ROLLBACK')
+          reply.code(400)
+          return { error: t('errors.exchange_rate_missing', { from: credit.sourceCurrency, to: credit.targetCurrency }, lang) }
         }
+        const targetAmount = credit.amount
 
         // Credit the target account on ITS owner's row
         await client.query(
@@ -318,20 +346,20 @@ async function transactionRoutes(fastify, opts) {
              LEFT JOIN transactions t ON t.category_id = b.category_id AND t.type = 'expense' AND t.user_id = b.user_id
                AND t.date >= CASE WHEN b.period = 'week' THEN date_trunc('week', CURRENT_DATE) ELSE date_trunc('month', CURRENT_DATE) END
                AND t.date < CASE WHEN b.period = 'week' THEN date_trunc('week', CURRENT_DATE) + INTERVAL '7 days' ELSE date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' END
-             JOIN categories c ON c.id = b.category_id AND c.user_id = b.user_id
+             JOIN categories c ON c.id = b.category_id
              WHERE b.category_id = $1 AND b.is_active = true AND b.user_id = $2
              GROUP BY b.id, b.amount, c.name`,
             [category_id, sourceOwner]
           )
           for (const budget of budgetRes.rows) {
-            const spent = parseFloat(budget.spent)
-            const limit = parseFloat(budget.limit_amount)
-            const pct = limit > 0 ? (spent / limit) : 0
-            if (spent > limit) {
+            const spent = new Decimal(budget.spent)
+            const limit = new Decimal(budget.limit_amount)
+            const pct = limit.gt(0) ? spent.div(limit).toNumber() : 0
+            if (spent.gt(limit)) {
               const dup = await checkDuplicateNotification(fastify, { userId: sourceOwner, type: 'budget_exceeded', entityId: budget.id })
               if (!dup) {
                 const title = t('notifications.budget_exceeded', {}, lang)
-                const message = t('notifications.budget_exceeded_body', { category: budget.category_name || '', amount: limit }, lang)
+                const message = t('notifications.budget_exceeded_body', { category: budget.category_name || '', amount: limit.toString() }, lang)
                 await notify(fastify, sourceOwner, {
                   type: 'budget_exceeded', title, message,
                   data: { entity_id: budget.id, url: '/budgets' },
@@ -365,9 +393,9 @@ async function transactionRoutes(fastify, opts) {
             [account_id, sourceOwner]
           )
           for (const goal of goalRes.rows) {
-            const balance = parseFloat(goal.balance)
-            const target = parseFloat(goal.target_amount)
-            if (balance >= target) {
+            const balance = new Decimal(goal.balance).toString()
+            const target = new Decimal(goal.target_amount).toString()
+            if (new Decimal(balance).gte(target)) {
               const dup = await checkDuplicateNotification(fastify, { userId: sourceOwner, type: 'goal_reached', entityId: goal.id })
               if (!dup) {
                 const title = t('notifications.goal_reached', {}, lang)
@@ -390,7 +418,7 @@ async function transactionRoutes(fastify, opts) {
         const lang = await getUserLang(fastify.db, sourceOwner)
         const accRes = await fastify.db.query('SELECT id, name, balance, type FROM accounts WHERE id = $1 AND user_id = $2', [account_id, sourceOwner])
         const acc = accRes.rows[0]
-        if (acc && parseFloat(acc.balance) < 0) {
+        if (acc && new Decimal(acc.balance).lt(0)) {
           const dup = await checkDuplicateNotification(fastify, { userId: sourceOwner, type: 'account_overdrawn', entityId: acc.id })
           if (!dup) {
             const title = t('notifications.account_overdrawn', {}, lang)
@@ -405,7 +433,7 @@ async function transactionRoutes(fastify, opts) {
         if (type === 'transfer' && transfer_to_account_id) {
           const tgtRes = await fastify.db.query('SELECT id, name, balance, type FROM accounts WHERE id = $1 AND user_id = $2', [transfer_to_account_id, targetOwner])
           const tgt = tgtRes.rows[0]
-          if (tgt && parseFloat(tgt.balance) < 0) {
+          if (tgt && new Decimal(tgt.balance).lt(0)) {
             const dup = await checkDuplicateNotification(fastify, { userId: targetOwner, type: 'account_overdrawn', entityId: tgt.id })
             if (!dup) {
               const title = t('notifications.account_overdrawn', {}, lang)
@@ -538,7 +566,7 @@ async function transactionRoutes(fastify, opts) {
       }
 
       if (category_id) {
-        const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [category_id, userId])
+        const catRes = await client.query('SELECT id FROM categories WHERE id = $1', [category_id])
         if (catRes.rows.length === 0) {
           await client.query('ROLLBACK')
           reply.code(404)
@@ -546,29 +574,31 @@ async function transactionRoutes(fastify, opts) {
         }
       }
 
+      const oldTransfer = await resolveTransferLeg(client, userId, old)
+      if (oldTransfer.forbidden) {
+        await client.query('ROLLBACK')
+        reply.code(403)
+        return { error: t('errors.not_allowed', {}, lang) }
+      }
+
       // Revert old balance effects — each leg on its OWN owner's row
-      const oldSign = old.type === 'income' ? 1 : -1
       await client.query(
         'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
-        [parseFloat(old.amount) * oldSign, old.account_id, oldOwner]
+        [signedAmount(old.amount, old.type), old.account_id, oldOwner]
       )
-      if (old.type === 'transfer' && old.transfer_to_account_id) {
+      if (oldTransfer.leg) {
         // Reverse the amount that was actually credited to the target account
         // (the paired leg amount, in the target currency) — not the source
         // amount, which differs once currencies differ.
-        const leg = await findTransferLeg(client, old)
-        const creditedAmount = leg ? parseFloat(leg.amount) : parseFloat(old.amount)
-        const legOwner = leg ? leg.user_id : null
-        if (legOwner) {
-          await client.query(
-            'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
-            [creditedAmount, old.transfer_to_account_id, legOwner]
-          )
-          await client.query(
-            'DELETE FROM transactions WHERE id = $1',
-            [leg.id]
-          )
-        }
+        const leg = oldTransfer.leg
+        await client.query(
+          'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
+          [leg.amount, old.transfer_to_account_id, leg.user_id]
+        )
+        await client.query(
+          'DELETE FROM transactions WHERE id = $1',
+          [leg.id]
+        )
       }
 
       // Update main transaction
@@ -595,31 +625,19 @@ async function transactionRoutes(fastify, opts) {
       }
 
       // Apply new balance effects
-      const sign = type === 'income' ? 1 : -1
       await client.query(
         'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
-        [amount * sign, account_id, newOwner]
+        [signedAmount(amount, type), account_id, newOwner]
       )
 
       if (type === 'transfer' && transfer_to_account_id) {
-        const [srcRes, tgtRes] = await Promise.all([
-          client.query('SELECT currency, type FROM accounts WHERE id = $1', [account_id]),
-          client.query('SELECT currency, type FROM accounts WHERE id = $1', [transfer_to_account_id])
-        ])
-        const sourceCurrency = srcRes.rows[0]?.currency
-        const targetCurrency = tgtRes.rows[0]?.currency
-
-        let targetAmount = amount
-        if (sourceCurrency && targetCurrency && sourceCurrency !== targetCurrency) {
-          const rates = await loadRates(client)
-          const converted = convertAmount(amount, sourceCurrency, targetCurrency, rates)
-          if (converted === null) {
-            await client.query('ROLLBACK')
-            reply.code(400)
-            return { error: t('errors.exchange_rate_missing', { from: sourceCurrency, to: targetCurrency }, lang) }
-          }
-          targetAmount = converted
+        const credit = await creditedTransferAmount(client, amount, account_id, transfer_to_account_id)
+        if (credit.amount === null) {
+          await client.query('ROLLBACK')
+          reply.code(400)
+          return { error: t('errors.exchange_rate_missing', { from: credit.sourceCurrency, to: credit.targetCurrency }, lang) }
         }
+        const targetAmount = credit.amount
 
         await client.query(
           'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
@@ -702,27 +720,29 @@ async function transactionRoutes(fastify, opts) {
         return { error: t('errors.split_child_delete', {}, lang) }
       }
 
+      const oldTransfer = await resolveTransferLeg(client, userId, old)
+      if (oldTransfer.forbidden) {
+        await client.query('ROLLBACK')
+        reply.code(403)
+        return { error: t('errors.not_allowed', {}, lang) }
+      }
+
       // Revert old balance effects — each leg on its OWN owner's row
-      const oldSign = old.type === 'income' ? 1 : -1
       await client.query(
         'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
-        [parseFloat(old.amount) * oldSign, old.account_id, oldOwner]
+        [signedAmount(old.amount, old.type), old.account_id, oldOwner]
       )
-      if (old.type === 'transfer' && old.transfer_to_account_id) {
+      if (oldTransfer.leg) {
         // Reverse the amount actually credited to the target (paired leg amount)
-        const leg = await findTransferLeg(client, old)
-        const creditedAmount = leg ? parseFloat(leg.amount) : parseFloat(old.amount)
-        const legOwner = leg ? leg.user_id : null
-        if (legOwner) {
-          await client.query(
-            'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
-            [creditedAmount, old.transfer_to_account_id, legOwner]
-          )
-          await client.query(
-            'DELETE FROM transactions WHERE id = $1',
-            [leg.id]
-          )
-        }
+        const leg = oldTransfer.leg
+        await client.query(
+          'UPDATE accounts SET balance = balance - $1 WHERE id = $2 AND user_id = $3',
+          [leg.amount, old.transfer_to_account_id, leg.user_id]
+        )
+        await client.query(
+          'DELETE FROM transactions WHERE id = $1',
+          [leg.id]
+        )
       }
 
       await client.query('DELETE FROM transaction_tags WHERE transaction_id = $1', [id])

@@ -1,5 +1,6 @@
 import { sanitizeSvg } from '../services/sanitizeSvg.js'
 import { t, getUserLang } from '../services/i18n.js'
+import { catalogAdminOnly } from '../services/catalog-access.js'
 
 async function categoryRoutes(fastify, opts) {
   // List (categories are global — shared by every user of the instance)
@@ -46,8 +47,9 @@ async function categoryRoutes(fastify, opts) {
     return result.rows[0]
   })
 
-  // Update
+  // Update (admin only — the category is shared by every user)
   fastify.put('/categories/:id', {
+    preHandler: catalogAdminOnly,
     schema: {
       params: {
         type: 'object',
@@ -99,8 +101,9 @@ async function categoryRoutes(fastify, opts) {
     return result.rows[0]
   })
 
-  // Delete
+  // Delete (admin only — budgets.category_id cascades for every user)
   fastify.delete('/categories/:id', {
+    preHandler: catalogAdminOnly,
     schema: {
       params: {
         type: 'object',
@@ -121,8 +124,10 @@ async function categoryRoutes(fastify, opts) {
   })
 
   // Merge: move all transactions, recurring rules and budgets from :id into
-  // the target category, then delete :id.
+  // the target category, then delete :id. Categories are global, so this
+  // rewrites every user's rows — admin only.
   fastify.post('/categories/:id/merge', {
+    preHandler: catalogAdminOnly,
     schema: {
       params: {
         type: 'object',
@@ -150,8 +155,8 @@ async function categoryRoutes(fastify, opts) {
     try {
       await client.query('BEGIN')
       const catRes = await client.query(
-        'SELECT id, type, name FROM categories WHERE id IN ($1, $2)',
-        [id, target_id, userId]
+        'SELECT id, type, name FROM categories WHERE id IN ($1, $2) FOR UPDATE',
+        [id, target_id]
       )
       const source = catRes.rows.find(c => c.id === id)
       const target = catRes.rows.find(c => c.id === target_id)
@@ -166,13 +171,13 @@ async function categoryRoutes(fastify, opts) {
         return { error: t('errors.merge_type_mismatch', {}, lang) }
       }
 
-      // Drop source budgets that would clash with an existing target budget
-      // of the same period (unique constraint), then move the rest.
+      // Drop each user's source budgets that would duplicate that user's
+      // existing target budget of the same period, then move the rest.
       await client.query(
         `DELETE FROM budgets b USING budgets tb
-         WHERE b.category_id = $1 AND b.user_id = $2
-           AND tb.category_id = $3 AND tb.period = b.period`,
-        [id, userId, target_id]
+         WHERE b.category_id = $1
+           AND tb.category_id = $2 AND tb.user_id = b.user_id AND tb.period = b.period`,
+        [id, target_id]
       )
       await client.query('UPDATE transactions SET category_id = $1 WHERE category_id = $2', [target_id, id])
       await client.query('UPDATE recurring_rules SET category_id = $1 WHERE category_id = $2', [target_id, id])

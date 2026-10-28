@@ -5,11 +5,14 @@
  * arrays usable with = ANY($n).
  */
 
+// A share only counts while its owner_id still owns the account — a stale or
+// forged grant for someone else's account must not expose it.
 export async function visibleAccountIds(db, userId) {
   const { rows } = await db.query(
     `SELECT id FROM accounts WHERE user_id = $1
      UNION
-     SELECT es.entity_id FROM entity_shares es
+     SELECT a.id FROM entity_shares es
+     JOIN accounts a ON a.id = es.entity_id AND a.user_id = es.owner_id
      WHERE es.entity_type = 'account' AND es.owner_id <> $1
        AND (es.shared_with = $1 OR es.shared_with IS NULL)`,
     [userId]
@@ -20,13 +23,24 @@ export async function visibleAccountIds(db, userId) {
 // Accounts (not owned by the user) the user may WRITE to
 export async function editableSharedAccountIds(db, userId) {
   const { rows } = await db.query(
-    `SELECT entity_id FROM entity_shares
-     WHERE entity_type = 'account' AND permission = 'edit' AND owner_id <> $1
-       AND (shared_with = $1 OR shared_with IS NULL)`,
+    `SELECT DISTINCT a.id FROM entity_shares es
+     JOIN accounts a ON a.id = es.entity_id AND a.user_id = es.owner_id
+     WHERE es.entity_type = 'account' AND es.permission = 'edit' AND es.owner_id <> $1
+       AND (es.shared_with = $1 OR es.shared_with IS NULL)`,
     [userId]
   )
-  return rows.map(r => r.entity_id)
+  return rows.map(r => r.id)
 }
+
+// When an account has both a family-wide and a personal grant for the user,
+// the most permissive one wins — the same rule canModifyTransaction() and
+// editableSharedAccountIds() apply and the account list shows.
+const SHARE_PERMISSION = `(SELECT es.permission FROM entity_shares es
+                      WHERE es.entity_type = 'account' AND es.entity_id = a.id
+                        AND es.owner_id = a.user_id
+                        AND (es.shared_with = $1 OR es.shared_with IS NULL)
+                      ORDER BY (es.permission = 'edit') DESC
+                      LIMIT 1)`
 
 /**
  * Resolve one account for a write operation. Returns the account row (with
@@ -36,11 +50,7 @@ export async function accountForWrite(db, userId, accountId) {
   const { rows } = await db.query(
     `SELECT a.id, a.user_id AS owner_id, a.currency, a.type,
             CASE WHEN a.user_id = $1 THEN 'own'
-                 ELSE COALESCE((SELECT es.permission FROM entity_shares es
-                      WHERE es.entity_type = 'account' AND es.entity_id = a.id
-                        AND es.owner_id = a.user_id
-                        AND (es.shared_with = $1 OR es.shared_with IS NULL)
-                      LIMIT 1), 'none') END AS access
+                 ELSE COALESCE(${SHARE_PERMISSION}, 'none') END AS access
      FROM accounts a WHERE a.id = $2`,
     [userId, accountId]
   )
@@ -54,11 +64,7 @@ export async function accountForRead(db, userId, accountId) {
   const { rows } = await db.query(
     `SELECT a.id, a.user_id AS owner_id,
             CASE WHEN a.user_id = $1 THEN 'own'
-                 ELSE COALESCE((SELECT es.permission FROM entity_shares es
-                      WHERE es.entity_type = 'account' AND es.entity_id = a.id
-                        AND es.owner_id = a.user_id
-                        AND (es.shared_with = $1 OR es.shared_with IS NULL)
-                      LIMIT 1), 'none') END AS access
+                 ELSE COALESCE(${SHARE_PERMISSION}, 'none') END AS access
      FROM accounts a WHERE a.id = $2`,
     [userId, accountId]
   )

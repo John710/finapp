@@ -1,19 +1,27 @@
 import { t, getUserLang } from '../services/i18n.js'
 
 async function accountRoutes(fastify, opts) {
-  // List: own accounts plus accounts shared with the user (or with the family)
+  // List: own accounts plus accounts shared with the user (or with the family).
+  // An account can carry both a family-wide and a personal grant; the LATERAL
+  // picks one (the most permissive, like services/visibility.js) so the
+  // account is listed once.
   fastify.get('/accounts', async (request, reply) => {
     const userId = request.user.userId
     const result = await fastify.db.query(
       `SELECT a.*,
               CASE WHEN a.user_id = $1 THEN NULL ELSE ou.login END AS owner_login,
-              CASE WHEN a.user_id = $1 THEN COALESCE((SELECT true FROM entity_shares es WHERE es.entity_type = 'account' AND es.entity_id = a.id AND es.owner_id = a.user_id LIMIT 1), false) ELSE false END AS is_shared,
-              CASE WHEN a.user_id = $1 THEN 'owner' ELSE COALESCE(es.permission, 'view') END AS access
+              CASE WHEN a.user_id = $1 THEN EXISTS (SELECT 1 FROM entity_shares es WHERE es.entity_type = 'account' AND es.entity_id = a.id AND es.owner_id = a.user_id) ELSE false END AS is_shared,
+              CASE WHEN a.user_id = $1 THEN 'owner' ELSE share.permission END AS access
        FROM accounts a
        JOIN users ou ON ou.id = a.user_id
-       LEFT JOIN entity_shares es ON es.entity_type = 'account' AND es.entity_id = a.id
-         AND es.owner_id = a.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
-       WHERE a.user_id = $1 OR es.id IS NOT NULL
+       LEFT JOIN LATERAL (
+         SELECT es.permission FROM entity_shares es
+         WHERE es.entity_type = 'account' AND es.entity_id = a.id
+           AND es.owner_id = a.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)
+         ORDER BY (es.permission = 'edit') DESC
+         LIMIT 1
+       ) share ON a.user_id <> $1
+       WHERE a.user_id = $1 OR share.permission IS NOT NULL
        ORDER BY a.is_archived, a.sort_order, a.created_at DESC`,
       [userId]
     )
@@ -195,42 +203,57 @@ async function accountRoutes(fastify, opts) {
       // transfer_pair_id are matched directly; legacy rows (pair id NULL) fall
       // back to the latest matching income leg, or to the source amount when
       // no leg exists. All arithmetic stays in SQL numeric — no float rounding.
+      // UPDATE ... FROM applies only ONE joined row per target row, so N
+      // transfers to the same counterparty must be summed per account first;
+      // joining the raw transfer rows would reverse just one of them.
       await client.query(`
         UPDATE accounts a
-        SET balance = a.balance - leg.amount
-        FROM transactions src
-        JOIN transactions leg ON leg.id = src.transfer_pair_id AND leg.user_id = src.user_id
-        WHERE src.account_id = $1 AND src.user_id = $2
-          AND src.type = 'transfer' AND src.transfer_to_account_id IS NOT NULL
-          AND a.id = src.transfer_to_account_id AND a.user_id = $2
+        SET balance = a.balance - agg.total
+        FROM (
+          SELECT src.transfer_to_account_id AS account_id, SUM(leg.amount) AS total
+          FROM transactions src
+          JOIN transactions leg ON leg.id = src.transfer_pair_id AND leg.user_id = src.user_id
+          WHERE src.account_id = $1 AND src.user_id = $2
+            AND src.type = 'transfer' AND src.transfer_to_account_id IS NOT NULL
+          GROUP BY src.transfer_to_account_id
+        ) agg
+        WHERE a.id = agg.account_id AND a.user_id = $2
       `, [id, userId])
       await client.query(`
         UPDATE accounts a
-        SET balance = a.balance - COALESCE(leg.amount, src.amount)
-        FROM transactions src
-        LEFT JOIN LATERAL (
-          SELECT l.amount FROM transactions l
-          WHERE l.type = 'income' AND l.account_id = src.transfer_to_account_id
-            AND l.transfer_to_account_id = src.account_id AND l.user_id = src.user_id
-            AND l.transfer_pair_id IS NULL
-          ORDER BY l.created_at DESC, l.id DESC
-          LIMIT 1
-        ) leg ON true
-        WHERE src.account_id = $1 AND src.user_id = $2
-          AND src.type = 'transfer' AND src.transfer_to_account_id IS NOT NULL
-          AND src.transfer_pair_id IS NULL
-          AND a.id = src.transfer_to_account_id AND a.user_id = $2
+        SET balance = a.balance - agg.total
+        FROM (
+          SELECT src.transfer_to_account_id AS account_id, SUM(COALESCE(leg.amount, src.amount)) AS total
+          FROM transactions src
+          LEFT JOIN LATERAL (
+            SELECT l.amount FROM transactions l
+            WHERE l.type = 'income' AND l.account_id = src.transfer_to_account_id
+              AND l.transfer_to_account_id = src.account_id AND l.user_id = src.user_id
+              AND l.transfer_pair_id IS NULL
+            ORDER BY l.created_at DESC, l.id DESC
+            LIMIT 1
+          ) leg ON true
+          WHERE src.account_id = $1 AND src.user_id = $2
+            AND src.type = 'transfer' AND src.transfer_to_account_id IS NOT NULL
+            AND src.transfer_pair_id IS NULL
+          GROUP BY src.transfer_to_account_id
+        ) agg
+        WHERE a.id = agg.account_id AND a.user_id = $2
       `, [id, userId])
 
       // Transfers INTO this account deducted other accounts — give the money
       // back before their source rows are removed together with the account.
       await client.query(`
         UPDATE accounts a
-        SET balance = a.balance + src.amount
-        FROM transactions src
-        WHERE src.transfer_to_account_id = $1 AND src.account_id <> $1
-          AND src.type = 'transfer' AND src.user_id = $2
-          AND a.id = src.account_id AND a.user_id = $2
+        SET balance = a.balance + agg.total
+        FROM (
+          SELECT src.account_id, SUM(src.amount) AS total
+          FROM transactions src
+          WHERE src.transfer_to_account_id = $1 AND src.account_id <> $1
+            AND src.type = 'transfer' AND src.user_id = $2
+          GROUP BY src.account_id
+        ) agg
+        WHERE a.id = agg.account_id AND a.user_id = $2
       `, [id, userId])
 
       // transaction_tags rows cascade via FK; remove every transaction that
