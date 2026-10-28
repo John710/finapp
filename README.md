@@ -268,21 +268,27 @@ stored, so revoke and re-create instead of sharing an old link. Revoking takes e
 refresh.
 
 > **Warning:** the token travels in the query string, which is where most proxies log requests. Put the
-> feed behind a route that disables access logging, otherwise the link ends up in your reverse proxy's
-> log file and in anything that reads it. With Traefik 3.x, add a dedicated router for the path —
-> a longer rule wins over the Host-only router, so no explicit priority is needed:
+> feed behind a router that disables access logging, otherwise the link ends up in your reverse proxy's
+> log file and in anything that reads it. With Traefik 3.x, add a second router to the container —
+> a longer rule wins over the `Host`-only one (priority defaults to rule length), TLS comes from the
+> `websecure` entrypoint, and the router must drop the forward-auth middleware your app uses, because a
+> calendar client cannot answer a Tinyauth/ForwardAuth challenge:
 >
 > ```yaml
 > labels:
 >   - "traefik.http.routers.finapp-ics.rule=Host(`fin.example.com`) && PathPrefix(`/api/v1/recurring.ics`)"
->   - "traefik.http.routers.finapp-ics.entrypoints=websecure-internal"
->   - "traefik.http.routers.finapp-ics.tls=true"
->   - "traefik.http.routers.finapp-ics.service=finapp"
+>   - "traefik.http.routers.finapp-ics.entrypoints=websecure-internal,websecure-external"
+>   - "traefik.http.routers.finapp-ics.middlewares=chain-no-auth@file"
+>   - "traefik.http.routers.finapp-ics.service=finapp-svc"
 >   - "traefik.http.routers.finapp-ics.observability.accesslogs=false"
 > ```
 >
-> The alternative is dropping query strings globally
-> (`--accesslog.fields.queryparameters.defaultmode=drop`), which also hides them from debugging.
+> Check it took effect by asking for the feed from outside your LAN — it must return
+> `200`/`text/calendar` rather than the gate page — and then confirm the proxy logged nothing:
+> `grep -c 'recurring.ics' /path/to/access.log` stays at 0.
+>
+> The alternative is dropping query strings from every logged request
+> (`--accesslog.fields.queryparameters.defaultmode=drop`), which also hides them while debugging.
 
 ## 📁 Project Structure
  
