@@ -273,12 +273,12 @@ v-for="color in presetColors" :key="color" type="button" class="w-6 h-6 rounded-
           </div>
           <div class="flex gap-3 mt-6">
             <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closeModal">{{ $t('common.cancel') }}</button>
-            <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
+            <button type="submit" :disabled="saving" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">{{ $t('common.save') }}</button>
           </div>
         </form>
       </BaseModal>
 
-    <ImportCsvModal v-model="showImportModal" @imported="transactionsStore.fetchTransactions()" />
+    <ImportCsvModal v-model="showImportModal" @imported="fetchPage()" />
 
     <!-- Attachments -->
     <BaseModal v-model="showAttachments" width-class="max-w-md">
@@ -288,7 +288,7 @@ v-for="color in presetColors" :key="color" type="button" class="w-6 h-6 rounded-
         <template v-else>
           <div v-for="att in attachments" :key="att.id" class="flex items-center justify-between gap-2 p-3 rounded-2xl bg-slate-100 dark:bg-slate-800">
             <a :href="`/api/v1/attachments/${att.id}`" target="_blank" rel="noopener" class="text-sm font-medium truncate flex-1 hover:underline">{{ att.filename }}</a>
-            <span class="text-xs text-slate-400 whitespace-nowrap">{{ (att.size / 1024).toFixed(0) }} KB</span>
+            <span class="text-xs text-slate-400 whitespace-nowrap">{{ (att.size / 1024).toFixed(0) }} {{ $t('common.kb') }}</span>
             <button class="text-slate-400 hover:text-danger-500" :aria-label="$t('common.delete')" @click="deleteAttachment(att.id)">
               <Icon name="cancel" class="w-4 h-4" />
             </button>
@@ -310,7 +310,7 @@ v-for="color in presetColors" :key="color" type="button" class="w-6 h-6 rounded-
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTransactionsStore } from '../stores/transactions'
 import { useAccountsStore } from '../stores/accounts'
@@ -358,6 +358,8 @@ const showQuickAccount = ref(false)
 const showQuickCategory = ref(false)
 const quickAccountTarget = ref('account_id')
 const editingId = ref(null)
+const saving = ref(false)
+const deleting = ref(false)
 const filters = reactive({ search: '', account_id: '', category_id: '', type: '', tag_id: '' })
 const form = reactive({ type: 'expense', amount: 0, account_id: null, category_id: null, date: new Date().toLocaleDateString('sv-SE'), note: '', transfer_to_account_id: null, tags: [] })
 const newTagName = ref('')
@@ -385,7 +387,12 @@ let fetchController = null
 
 
 onMounted(() => {
-  accountsStore.fetchAccounts()
+  // `?new=1` is set by the command palette / hotkey to open the "add" modal
+  // right after navigating here (syncUrl below strips it from the URL)
+  const wantsNewTx = route.query.new !== undefined
+  const accountsReady = Promise.resolve(accountsStore.fetchAccounts()).catch(e => {
+    logger.error('Failed to load accounts', e)
+  })
   categoriesStore.fetchCategories()
   tagsStore.fetchTags()
   ratesStore.fetchRates()
@@ -397,6 +404,15 @@ onMounted(() => {
   if (Number.isFinite(urlPage) && urlPage > 0) page.value = urlPage
   applyFilters(false)
   window.addEventListener('open-transaction-modal', openModal)
+  // Wait for accounts so the modal can preselect the first one
+  if (wantsNewTx) accountsReady.then(openModal)
+})
+
+// Already on this page when the palette/hotkey asks for a new transaction
+watch(() => route.query.new, (val) => {
+  if (val === undefined) return
+  openModal()
+  syncUrl()
 })
 
 onUnmounted(() => {
@@ -527,13 +543,20 @@ function toggleTag(tagId) {
 
 async function addTag() {
   if (!newTagName.value.trim()) return
-  const tag = await tagsStore.createTag({ name: newTagName.value.trim(), color: newTagColor.value })
-  form.tags.push(tag.id)
-  newTagName.value = ''
-  newTagColor.value = '#94a3b8'
+  try {
+    const tag = await tagsStore.createTag({ name: newTagName.value.trim(), color: newTagColor.value })
+    form.tags.push(tag.id)
+    newTagName.value = ''
+    newTagColor.value = '#94a3b8'
+  } catch (e) {
+    logger.error('Failed to create tag', e)
+    window.$toast?.error(e.message || t('common.error'))
+  }
 }
 
 async function saveTransaction() {
+  // Re-entry guard: double click / Ctrl+Enter while a request is in flight
+  if (saving.value) return
   const payload = { ...form, amount: parseAmount(form.amount) }
   if (Number.isNaN(payload.amount)) {
     window.$toast?.error(t('transactions.invalid_amount'))
@@ -552,15 +575,23 @@ async function saveTransaction() {
     payload.splits = rows
     payload.category_id = null
   }
-  if (editingId.value) {
-    await transactionsStore.updateTransaction(editingId.value, payload)
-    window.$toast?.success(t('common.saved'))
-  } else {
-    await transactionsStore.createTransaction(payload)
-    window.$toast?.success(t('common.created'))
+  saving.value = true
+  try {
+    if (editingId.value) {
+      await transactionsStore.updateTransaction(editingId.value, payload)
+      window.$toast?.success(t('common.saved'))
+    } else {
+      await transactionsStore.createTransaction(payload)
+      window.$toast?.success(t('common.created'))
+    }
+    closeModal()
+    fetchPage()
+  } catch (e) {
+    logger.error('Failed to save transaction', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    saving.value = false
   }
-  closeModal()
-  fetchPage()
 }
 
 // ---------- Attachments ----------
@@ -610,26 +641,64 @@ async function deleteAttachment(id) {
 }
 
 async function deleteTransaction(id) {
-  if (!(await window.$confirm({ message: t('common.confirm_delete') }))) return
+  if (deleting.value) return
   const tx = transactionsStore.transactions.find(x => x.id === id)
-  await transactionsStore.deleteTransaction(id)
-  fetchPage()
-  if (tx) {
-    undo.push({
-      message: t('common.undo_delete'),
-      action: async () => {
-        await transactionsStore.createTransaction({
-          account_id: tx.account_id,
-          category_id: tx.category_id,
-          amount: tx.amount,
-          type: tx.type,
-          date: tx.date,
-          note: tx.note,
-          transfer_to_account_id: tx.transfer_to_account_id
-        })
-        applyFilters()
-      }
+  deleting.value = true
+  try {
+    // Attachments are removed together with the transaction and cannot be
+    // re-created by undo, so such a delete is final: confirm instead of undo.
+    // If the lookup fails, assume attachments exist (the safe side).
+    let hasAttachments = false
+    try {
+      const list = await api(`/transactions/${id}/attachments`)
+      hasAttachments = Array.isArray(list) ? list.length > 0 : true
+    } catch (e) {
+      logger.error('Failed to check attachments', e)
+      hasAttachments = true
+    }
+    const confirmed = await window.$confirm({
+      message: hasAttachments ? t('transactions.confirm_delete_attachments') : t('common.confirm_delete'),
+      danger: true
     })
+    if (!confirmed) return
+    // Split parts are separate rows: capture them before the delete drops them
+    const splitParts = tx?.is_split
+      ? transactionsStore.transactions.filter(x => x.parent_id === id)
+      : []
+    await transactionsStore.deleteTransaction(id)
+    fetchPage()
+    if (tx && !hasAttachments && (!tx.is_split || splitParts.length > 0)) {
+      const payload = {
+        account_id: tx.account_id,
+        category_id: tx.is_split ? null : tx.category_id,
+        amount: tx.amount,
+        type: tx.type,
+        date: String(tx.date).slice(0, 10),
+        note: tx.note,
+        transfer_to_account_id: tx.transfer_to_account_id,
+        tags: (tx.tags || []).map(tag => tag.id)
+      }
+      if (splitParts.length) {
+        payload.splits = splitParts.map(p => ({ category_id: p.category_id, amount: p.amount }))
+      }
+      undo.push({
+        message: t('common.undo_delete'),
+        action: async () => {
+          try {
+            await transactionsStore.createTransaction(payload)
+            applyFilters()
+          } catch (e) {
+            logger.error('Failed to restore transaction', e)
+            window.$toast?.error(e.message || t('common.error'))
+          }
+        }
+      })
+    }
+  } catch (e) {
+    logger.error('Failed to delete transaction', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    deleting.value = false
   }
 }
 </script>

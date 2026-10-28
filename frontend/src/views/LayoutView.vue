@@ -63,10 +63,10 @@ class="hidden lg:flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 dar
               <div v-if="showNotifs" class="absolute right-0 mt-3 w-80 bg-white dark:bg-slate-900 rounded-3xl shadow-float z-50 max-h-96 overflow-y-auto">
                 <div class="px-5 py-4 flex items-center justify-between">
                   <span class="font-display font-semibold text-sm">{{ $t('notifications.title') }}</span>
-                  <button v-if="notifStore.items.some(n => !n.is_read)" class="text-xs text-primary-500 hover:underline" @click="notifStore.markAllRead()">{{ $t('notifications.mark_all') }}</button>
+                  <button v-if="notifStore.items.some(n => !n.is_read)" class="text-xs text-primary-500 hover:underline" @click="markAllNotifsRead">{{ $t('notifications.mark_all') }}</button>
                 </div>
                 <div class="px-5 pb-3">
-                  <select v-model="notifStore.filterType" class="w-full text-xs bg-slate-100 dark:bg-slate-800 border-0 rounded-xl px-3 py-2" @change="notifStore.fetchNotifications()">
+                  <select v-model="notifStore.filterType" class="w-full text-xs bg-slate-100 dark:bg-slate-800 border-0 rounded-xl px-3 py-2" @change="loadNotifs">
                     <option value="">{{ $t('common.all') }}</option>
                     <option value="budget_exceeded">{{ $t('budgets.title') }} — {{ $t('budgets.exceeded') }}</option>
                     <option value="budget_warning">{{ $t('budgets.title') }} — {{ $t('budgets.warning') }}</option>
@@ -89,17 +89,19 @@ class="hidden lg:flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 dar
                 </div>
                 <div v-else-if="notifStore.items.length === 0" class="p-5 text-center text-sm text-slate-500">
                   <p class="mb-2">{{ $t('notifications.empty') }}</p>
-                  <button v-if="notifStore.unreadCount > 0" class="text-xs text-primary-500 hover:underline" @click="notifStore.markAllRead()">{{ $t('notifications.mark_all') }}</button>
+                  <button v-if="notifStore.unreadCount > 0" class="text-xs text-primary-500 hover:underline" @click="markAllNotifsRead">{{ $t('notifications.mark_all') }}</button>
                 </div>
                 <div v-else class="divide-y divide-slate-100 dark:divide-slate-800">
-                  <div v-for="n in notifStore.items" :key="n.id" class="p-4 flex gap-3 items-start hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer" @click="openNotif(n)">
-                    <div class="w-2 h-2 mt-1.5 rounded-full flex-shrink-0" :class="n.is_read ? 'bg-slate-300 dark:bg-slate-600' : 'bg-primary-500'"></div>
-                    <div class="flex-1 min-w-0">
-                      <p class="text-sm font-medium truncate">{{ n.title }}</p>
-                      <p class="text-xs text-slate-500 truncate">{{ n.message }}</p>
-                      <p class="text-xs text-slate-400 mt-1">{{ formatNotifDate(n.created_at) }}</p>
-                    </div>
-                    <button :aria-label="$t('common.delete')" class="text-slate-400 hover:text-danger-500" @click.stop="notifStore.remove(n.id)">
+                  <div v-for="n in notifStore.items" :key="n.id" class="p-4 flex gap-3 items-start hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <button type="button" class="flex flex-1 min-w-0 gap-3 items-start text-left cursor-pointer" @click="openNotif(n)">
+                      <span class="w-2 h-2 mt-1.5 rounded-full flex-shrink-0" :class="n.is_read ? 'bg-slate-300 dark:bg-slate-600' : 'bg-primary-500'"></span>
+                      <span class="flex-1 min-w-0 block">
+                        <span class="block text-sm font-medium truncate">{{ n.title }}</span>
+                        <span class="block text-xs text-slate-500 truncate">{{ n.message }}</span>
+                        <span class="block text-xs text-slate-400 mt-1">{{ formatNotifDate(n.created_at) }}</span>
+                      </span>
+                    </button>
+                    <button type="button" :aria-label="$t('common.delete')" class="text-slate-400 hover:text-danger-500" @click.stop="removeNotif(n.id)">
                       <Icon name="cancel" class="w-4 h-4" />
                     </button>
                   </div>
@@ -232,7 +234,9 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const notifStore = useNotificationsStore()
-const undo = useUndo(route.name?.toLowerCase() || 'global')
+// Layout stays mounted across navigation, so the undo scope must follow the
+// current route (views push into 'accounts', 'budgets', 'debts', ...)
+const undo = useUndo(() => String(route.name || 'global').toLowerCase())
 const { t, locale } = useI18n()
 
 const currentVersion = packageJson.version
@@ -333,7 +337,8 @@ function onGlobalKeydown(e) {
   // Ctrl+Shift+N → New transaction
   if (e.ctrlKey && e.shiftKey && e.code === 'KeyN') {
     e.preventDefault()
-    window.dispatchEvent(new CustomEvent('open-transaction-modal'))
+    // The transactions view opens its modal on `?new=1` (works from any page)
+    router.push({ path: '/transactions', query: { new: '1' } })
     return
   }
 }
@@ -381,7 +386,8 @@ function onVisibilityChange() {
 onMounted(() => {
   window.addEventListener('keydown', onGlobalKeydown)
   notifStore.fetchUnreadCount()
-  notifStore.fetchNotifications()
+  // Background prefetch: a failure must not toast on every page load
+  notifStore.fetchNotifications().catch((e) => logger.error('Failed to load notifications', e))
   checkForUpdates()
   startNotifPoll()
   document.addEventListener('visibilitychange', onVisibilityChange)
@@ -393,8 +399,38 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onVisibilityChange)
 })
 
+async function loadNotifs() {
+  try {
+    await notifStore.fetchNotifications()
+  } catch (e) {
+    logger.error('Failed to load notifications', e)
+    window.$toast?.error(e.message || t('common.error'))
+  }
+}
+
+async function markAllNotifsRead() {
+  try {
+    await notifStore.markAllRead()
+  } catch (e) {
+    logger.error('Failed to mark notifications as read', e)
+    window.$toast?.error(e.message || t('common.error'))
+  }
+}
+
+async function removeNotif(id) {
+  try {
+    await notifStore.remove(id)
+  } catch (e) {
+    logger.error('Failed to remove notification', e)
+    window.$toast?.error(e.message || t('common.error'))
+  }
+}
+
 function openNotif(n) {
-  if (!n.is_read) notifStore.markRead(n.id)
+  if (!n.is_read) {
+    // Navigation must not wait for (or fail with) the read mark
+    notifStore.markRead(n.id).catch((e) => logger.error('Failed to mark notification as read', e))
+  }
   showNotifs.value = false
   if (n.data?.url) router.push(n.data.url)
 }

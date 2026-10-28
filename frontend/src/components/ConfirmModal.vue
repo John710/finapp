@@ -25,12 +25,15 @@
 
 <script setup>
 import { ref, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const visible = ref(false)
-const title = ref('Confirm')
+const title = ref('')
 const message = ref('')
-const confirmText = ref('OK')
-const cancelText = ref('Cancel')
+const confirmText = ref('')
+const cancelText = ref('')
 const danger = ref(false)
 let resolvePromise = null
 
@@ -40,14 +43,16 @@ const confirmBtn = ref(null)
 const cancelBtn = ref(null)
 
 function open(opts = {}) {
-  title.value = opts.title || 'Confirm'
+  // A previous confirm that is still pending is superseded: settle it as cancelled
+  if (resolvePromise) resolvePromise(false)
+  title.value = opts.title || t('common.confirm_title')
   message.value = opts.message || ''
-  confirmText.value = opts.confirmText || 'OK'
-  cancelText.value = opts.cancelText || 'Cancel'
+  confirmText.value = opts.confirmText || t('common.confirm')
+  cancelText.value = opts.cancelText || t('common.cancel')
   danger.value = opts.danger || false
   visible.value = true
   nextTick(() => {
-    confirmBtn.value?.focus()
+    cancelBtn.value?.focus()
   })
   return new Promise((resolve) => {
     resolvePromise = resolve

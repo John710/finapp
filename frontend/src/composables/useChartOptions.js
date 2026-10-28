@@ -1,5 +1,10 @@
 import { useI18n } from 'vue-i18n'
+import { format as echartsFormat } from 'echarts/core'
 import { formatFull } from '@/utils/currency'
+
+// Tooltip formatters return HTML, so every user-controlled string (category
+// names, series names) goes through encodeHTML; `marker` is ECharts' own HTML.
+const esc = (value) => echartsFormat.encodeHTML(String(value ?? ''))
 
 // Shared ECharts option builders for the trend (grouped bars) and category
 // (donut) charts — previously duplicated, with styling drift, between
@@ -45,9 +50,9 @@ export function useChartOptions({ isDark, baseCurrency, ratesStore }) {
         axisPointer: { type: 'shadow' },
         ...tooltipStyle(),
         formatter: (params) => {
-          let result = params[0].axisValue + '<br/>'
+          let result = esc(params[0].axisValue) + '<br/>'
           params.forEach(p => {
-            result += `${p.marker} ${p.seriesName}: ${formatFull(p.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}<br/>`
+            result += `${p.marker} ${esc(p.seriesName)}: ${formatFull(p.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}<br/>`
           })
           return result
         }
@@ -84,7 +89,7 @@ export function useChartOptions({ isDark, baseCurrency, ratesStore }) {
         trigger: 'item',
         ...tooltipStyle(),
         formatter: (params) => {
-          return `${params.marker} ${params.name}: ${formatFull(params.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)} (${params.percent}%)`
+          return `${params.marker} ${esc(params.name)}: ${formatFull(params.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)} (${params.percent}%)`
         }
       },
       legend: { show: false },
@@ -148,9 +153,9 @@ export function useChartOptions({ isDark, baseCurrency, ratesStore }) {
         axisPointer: { type: 'shadow' },
         ...tooltipStyle(),
         formatter: (params) => {
-          let result = params[0].axisValue + '<br/>'
+          let result = esc(params[0].axisValue) + '<br/>'
           params.forEach(p => {
-            result += `${p.marker} ${p.seriesName}: ${formatFull(p.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}<br/>`
+            result += `${p.marker} ${esc(p.seriesName)}: ${formatFull(p.value, baseCurrency.value, baseCurrency.value, ratesStore.rates)}<br/>`
           })
           return result
         }

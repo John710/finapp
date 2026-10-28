@@ -282,7 +282,7 @@ v-for="color in presetColors" :key="color" type="button" class="w-8 h-8 rounded-
           </div>
           <div class="flex gap-3 mt-6">
             <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closeModal">{{ $t('common.cancel') }}</button>
-            <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
+            <button type="submit" :disabled="saving" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">{{ $t('common.save') }}</button>
           </div>
         </form>
       </BaseModal>
@@ -296,7 +296,6 @@ import { ref, onMounted, onBeforeUnmount, reactive, computed, watch, nextTick } 
 import { useAccountsStore } from '../stores/accounts'
 import { useRatesStore } from '../stores/rates'
 import { useI18n } from 'vue-i18n'
-import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { api } from '@/utils/api'
 import { getUserLocale } from '@/utils/locale'
@@ -309,7 +308,6 @@ import ShareModal from '@/components/ShareModal.vue'
 
 const { t } = useI18n()
 const ratesStore = useRatesStore()
-const undo = useUndo('accounts')
 
 useHotkeys({
   'ctrl+enter': () => { if (showModal.value) saveAccount() },
@@ -320,6 +318,8 @@ const accountsStore = useAccountsStore()
 const baseCurrency = computed(() => ratesStore.baseCurrency)
 const showModal = ref(false)
 const isEditing = ref(false)
+const saving = ref(false)
+const deleting = ref(false)
 const form = reactive({ name: '', type: 'card', currency: baseCurrency.value, balance: 0, color: '#10b981', icon: null, target_amount: 0 })
 const cryptoList = ref([])
 const showCryptoDropdown = ref(false)
@@ -448,27 +448,39 @@ function closeModal() {
 }
 
 async function saveAccount() {
+  // Re-entry guard: double click / Ctrl+Enter while a request is in flight
+  if (saving.value) return
   form.balance = parseAmount(form.balance)
   form.target_amount = parseAmount(form.target_amount)
-  if (isEditing.value) {
-    await accountsStore.updateAccount(form.id, { ...form })
-  } else {
-    await accountsStore.createAccount({ ...form })
+  saving.value = true
+  try {
+    if (isEditing.value) {
+      await accountsStore.updateAccount(form.id, { ...form })
+    } else {
+      await accountsStore.createAccount({ ...form })
+    }
+    closeModal()
+  } catch (e) {
+    logger.error('Failed to save account', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    saving.value = false
   }
-  closeModal()
 }
 
+// No undo here: the backend hard-deletes the account together with its
+// transactions, and re-creating the account would bring back an empty shell.
 async function deleteAccount(id) {
-  if (!(await window.$confirm({ message: t('common.confirm_delete') }))) return
-  const acc = accountsStore.accounts.find(a => a.id === id)
-  await accountsStore.deleteAccount(id)
-  if (acc) {
-    undo.push({
-      message: t('common.undo_delete'),
-      action: async () => {
-        await accountsStore.createAccount({ ...acc })
-      }
-    })
+  if (deleting.value) return
+  if (!(await window.$confirm({ message: t('accounts.confirm_delete'), danger: true }))) return
+  deleting.value = true
+  try {
+    await accountsStore.deleteAccount(id)
+  } catch (e) {
+    logger.error('Failed to delete account', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    deleting.value = false
   }
 }
 

@@ -35,7 +35,8 @@
     "already_have_account": "Already have an account?",
     "go_to_register": "Create one",
     "go_to_login": "Sign in",
-    "totp_code": "2FA code"
+    "totp_code": "2FA code",
+    "totp_required": "Enter the 2FA code to sign in"
   },
   "dashboard": {
     "total_balance": "Total balance",
@@ -86,7 +87,8 @@
     "split_invalid": "Each split part needs a category and an amount",
     "attachments": "Attachments",
     "attachments_empty": "No attachments yet",
-    "attachments_upload": "Upload file"
+    "attachments_upload": "Upload file",
+    "confirm_delete_attachments": "Delete this transaction? Its attachments will be deleted too, and this cannot be undone."
   },
   "categories": {
     "title": "Categories",
@@ -275,7 +277,8 @@
       "note": "Note",
       "currency": "Currency"
     },
-    "failed": "Import failed"
+    "failed": "Import failed",
+    "delimiter_tab": "Tab"
   },
   "reports": {
     "title": "Reports",
@@ -444,6 +447,7 @@
     "avatar_invalid": "Could not process the image — use a PNG, JPEG, WebP or GIF file",
     "access_title": "Access & API",
     "totp_title": "Two-factor authentication",
+    "totp_qr_alt": "QR code for two-factor authentication",
     "totp_desc": "An extra one-time code from an authenticator app at login",
     "totp_enabled": "Two-factor authentication is enabled",
     "totp_disabled": "Two-factor authentication is disabled",
@@ -503,7 +507,11 @@
     "created": "Created",
     "error": "Error",
     "prev": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "confirm": "Confirm",
+    "confirm_title": "Confirm action",
+    "kb": "KB",
+    "load_more": "Load more"
   },
   "notifications": {
     "title": "Notifications",
@@ -533,6 +541,7 @@
     "title": "About the app"
   },
   "accounts": {
+    "confirm_delete": "Delete this account? All its transactions will be deleted too, and this cannot be undone.",
     "title": "Accounts",
     "empty": "Account list will appear here",
     "types": {
@@ -563,6 +572,9 @@
     "shared_badge": "Shared"
   },
   "errors": {
-    "rate_limited": "Too many requests — please wait a moment and try again"
+    "rate_limited": "Too many requests — please wait a moment and try again",
+    "session_expired": "Session expired. Please sign in again",
+    "http_status": "Request failed (HTTP {status})",
+    "unexpected": "Something went wrong. Please try again"
   }
 }

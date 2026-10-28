@@ -88,13 +88,13 @@ export const useReportsStore = defineStore('reports', () => {
 
   async function exportCsv(params = {}) {
     const query = buildQuery(params)
-    const res = await fetch(`/api/v1/export/csv?${query}`, { credentials: 'include' })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const blob = await res.blob()
+    // Through api(): 401 refresh and localized errors, like every other call
+    const blob = await api(`/export/csv?${query}`, { responseType: 'blob' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `finapp_export_${new Date().toISOString().split('T')[0]}.csv`
+    // Local calendar day (toISOString would shift it to UTC)
+    a.download = `finapp_export_${new Date().toLocaleDateString('sv-SE')}.csv`
     a.click()
     window.URL.revokeObjectURL(url)
   }

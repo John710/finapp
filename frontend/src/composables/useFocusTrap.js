@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, toValue } from 'vue'
 
 const FOCUSABLE_SELECTORS = [
   'button:not([disabled])',
@@ -10,8 +10,23 @@ const FOCUSABLE_SELECTORS = [
   '[tabindex]:not([tabindex="-1"])'
 ].join(', ')
 
+// Modals can stack (e.g. a quick-create modal over a form modal). Body scroll
+// stays locked while any trap is active, and only the top-most trap handles Tab.
+const activeTraps = []
+
+function lockBody() {
+  document.body.style.overflow = 'hidden'
+}
+
+function unlockBody() {
+  if (activeTraps.length === 0) document.body.style.overflow = ''
+}
+
 export function useFocusTrap(containerRef, activeRef) {
   const previousActiveElement = ref(null)
+  const token = {}
+  let isActive = false
+  let rafId = null
 
   function getFocusable() {
     const container = containerRef.value
@@ -22,6 +37,7 @@ export function useFocusTrap(containerRef, activeRef) {
 
   function handleKeydown(e) {
     if (e.key !== 'Tab') return
+    if (activeTraps[activeTraps.length - 1] !== token) return
     const focusable = getFocusable()
     if (focusable.length === 0) {
       e.preventDefault()
@@ -42,18 +58,13 @@ export function useFocusTrap(containerRef, activeRef) {
     }
   }
 
-  function lockBody() {
-    const body = document.body
-    body.style.overflow = 'hidden'
-  }
-
-  function unlockBody() {
-    const body = document.body
-    body.style.overflow = ''
-  }
-
   function activate() {
+    rafId = null
+    // The modal may have been closed again before the frame fired
+    if (isActive || !toValue(activeRef)) return
+    isActive = true
     previousActiveElement.value = document.activeElement
+    activeTraps.push(token)
     lockBody()
     const focusable = getFocusable()
     if (focusable.length > 0) {
@@ -62,9 +73,23 @@ export function useFocusTrap(containerRef, activeRef) {
     document.addEventListener('keydown', handleKeydown)
   }
 
-  function deactivate() {
+  function release() {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId)
+      rafId = null
+    }
+    if (!isActive) return false
+    isActive = false
     document.removeEventListener('keydown', handleKeydown)
+    const idx = activeTraps.indexOf(token)
+    if (idx !== -1) activeTraps.splice(idx, 1)
     unlockBody()
+    return true
+  }
+
+  function deactivate() {
+    // A modal that never opened (initial closed state) has nothing to undo
+    if (!release()) return
     if (previousActiveElement.value?.focus) {
       previousActiveElement.value.focus()
     }
@@ -74,7 +99,7 @@ export function useFocusTrap(containerRef, activeRef) {
     watch(activeRef, (active) => {
       if (active) {
         // Wait for DOM to render
-        requestAnimationFrame(activate)
+        rafId = requestAnimationFrame(activate)
       } else {
         deactivate()
       }
@@ -82,7 +107,6 @@ export function useFocusTrap(containerRef, activeRef) {
   })
 
   onUnmounted(() => {
-    document.removeEventListener('keydown', handleKeydown)
-    unlockBody()
+    release()
   })
 }

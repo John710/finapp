@@ -35,8 +35,12 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request)
         .then((res) => {
-          const copy = res.clone()
-          caches.open(SHELL_CACHE).then((cache) => cache.put('/index.html', copy))
+          // Only a healthy response may become the offline shell: caching a
+          // 5xx/404 page would serve that error to the user while offline
+          if (res.ok) {
+            const copy = res.clone()
+            caches.open(SHELL_CACHE).then((cache) => cache.put('/index.html', copy))
+          }
           return res
         })
         .catch(() => caches.match('/index.html').then((r) => r || caches.match('/')))
@@ -61,8 +65,18 @@ self.addEventListener('fetch', (event) => {
   }
 })
 
+function readPushPayload(event) {
+  try {
+    return event.data?.json() || {}
+  } catch {
+    return {}
+  }
+}
+
 self.addEventListener('push', (event) => {
-  const data = event.data?.json() || {}
+  // A push may carry no payload or non-JSON text: fall back to the defaults
+  // instead of throwing and showing nothing
+  const data = readPushPayload(event)
   event.waitUntil(
     self.registration.showNotification(data.title || 'FinApp', {
       body: data.body || '',
