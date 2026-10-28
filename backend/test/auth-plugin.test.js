@@ -161,6 +161,9 @@ describe('apiTokenForbidden', () => {
   it('matches route patterns, not concrete urls', () => {
     expect(apiTokenForbidden('DELETE', '/api/v1/users/tokens/:id')).toBe(true)
     expect(apiTokenForbidden('POST', '/api/v1/recurring/feed-tokens')).toBe(true)
+    expect(apiTokenForbidden('POST', '/api/v1/users/change-password')).toBe(true)
+    expect(apiTokenForbidden('POST', '/api/v1/users/logout-all')).toBe(true)
+    expect(apiTokenForbidden('POST', '/api/v1/users/2fa/disable')).toBe(true)
     expect(apiTokenForbidden('POST', '/api/v1/admin/clear-database')).toBe(true)
     expect(apiTokenForbidden('PUT', '/api/v1/shares/:entityType/:entityId')).toBe(true)
     expect(apiTokenForbidden('GET', '/api/v1/shares/:entityType/:entityId')).toBe(false)

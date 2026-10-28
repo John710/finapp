@@ -52,6 +52,8 @@ function hashToken(token) {
 export function apiTokenForbidden(method, routeUrl) {
   const url = String(routeUrl || '')
   if (url.startsWith('/api/v1/users/tokens')) return true
+  if (url.startsWith('/api/v1/users/2fa/')) return true
+  if (url === '/api/v1/users/change-password' || url === '/api/v1/users/logout-all') return true
   if (url.startsWith('/api/v1/recurring/feed-tokens')) return true
   if (url.startsWith('/api/v1/admin/')) return true
   if (url.startsWith('/api/v1/shares/') && method !== 'GET' && method !== 'HEAD') return true
