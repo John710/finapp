@@ -722,9 +722,11 @@ async function recurringRoutes(fastify, opts) {
       return { error: t('errors.rule_not_found', {}, lang) }
     }
     const limit = request.query.limit ?? 200
+    // h.id and h.created_at both collide with the joined users row, so every
+    // history column has to be qualified.
     const { rows } = await fastify.db.query(
-      `SELECT id, event_type, old_value, new_value, effective_date::text AS effective_date,
-              created_at, user_id AS actor_id, login AS actor_login
+      `SELECT h.id, h.event_type, h.old_value, h.new_value, h.effective_date::text AS effective_date,
+              h.created_at, h.user_id AS actor_id, u.login AS actor_login
        FROM recurring_history h
        LEFT JOIN users u ON u.id = h.user_id
        WHERE h.rule_id = $1

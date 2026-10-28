@@ -408,7 +408,9 @@ let eurRate = null
   assert('list reports the next occurrence after the ledger cursor', mine?.next_occurrence === '2027-04-30', `${mine?.next_occurrence}`)
 
   const history = await req('GET', `/recurring/${ruleId}/history`)
-  const kinds = (history.json || []).map(h => h.event_type)
+  const historyRows = Array.isArray(history.json) ? history.json : []
+  if (!Array.isArray(history.json)) console.log(`  ...history diagnostic: status=${history.status} body=${String(history.text).slice(0, 300)}`)
+  const kinds = historyRows.map(h => h.event_type)
   assert('history records created/price_changed/skipped/paid', history.status === 200 && ['created', 'price_changed', 'skipped', 'paid'].every(k => kinds.includes(k)), JSON.stringify(kinds))
 
   const expired = await req('POST', '/recurring', {

@@ -425,6 +425,24 @@ describe('GET /recurring/:id/history', () => {
     expect(res.json()[0].event_type).toBe('paused')
     await app.close()
   })
+
+  it('qualifies every history column against the joined users row', async () => {
+    const { app, queries } = buildServer([
+      CURRENT_DATE,
+      { match: /FROM recurring_rules/, rows: () => [baseRule()] },
+      { match: /FROM recurring_history/, rows: () => [] }
+    ])
+    await app.inject({ method: 'GET', url: '/recurring/1/history' })
+    const sql = queries.find(q => /FROM recurring_history/.test(q.sql)).sql
+    // id and created_at exist on recurring_history AND on the joined users row;
+    // unqualified, PostgreSQL fails with "column reference ... is ambiguous"
+    // and the endpoint answers 500.
+    for (const column of ['id', 'event_type', 'old_value', 'new_value', 'effective_date', 'created_at']) {
+      expect(sql, column).toMatch(new RegExp(`h\\.${column}\\b`))
+    }
+    expect(sql).toMatch(/\bu\.login\b/)
+    await app.close()
+  })
 })
 
 describe('backend locales', () => {
