@@ -49,3 +49,8 @@ updates:
       interval: weekly
     commit-message:
       prefix: "chore(deps)"
+    # A Postgres major cannot read the previous major's data directory: bumping
+    # it in compose breaks every existing volume until a manual pg_upgrade.
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
