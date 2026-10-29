@@ -253,7 +253,7 @@ docker compose pull && docker compose up -d
 Уведомления настраиваются персонально для каждого пользователя в разделе **Настройки**:
 
 - **Web Push** — сгенерируйте персональные VAPID-ключи, подпишите браузер и получайте push-уведомления.
-- **Shoutrrr** — настройте один или несколько Shoutrrr URL для отправки уведомлений в Telegram, Discord, Gotify, email, generic webhook и другие сервисы.
+- **Shoutrrr** — настройте один или несколько Shoutrrr URL для отправки уведомлений в Telegram, Discord, Gotify, email, generic webhook и другие сервисы. Токены приложений Gotify 3.x (`gtfya.…`) поддерживаются; формат URL — `gotify://host/<token>` (без лишних сегментов пути вроде `/messages`).
 
 > **Важно:** Web Push требует secure context (`https://` или `localhost`). На чистом `http://` по IP-адресу push-уведомления работать не будут.
 

@@ -20,13 +20,37 @@ const ALLOWED_HOSTS = parseAllowedHosts(process.env.SHOUTRRR_ALLOWED_HOSTS)
 
 // Errors from this plugin can surface in API responses; never include the full
 // URL — Shoutrrr URLs embed bot tokens and API keys in userinfo/query.
-function maskUrl(u) {
+// Only scheme://host[:port] is safe: paths carry tokens (gotify, telegram, discord).
+export function maskUrl(u) {
   try {
     const p = new URL(u)
-    return `${p.protocol}//${p.host}${p.pathname}`
+    return `${p.protocol}//${p.host}`
   } catch {
     return 'invalid-url'
   }
+}
+
+// Replaces userinfo, every path segment and query values of `u` (and the URL
+// itself) in CLI output with ***, so stderr can be logged safely.
+export function redactUrlSecrets(text, u) {
+  let out = String(text ?? '')
+  const secrets = new Set([u])
+  try {
+    const p = new URL(u)
+    for (const s of [p.username, p.password, ...p.pathname.split('/'), ...p.searchParams.values()]) {
+      if (!s) continue
+      secrets.add(s)
+      try { secrets.add(decodeURIComponent(s)) } catch { /* keep raw */ }
+    }
+    for (const v of p.search.slice(1).split('&')) {
+      const val = v.includes('=') ? v.slice(v.indexOf('=') + 1) : ''
+      if (val) secrets.add(val)
+    }
+  } catch { /* unparsable URL: redact it whole */ }
+  for (const s of [...secrets].filter(Boolean).sort((a, b) => b.length - a.length)) {
+    out = out.split(s).join('***')
+  }
+  return out
 }
 
 async function shoutrrrPlugin(fastify, opts) {
@@ -76,7 +100,7 @@ async function shoutrrrPlugin(fastify, opts) {
         }
         await execFileAsync('shoutrrr', args, { timeout: 30000 })
       } catch (err) {
-        fastify.log.warn({ stderr: String(err.stderr || '').slice(0, 300), message: err.message }, 'Shoutrrr CLI failed')
+        fastify.log.warn({ stderr: redactUrlSecrets(String(err.stderr || ''), u).slice(0, 300) }, 'Shoutrrr CLI failed')
         errors.push(`Shoutrrr (${maskUrl(u)}) failed`)
       }
     }

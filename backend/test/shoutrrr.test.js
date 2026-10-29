@@ -6,7 +6,10 @@ vi.hoisted(() => {
   process.env.SHOUTRRR_BLOCK_PRIVATE_TARGETS = 'true'
 })
 
-const { default: shoutrrrPlugin, blockPrivateTargets } = await import('../plugins/shoutrrr.js')
+const execMock = vi.hoisted(() => vi.fn())
+vi.mock('node:child_process', () => ({ execFile: execMock }))
+
+const { default: shoutrrrPlugin, blockPrivateTargets, maskUrl } = await import('../plugins/shoutrrr.js')
 
 describe('blockPrivateTargets', () => {
   it('blocks by default and only opts out on an explicit false', () => {
@@ -54,5 +57,36 @@ describe('sendShoutrrr with SHOUTRRR_BLOCK_PRIVATE_TARGETS on', () => {
     const app = await buildApp()
     await expect(app.sendShoutrrr('gotify://10.0.0.7/token', { title: 't', message: 'm' }))
       .rejects.toThrow(/private network/)
+  })
+})
+
+describe('maskUrl', () => {
+  it('keeps only scheme and host[:port]', () => {
+    expect(maskUrl('gotify://host.example:8080/messages/SECRET?priority=1')).toBe('gotify://host.example:8080')
+    expect(maskUrl('telegram://123:SECRET@telegram?chats=@x')).toBe('telegram://telegram')
+    expect(maskUrl('discord://SECRET@1234/WEBHOOK')).toBe('discord://1234')
+    expect(maskUrl('https://user:pw@hooks.example/a/SECRET?k=v')).toBe('https://hooks.example')
+    expect(maskUrl('not a url')).toBe('invalid-url')
+  })
+})
+
+describe('shoutrrr CLI failure', () => {
+  it('neither logs nor returns the token', async () => {
+    const SECRET = 'SUPERSECRETTOKEN123'
+    const url = `discord://${SECRET}@8.8.8.8/WEBHOOKID?color=${SECRET}`
+    execMock.mockImplementation((cmd, args, opts, cb) => {
+      const e = new Error(`Command failed: shoutrrr send --url ${url}`)
+      e.stderr = `invalid token "${url}" / ${SECRET} / WEBHOOKID`
+      cb(e)
+    })
+    const logs = []
+    const app = await buildApp()
+    app.log.warn = (...a) => logs.push(JSON.stringify(a))
+    const err = await app.sendShoutrrr(url, { title: 'T', message: 'M' }).catch(e => e)
+    expect(err.message).toBe('Shoutrrr (discord://8.8.8.8) failed')
+    expect(logs.length).toBe(1)
+    expect(logs[0]).not.toContain(SECRET)
+    expect(logs[0]).not.toContain('WEBHOOKID')
+    expect(logs[0]).toContain('***')
   })
 })

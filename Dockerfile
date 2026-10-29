@@ -33,26 +33,26 @@ WORKDIR /app
 # spawns child processes; the entrypoint ends in `exec node`)
 RUN apk add --no-cache su-exec tzdata curl tini
 
-ARG SHOUTRRR_VERSION=0.8.0
+# Maintained fork of containrrr/shoutrrr (0.8.0 rejects Gotify 3.x tokens).
+# Checksums are pinned here (not fetched from the release) so a tampered
+# release asset is detected, not only a corrupted download.
+ARG SHOUTRRR_VERSION=0.22.1
 RUN apk add --no-cache --virtual .build-deps wget \
     && ARCH=$(uname -m) \
     && case "$ARCH" in \
-         x86_64)  SHOUTRRR_ARCH=amd64  ;; \
-         aarch64) SHOUTRRR_ARCH=arm64  ;; \
-         armv7l)  SHOUTRRR_ARCH=armv6  ;; \
+         x86_64)  SHOUTRRR_ARCH=amd64;   EXPECTED=c6621f7a34b631705e5e94d33056d6368901495835ad07166034b644a1d46d86 ;; \
+         aarch64) SHOUTRRR_ARCH=arm64v8; EXPECTED=f5198eacbc481552e169bb5d67cc9652d19c5494f06720832b0d85fc5eb368b4 ;; \
+         armv7l)  SHOUTRRR_ARCH=armhf;   EXPECTED=1e99f7bcd8b60e3bc952381875f8766cba9ac8013144005ebe503587018954ee ;; \
          *) echo "Unsupported arch: $ARCH" && exit 1 ;; \
        esac \
     && wget -qO /tmp/shoutrrr.tar.gz \
-         "https://github.com/containrrr/shoutrrr/releases/download/v${SHOUTRRR_VERSION}/shoutrrr_linux_${SHOUTRRR_ARCH}.tar.gz" \
-    && wget -qO /tmp/shoutrrr_checksums.txt \
-         "https://github.com/containrrr/shoutrrr/releases/download/v${SHOUTRRR_VERSION}/shoutrrr_${SHOUTRRR_VERSION}_checksums.txt" \
-    && EXPECTED=$(grep -E "shoutrrr_linux_${SHOUTRRR_ARCH}\.tar\.gz$" /tmp/shoutrrr_checksums.txt | awk '{print $1}') \
+         "https://github.com/nicholas-fedor/shoutrrr/releases/download/v${SHOUTRRR_VERSION}/shoutrrr_linux_${SHOUTRRR_ARCH}_${SHOUTRRR_VERSION}.tar.gz" \
     && ACTUAL=$(sha256sum /tmp/shoutrrr.tar.gz | awk '{print $1}') \
-    && if [ -z "$EXPECTED" ] || [ "$EXPECTED" != "$ACTUAL" ]; then echo "Shoutrrr checksum mismatch" && exit 1; fi \
+    && if [ "$EXPECTED" != "$ACTUAL" ]; then echo "Shoutrrr checksum mismatch" && exit 1; fi \
     && tar -xzf /tmp/shoutrrr.tar.gz -C /usr/local/bin shoutrrr \
-    && rm /tmp/shoutrrr.tar.gz /tmp/shoutrrr_checksums.txt \
+    && rm /tmp/shoutrrr.tar.gz \
     && chmod +x /usr/local/bin/shoutrrr \
-    && shoutrrr --version \
+    && shoutrrr --help >/dev/null \
     && apk del .build-deps
 
 # --chown for the default PUID/PGID (1000) so the runtime entrypoint usually

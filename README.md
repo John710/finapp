@@ -253,7 +253,7 @@ Notes:
 Notifications are configured per-user in **Settings**:
 
 - **Web Push** — generate your personal VAPID keys, subscribe the browser, and receive push notifications.
-- **Shoutrrr** — configure one or more Shoutrrr URLs to send notifications to Telegram, Discord, Gotify, email, generic webhooks, etc.
+- **Shoutrrr** — configure one or more Shoutrrr URLs to send notifications to Telegram, Discord, Gotify, email, generic webhooks, etc. Gotify 3.x app tokens (`gtfya.…`) are supported; the URL form is `gotify://host/<token>` (no extra path segments such as `/messages`).
 
 > **Note:** Web Push requires a secure context (`https://` or `localhost`). It will not work on plain `http://` IP addresses.
 
