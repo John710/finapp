@@ -128,9 +128,13 @@
             <span class="font-medium">{{ u.login }}</span>
             <span v-if="u.role === 'admin'" class="ml-2 text-xs px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300">{{ $t('settings.users_admin_badge') }}</span>
             <span v-if="u.id === auth.user?.id" class="ml-2 text-xs text-slate-400">({{ $t('settings.users_you') }})</span>
+            <span class="ml-2 text-xs" :class="u.totp_enabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'">{{ u.totp_enabled ? $t('settings.users_2fa_on') : $t('settings.users_2fa_off') }}</span>
             <p class="text-xs text-slate-500">{{ $t('settings.users_created') }}: {{ formatDateTime(u.created_at) }}</p>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
+            <button v-if="u.totp_enabled" :disabled="userActionId === u.id" @click="resetTwoFactor(u)" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-50">
+              {{ $t('settings.users_reset_2fa') }}
+            </button>
             <button @click="resetPassword(u)" class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600">
               {{ $t('settings.users_reset_password') }}
             </button>
@@ -184,6 +188,7 @@ const users = ref([])
 const newLogin = ref('')
 const newPassword = ref('')
 const userLoading = ref(false)
+const userActionId = ref(null)
 
 const newFeedName = ref('')
 const feedLink = ref('')
@@ -362,6 +367,24 @@ async function resetPassword(u) {
   } catch (e) {
     logger.error('Failed to reset password', e)
     window.$toast?.error(e.message || t('common.error'))
+  }
+}
+
+async function resetTwoFactor(u) {
+  if (userActionId.value !== null) return
+  if (!(await window.$confirm({ message: t('settings.users_reset_2fa_confirm', { login: u.login }), danger: true }))) return
+  userActionId.value = u.id
+  try {
+    await api(`/admin/users/${u.id}`, { method: 'PATCH', body: JSON.stringify({ reset_2fa: true }) })
+    await loadUsers()
+    // An admin resetting their own 2FA changes what the security card shows
+    if (u.id === auth.user?.id) await auth.fetchMe()
+    window.$toast?.success(t('settings.users_reset_2fa_done', { login: u.login }))
+  } catch (e) {
+    logger.error('Failed to reset 2FA', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    userActionId.value = null
   }
 }
 

@@ -29,8 +29,9 @@
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           <div
 v-for="cat in filteredCategories(type)" :key="cat.id"
-            class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer"
-            @click="editCategory(cat)">
+            class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark flex items-center gap-3 transition-shadow"
+            :class="isAdmin ? 'hover:shadow-md cursor-pointer' : ''"
+            @click="isAdmin && editCategory(cat)">
             <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" :style="{ backgroundColor: cat.color + '20', color: cat.color }">
               <SafeSvg v-if="cat.icon_custom" :svg="cat.icon_custom" class="w-5 h-5" />
               <Icon v-else-if="cat.icon" :name="cat.icon" set="category" class="w-5 h-5" />
@@ -40,7 +41,7 @@ v-for="cat in filteredCategories(type)" :key="cat.id"
               <span class="font-medium truncate block">{{ cat.name }}</span>
               <span v-if="cat.parent_id" class="text-xs text-slate-500">{{ parentName(cat.parent_id) }}</span>
             </div>
-            <button class="shrink-0 p-1.5 rounded-full text-slate-400 hover:text-primary-600 transition-colors" :aria-label="$t('categories.merge')" :title="$t('categories.merge')" @click.stop="openMerge(cat)">
+            <button v-if="isAdmin" class="shrink-0 p-1.5 rounded-full text-slate-400 hover:text-primary-600 transition-colors" :aria-label="$t('categories.merge')" :title="$t('categories.merge')" @click.stop="openMerge(cat)">
               <Icon name="arrowRight" class="w-4 h-4" />
             </button>
           </div>
@@ -113,7 +114,7 @@ v-for="color in presetColors" :key="color" type="button" class="w-8 h-8 rounded-
           </div>
           <div class="flex gap-3 mt-6">
             <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closeModal">{{ $t('common.cancel') }}</button>
-            <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
+            <button type="submit" :disabled="saving" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium disabled:opacity-50">{{ $t('common.save') }}</button>
           </div>
         </form>
       </BaseModal>
@@ -139,6 +140,10 @@ useHotkeys({
   'esc': () => { if (showModal.value) closeModal() }
 })
 const categoriesStore = useCategoriesStore()
+const authStore = useAuthStore()
+
+// Categories are shared by every user: only an admin may edit or merge them
+const isAdmin = computed(() => authStore.user?.role === 'admin')
 
 // Merge: move all transactions/rules/budgets into another category of the same type
 const showMerge = ref(false)
@@ -151,6 +156,7 @@ const mergeTargets = computed(() =>
 )
 
 function openMerge(cat) {
+  if (!isAdmin.value) return
   mergeSource.value = cat
   mergeTargetId.value = null
   showMerge.value = true
@@ -171,6 +177,7 @@ async function confirmMerge() {
 }
 const showModal = ref(false)
 const isEditing = ref(false)
+const saving = ref(false)
 const fileInput = ref(null)
 const form = reactive({ name: '', type: 'expense', color: '#f43f5e', icon: 'tag', icon_custom: null, parent_id: null })
 
@@ -218,6 +225,7 @@ function openModal() {
 }
 
 function editCategory(category) {
+  if (!isAdmin.value) return
   isEditing.value = true
   Object.assign(form, category)
   showModal.value = true
@@ -228,12 +236,20 @@ function closeModal() {
 }
 
 async function saveCategory() {
+  if (saving.value) return
   const data = { name: form.name, type: form.type, color: form.color, icon: form.icon, icon_custom: form.icon_custom, parent_id: form.parent_id }
-  if (isEditing.value) {
-    await categoriesStore.updateCategory(form.id, data)
-  } else {
-    await categoriesStore.createCategory(data)
+  saving.value = true
+  try {
+    if (isEditing.value) {
+      await categoriesStore.updateCategory(form.id, data)
+    } else {
+      await categoriesStore.createCategory(data)
+    }
+    closeModal()
+  } catch (e) {
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    saving.value = false
   }
-  closeModal()
 }
 </script>

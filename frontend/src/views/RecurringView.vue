@@ -96,10 +96,10 @@
               <Icon name="share" class="w-3 h-3" />{{ rule.is_shared ? $t('sharing.shared_badge') : $t('sharing.title') }}
             </button>
             <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click="editRule(rule)">{{ $t('common.edit') }}</button>
-            <button class="w-11 h-6 rounded-full relative transition-colors border-0" :class="rule.is_active ? 'bg-primary-600' : 'bg-slate-300 dark:bg-slate-700'" :aria-label="$t('common.edit')" @click="toggleActive(rule)">
+            <button class="w-11 h-6 rounded-full relative transition-colors border-0" :class="rule.is_active ? 'bg-primary-600' : 'bg-slate-300 dark:bg-slate-700'" :aria-label="$t('common.edit')" :disabled="busy === rule.id" @click="toggleActive(rule)">
               <span class="absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all" :class="rule.is_active ? 'right-1' : 'left-1'"></span>
             </button>
-            <button class="p-2 text-slate-400 hover:text-danger-500 transition-colors border-0 bg-transparent" @click="deleteRule(rule.id)">
+            <button class="p-2 text-slate-400 hover:text-danger-500 transition-colors border-0 bg-transparent disabled:opacity-50" :disabled="deleting" :aria-label="$t('common.delete')" @click="deleteRule(rule.id)">
               <Icon name="delete" class="w-4 h-4" />
             </button>
           </div>
@@ -224,7 +224,7 @@
           </div>
           <div class="flex gap-3 mt-6">
             <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closeModal">{{ $t('common.cancel') }}</button>
-            <button type="submit" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium">{{ $t('common.save') }}</button>
+            <button type="submit" :disabled="saving" class="flex-1 py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">{{ $t('common.save') }}</button>
           </div>
         </form>
       </BaseModal>
@@ -247,6 +247,7 @@ import { useI18n } from 'vue-i18n'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { useUndo } from '@/composables/useUndo'
 import { formatDate as formatDateValue, parseAmount } from '@/utils/format'
+import { logger } from '@/utils/logger'
 import { scheduleLabel } from '@/utils/recurring'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import QuickCategoryModal from '../components/QuickCategoryModal.vue'
@@ -291,6 +292,8 @@ const showQuickAccount = ref(false)
 const showQuickCategory = ref(false)
 const isEditing = ref(false)
 const busy = ref(null)
+const saving = ref(false)
+const deleting = ref(false)
 const anchorTouched = ref(false)
 const editing = ref(null)
 
@@ -469,26 +472,37 @@ function onQuickCategoryCreated(category) {
 }
 
 async function saveRule() {
-  form.amount = parseAmount(form.amount)
-  const payload = buildPayload()
-  if (isEditing.value) {
-    if (!Object.keys(payload).length) {
-      closeModal()
-      return
+  // Re-entry guard: double click / Ctrl+Enter while a request is in flight
+  if (saving.value) return
+  saving.value = true
+  try {
+    form.amount = parseAmount(form.amount)
+    const payload = buildPayload()
+    if (isEditing.value) {
+      if (!Object.keys(payload).length) {
+        closeModal()
+        return
+      }
+      await recurringStore.patchRule(editing.value.id, payload)
+    } else {
+      await recurringStore.createRule(payload)
     }
-    await recurringStore.patchRule(editing.value.id, payload)
-  } else {
-    await recurringStore.createRule(payload)
+    window.$toast?.success(t('common.saved'))
+    closeModal()
+  } catch (e) {
+    logger.error('Failed to save recurring rule', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    saving.value = false
   }
-  window.$toast?.success(t('common.saved'))
-  closeModal()
 }
 
-async function toggleActive(rule) {
-  await recurringStore.patchRule(rule.id, { is_active: !rule.is_active })
+function toggleActive(rule) {
+  return withBusy(rule, () => recurringStore.patchRule(rule.id, { is_active: !rule.is_active }))
 }
 
 async function withBusy(rule, work) {
+  if (busy.value !== null) return
   busy.value = rule.id
   try {
     await work()
@@ -521,18 +535,32 @@ function runNow(rule) {
 }
 
 async function deleteRule(id) {
-  if (!(await window.$confirm({ message: t('common.confirm_delete') }))) return
+  if (deleting.value) return
+  if (!(await window.$confirm({ message: t('common.confirm_delete'), danger: true }))) return
   const item = recurringStore.rules.find(r => r.id === id)
-  await recurringStore.deleteRule(id)
-  if (item) {
-    const snapshot = {}
-    for (const key of EDITABLE_FIELDS) snapshot[key] = valueOf(item, key)
-    undo.push({
-      message: t('common.undo_delete'),
-      action: async () => {
-        await recurringStore.createRule(snapshot)
-      }
-    })
+  deleting.value = true
+  try {
+    await recurringStore.deleteRule(id)
+    if (item) {
+      const snapshot = {}
+      for (const key of EDITABLE_FIELDS) snapshot[key] = valueOf(item, key)
+      undo.push({
+        message: t('common.undo_delete'),
+        action: async () => {
+          try {
+            await recurringStore.createRule(snapshot)
+          } catch (e) {
+            logger.error('Failed to restore recurring rule', e)
+            window.$toast?.error(e.message || t('common.error'))
+          }
+        }
+      })
+    }
+  } catch (e) {
+    logger.error('Failed to delete recurring rule', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    deleting.value = false
   }
 }
 </script>

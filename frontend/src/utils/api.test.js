@@ -52,6 +52,25 @@ describe('api()', () => {
     expect(window.location.href).toBe('/login')
   })
 
+  it('keeps the server message and flags of a locked second factor (423)', async () => {
+    const body = { error: 'Too many wrong codes', totp_required: true, totp_locked: true }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(body, 423)))
+    const err = await api('/auth/login', { method: 'POST', body: '{}' }).catch(e => e)
+    expect(err.message).toBe('Too many wrong codes')
+    expect(err.totp_locked).toBe(true)
+    expect(err.totp_required).toBe(true)
+  })
+
+  it('keeps the route own message on 429 but replaces the framework one', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ error: 'Rates were refreshed recently' }, 429)))
+    await expect(api('/currencies/update', { method: 'POST' })).rejects.toThrow('Rates were refreshed recently')
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ statusCode: 429, error: 'Too Many Requests', message: 'Rate limit exceeded' }, 429)))
+    const err = await api('/auth/login', { method: 'POST', body: '{}' }).catch(e => e)
+    expect(err.message).not.toBe('Too Many Requests')
+    expect(err.message).not.toBe('Rate limit exceeded')
+  })
+
   it('uses a localized message for a bare HTTP error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({}, 500)))
     await expect(api('/accounts')).rejects.toThrow(/500/)
