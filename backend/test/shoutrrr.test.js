@@ -6,7 +6,18 @@ vi.hoisted(() => {
   process.env.SHOUTRRR_BLOCK_PRIVATE_TARGETS = 'true'
 })
 
-const { default: shoutrrrPlugin } = await import('../plugins/shoutrrr.js')
+const { default: shoutrrrPlugin, blockPrivateTargets } = await import('../plugins/shoutrrr.js')
+
+describe('blockPrivateTargets', () => {
+  it('blocks by default and only opts out on an explicit false', () => {
+    expect(blockPrivateTargets(undefined)).toBe(true)
+    expect(blockPrivateTargets('')).toBe(true)
+    expect(blockPrivateTargets('true')).toBe(true)
+    expect(blockPrivateTargets('false')).toBe(false)
+    expect(blockPrivateTargets(' No ')).toBe(false)
+    expect(blockPrivateTargets('0')).toBe(false)
+  })
+})
 
 async function buildApp() {
   const app = Fastify()

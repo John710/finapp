@@ -8,12 +8,13 @@ const execFileAsync = promisify(execFile)
 
 // When true, notification targets (http(s) webhooks AND shoutrrr service URLs)
 // that resolve to private/loopback addresses are rejected and webhook redirects
-// are not followed (SSRF protection for multi-user deployments). Off by
-// default: self-hosted setups legitimately notify services on their own LAN
-// (e.g. a local Gotify), which public hosting would consider SSRF.
-const BLOCK_PRIVATE_TARGETS = ['1', 'true', 'yes'].includes(
-  String(process.env.SHOUTRRR_BLOCK_PRIVATE_TARGETS || '').toLowerCase()
-)
+// are not followed (SSRF protection for multi-user deployments). On by
+// default; an admin whose users notify services on the local network
+// (e.g. a local Gotify) opts out with SHOUTRRR_BLOCK_PRIVATE_TARGETS=false.
+export function blockPrivateTargets(value) {
+  return !['0', 'false', 'no', 'off'].includes(String(value ?? '').trim().toLowerCase())
+}
+const BLOCK_PRIVATE_TARGETS = blockPrivateTargets(process.env.SHOUTRRR_BLOCK_PRIVATE_TARGETS)
 
 // Errors from this plugin can surface in API responses; never include the full
 // URL — Shoutrrr URLs embed bot tokens and API keys in userinfo/query.
