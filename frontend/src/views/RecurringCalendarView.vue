@@ -38,6 +38,9 @@
 v-for="occurrence in cell.visible" :key="occurrence.key" type="button"
               class="w-full text-left px-1.5 py-1 rounded-md text-[10px] lg:text-[11px] font-medium border-0 truncate transition-opacity hover:opacity-80"
               :class="chipClass(occurrence)" @click="openOccurrence(occurrence)">
+              <template v-if="isInstallment(occurrence)">
+                <span aria-hidden="true">{{ occurrence.debt_type === 'lend' ? '↑' : '↓' }} </span><span class="sr-only">{{ directionLabel(occurrence) }}: </span>
+              </template>
               {{ occurrence.name }} · {{ chipAmount(occurrence) }}
             </button>
             <p v-if="cell.extra > 0" class="text-[10px] text-slate-400 px-1.5">+{{ cell.extra }}</p>
@@ -54,20 +57,21 @@ v-for="occurrence in cell.visible" :key="occurrence.key" type="button"
 
     <BaseModal v-model="selected.show" width-class="max-w-sm" z-class="z-50">
       <template v-if="selected.occurrence">
-        <h2 class="font-display text-xl font-semibold mb-1">{{ $t('recurring.calendar.occurrence') }}</h2>
+        <h2 class="font-display text-xl font-semibold mb-1">{{ $t(isInstallment(selected.occurrence) ? 'recurring.calendar.installment' : 'recurring.calendar.occurrence') }}</h2>
         <p class="text-sm text-slate-500 mb-4">{{ selected.occurrence.name }} • {{ formatDate(selected.occurrence.date) }}</p>
-        <p class="text-2xl font-semibold mb-1" :class="selected.occurrence.type === 'income' ? 'text-primary-600' : 'text-danger-500'">
-          {{ selected.occurrence.type === 'income' ? '+' : '−' }}{{ amountText(selected.occurrence) }}
+        <p class="text-2xl font-semibold mb-1" :class="isIncoming(selected.occurrence) ? 'text-primary-600' : 'text-danger-500'">
+          {{ isIncoming(selected.occurrence) ? '+' : '−' }}{{ amountText(selected.occurrence) }}
         </p>
-        <p class="text-xs text-slate-400 mb-5">{{ selected.occurrence.account_name }}<template v-if="selected.occurrence.category_name"> • {{ selected.occurrence.category_name }}</template></p>
+        <p v-if="isInstallment(selected.occurrence)" class="text-xs text-slate-400 mb-5">{{ directionLabel(selected.occurrence) }}</p>
+        <p v-else class="text-xs text-slate-400 mb-5">{{ selected.occurrence.account_name }}<template v-if="selected.occurrence.category_name"> • {{ selected.occurrence.category_name }}</template></p>
 
         <div v-if="!selected.occurrence.paid && !selected.occurrence.skipped && canManage" class="flex gap-2">
-          <button class="flex-1 py-2.5 rounded-full border-0 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium" :disabled="busy" @click="act('pay')">{{ $t('recurring.actions.pay') }}</button>
-          <button class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium" :disabled="busy" @click="act('skip')">{{ $t('recurring.actions.skip') }}</button>
+          <button class="flex-1 py-2.5 rounded-full border-0 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium disabled:opacity-50" :disabled="busy" @click="act('pay')">{{ $t(isInstallment(selected.occurrence) ? 'debts.installments.pay' : 'recurring.actions.pay') }}</button>
+          <button class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium disabled:opacity-50" :disabled="busy" @click="act('skip')">{{ $t(isInstallment(selected.occurrence) ? 'debts.installments.skip' : 'recurring.actions.skip') }}</button>
         </div>
         <div v-else-if="(selected.occurrence.paid || selected.occurrence.skipped) && canManage" class="flex gap-2">
-          <button class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium" :disabled="busy" @click="act(selected.occurrence.paid ? 'unpay' : 'unskip')">
-            {{ $t(selected.occurrence.paid ? 'recurring.actions.unpay' : 'recurring.actions.unskip') }}
+          <button class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium disabled:opacity-50" :disabled="busy" @click="act(selected.occurrence.paid ? 'unpay' : 'unskip')">
+            {{ $t(undoLabelKey(selected.occurrence)) }}
           </button>
         </div>
 
@@ -81,7 +85,9 @@ v-for="occurrence in cell.visible" :key="occurrence.key" type="button"
 import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRecurringStore } from '../stores/recurring'
+import { useDebtsStore } from '../stores/debts'
 import { useRatesStore } from '../stores/rates'
+import { isInstallmentRow, isIncomingRow, occurrenceKey } from '@/utils/installments'
 import { formatDate, formatCurrency, parseAmount } from '@/utils/format'
 import { getUserLocale, getFirstDayOfWeek } from '@/utils/locale'
 import BaseModal from '@/components/BaseModal.vue'
@@ -89,8 +95,22 @@ import BaseSkeleton from '@/components/BaseSkeleton.vue'
 
 const ITEMS_PER_CELL = 3
 
+const RULE_TOASTS = {
+  pay: 'recurring.paid_toast',
+  skip: 'recurring.skipped_toast',
+  unpay: 'recurring.unpaid_toast',
+  unskip: 'recurring.unskipped_toast'
+}
+const INSTALLMENT_TOASTS = {
+  pay: 'debts.installments.paid_toast',
+  skip: 'debts.installments.skipped_toast',
+  unpay: 'debts.installments.unpaid_toast',
+  unskip: 'debts.installments.unskipped_toast'
+}
+
 const { t } = useI18n()
 const recurringStore = useRecurringStore()
+const debtsStore = useDebtsStore()
 const ratesStore = useRatesStore()
 
 function todayValue() {
@@ -133,7 +153,7 @@ const byDate = computed(() => {
   const map = new Map()
   for (const occurrence of recurringStore.occurrences) {
     if (!map.has(occurrence.date)) map.set(occurrence.date, [])
-    map.get(occurrence.date).push({ ...occurrence, key: `${occurrence.rule_id}-${occurrence.date}` })
+    map.get(occurrence.date).push({ ...occurrence, key: occurrenceKey(occurrence) })
   }
   return map
 })
@@ -169,12 +189,26 @@ const legend = computed(() => [
   { key: 'due', label: t('recurring.calendar.legend_due'), dot: 'bg-amber-500' },
   { key: 'overdue', label: t('recurring.calendar.legend_overdue'), dot: 'bg-danger-500' },
   { key: 'paid', label: t('recurring.calendar.legend_paid'), dot: 'bg-emerald-500' },
-  { key: 'skipped', label: t('recurring.calendar.legend_skipped'), dot: 'bg-slate-400' }
+  { key: 'skipped', label: t('recurring.calendar.legend_skipped'), dot: 'bg-slate-400' },
+  { key: 'debts', label: t('recurring.calendar.legend_debts'), dot: 'bg-violet-500' }
 ])
+
+const isInstallment = isInstallmentRow
+const isIncoming = isIncomingRow
+
+function directionLabel(occurrence) {
+  return t(occurrence.debt_type === 'lend' ? 'recurring.calendar.debt_lend' : 'recurring.calendar.debt_borrow')
+}
+
+function undoLabelKey(occurrence) {
+  if (isInstallment(occurrence)) return occurrence.paid ? 'debts.installments.unpay' : 'debts.installments.unskip'
+  return occurrence.paid ? 'recurring.actions.unpay' : 'recurring.actions.unskip'
+}
 
 const canManage = computed(() => {
   const occurrence = selected.value.occurrence
   if (!occurrence) return false
+  if (isInstallment(occurrence)) return occurrence.is_owner !== false
   return recurringStore.rules.find(rule => rule.id === occurrence.rule_id)?.is_owner !== false
 })
 
@@ -208,7 +242,7 @@ function chipClass(occurrence) {
 }
 
 function chipAmount(occurrence) {
-  const sign = occurrence.type === 'income' ? '+' : '−'
+  const sign = isIncoming(occurrence) ? '+' : '−'
   return `${sign}${formatCurrency(parseAmount(occurrence.amount), occurrence.currency)}`
 }
 
@@ -224,18 +258,24 @@ async function act(kind) {
   const occurrence = selected.value.occurrence
   if (!occurrence || busy.value) return
   busy.value = true
+  const installment = isInstallment(occurrence)
   const target = { ruleId: occurrence.rule_id, date: occurrence.date }
-  const toastKey = {
-    pay: 'recurring.paid_toast',
-    skip: 'recurring.skipped_toast',
-    unpay: 'recurring.unpaid_toast',
-    unskip: 'recurring.unskipped_toast'
-  }[kind]
+  const toastKey = (installment ? INSTALLMENT_TOASTS : RULE_TOASTS)[kind]
   try {
-    if (kind === 'pay') await recurringStore.payOccurrence(target)
-    if (kind === 'skip') await recurringStore.skipOccurrence(target)
-    if (kind === 'unpay') await recurringStore.unpayOccurrence(target)
-    if (kind === 'unskip') await recurringStore.unskipOccurrence(target)
+    if (installment) {
+      const id = occurrence.installment_id
+      if (kind === 'pay') await debtsStore.payInstallment(id)
+      if (kind === 'skip') await debtsStore.skipInstallment(id)
+      if (kind === 'unpay') await debtsStore.unpayInstallment(id)
+      if (kind === 'unskip') await debtsStore.unskipInstallment(id)
+      // The debt writes moved the calendar's source rows: re-read the projection.
+      await recurringStore.refresh()
+    } else {
+      if (kind === 'pay') await recurringStore.payOccurrence(target)
+      if (kind === 'skip') await recurringStore.skipOccurrence(target)
+      if (kind === 'unpay') await recurringStore.unpayOccurrence(target)
+      if (kind === 'unskip') await recurringStore.unskipOccurrence(target)
+    }
     window.$toast?.success(t(toastKey, { date: formatDate(occurrence.date) }))
     selected.value.show = false
   } catch (err) {
