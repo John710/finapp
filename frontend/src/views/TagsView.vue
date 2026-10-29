@@ -26,11 +26,11 @@
           <span class="font-medium">{{ tag.name }}</span>
           <span class="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-full">{{ tag.transaction_count ?? 0 }}</span>
         </div>
-        <div class="flex items-center gap-1" @click.stop>
-          <button class="p-1.5 text-slate-400 hover:text-primary-600 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" @click="openModal(tag)">
+        <div v-if="isAdmin" class="flex items-center gap-1" @click.stop>
+          <button class="p-1.5 text-slate-400 hover:text-primary-600 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" :aria-label="$t('common.edit')" @click="openModal(tag)">
             <Icon name="edit" class="w-4 h-4" />
           </button>
-          <button :disabled="deletingId === tag.id" class="p-1.5 text-slate-400 hover:text-danger-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50" @click="deleteTag(tag.id)">
+          <button :disabled="deletingId === tag.id" :aria-label="$t('common.delete')" class="p-1.5 text-slate-400 hover:text-danger-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50" @click="deleteTag(tag.id)">
             <Icon name="delete" class="w-4 h-4" />
           </button>
         </div>
@@ -78,6 +78,9 @@ const undo = useUndo('tags')
 const tagsStore = useTagsStore()
 const authStore = useAuthStore()
 
+// Tags are shared by every user: only an admin may edit or delete them
+const isAdmin = computed(() => authStore.user?.role === 'admin')
+
 useHotkeys({
   'ctrl+enter': () => { if (showModal.value) saveTag() },
   'esc': () => { if (showModal.value) closeModal() }
@@ -105,7 +108,8 @@ function closeModal() {
 
 async function saveTag() {
   const name = form.value.name.trim()
-  if (!name) return
+  if (!name || saving.value) return
+  if (editingTag.value && !isAdmin.value) return
   saving.value = true
   try {
     if (editingTag.value) {
@@ -126,6 +130,7 @@ function goToTransactions(tagId) {
 }
 
 async function deleteTag(id) {
+  if (!isAdmin.value || deletingId.value !== null) return
   if (!(await window.$confirm({ message: t('common.confirm_delete'), danger: true }))) return
   const item = tagsStore.tags.find(t => t.id === id)
   deletingId.value = id

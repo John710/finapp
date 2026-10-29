@@ -27,6 +27,14 @@
         </select>
       </div>
 
+      <!-- Date format -->
+      <div class="mb-4">
+        <label for="import-date-format" class="block text-sm font-medium mb-1">{{ $t('import.date_format') }}</label>
+        <select id="import-date-format" v-model="dateFormat" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm">
+          <option v-for="f in DATE_FORMATS" :key="f" :value="f">{{ f }}</option>
+        </select>
+      </div>
+
       <!-- Preview -->
       <div v-if="preview.length" class="mb-4">
         <label class="block text-sm font-medium mb-1">{{ $t('import.preview') }}</label>
@@ -61,10 +69,12 @@
       <div v-if="result" class="mb-4 p-3 rounded-lg" :class="result.stats?.errors?.length ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800'">
         <p class="font-medium">{{ $t('import.created') }}: {{ result.stats.created }} / {{ result.total }}</p>
         <p v-if="result.stats.skipped">{{ $t('import.skipped') }}: {{ result.stats.skipped }}</p>
-        <details v-if="result.stats.errors?.length">
+        <p v-if="result.stats.uncategorized">{{ $t('import.uncategorized') }}: {{ result.stats.uncategorized }}</p>
+        <details v-if="result.stats.errors?.length" open>
           <summary class="cursor-pointer">{{ $t('import.errors') }} ({{ result.stats.errors.length }})</summary>
-          <ul class="mt-1 text-xs space-y-1">
-            <li v-for="(err, i) in result.stats.errors.slice(0, 10)" :key="i">{{ err.row }}: {{ err.error }}</li>
+          <ul class="mt-1 text-xs space-y-1 max-h-48 overflow-y-auto">
+            <li v-for="(err, i) in result.stats.errors.slice(0, MAX_SHOWN_ERRORS)" :key="i">{{ $t('import.row', { row: err.row }) }}: {{ err.error }}</li>
+            <li v-if="result.stats.errors.length > MAX_SHOWN_ERRORS">{{ $t('import.errors_more', { count: result.stats.errors.length - MAX_SHOWN_ERRORS }) }}</li>
           </ul>
         </details>
       </div>
@@ -88,6 +98,10 @@ import BaseModal from '@/components/BaseModal.vue'
 
 const { t } = useI18n()
 
+// Same list the server accepts; anything else is rejected with a 400
+const DATE_FORMATS = ['YYYY-MM-DD', 'DD.MM.YYYY', 'DD/MM/YYYY', 'MM/DD/YYYY']
+const MAX_SHOWN_ERRORS = 100
+
 const props = defineProps({ modelValue: Boolean })
 const emit = defineEmits(['update:modelValue', 'imported'])
 
@@ -96,6 +110,7 @@ const file = ref(null)
 const profiles = ref([])
 const profile = ref('default')
 const delimiter = ref(';')
+const dateFormat = ref(DATE_FORMATS[0])
 const preview = ref([])
 const headers = ref([])
 const mapping = ref({ date: null, amount: null, type: null, category: null, account: null, note: null, currency: null })
@@ -120,6 +135,7 @@ watch(() => props.modelValue, async (val) => {
       window.$toast?.error(e.message || t('import.failed'))
     }
     reset()
+    onProfileChange()
   }
 })
 
@@ -145,7 +161,9 @@ function onFileChange(e) {
 
 function onProfileChange() {
   const p = profiles.value.find(p => p.key === profile.value)
-  if (p) delimiter.value = p.delimiter
+  if (!p) return
+  delimiter.value = p.delimiter
+  if (DATE_FORMATS.includes(p.dateFormat)) dateFormat.value = p.dateFormat
 }
 
 async function previewFile() {
@@ -172,6 +190,7 @@ async function upload(opts) {
   formData.append('options', JSON.stringify({
     profile: profile.value,
     delimiter: delimiter.value,
+    dateFormat: dateFormat.value,
     mapping: mapping.value,
     previewOnly: opts.previewOnly
   }))

@@ -142,7 +142,8 @@
     "paid_off": "Debt is fully paid",
     "account": "Account",
     "tx_created": "Debt created",
-    "tx_payment": "Debt payment"
+    "tx_payment": "Debt payment",
+    "locked_by_payments": "This debt already has payments, so the amount, currency, type and account can no longer be changed."
   },
   "recurring": {
     "title": "Recurring",
@@ -267,7 +268,11 @@
     "import_btn": "Import",
     "created": "Created",
     "skipped": "Skipped",
+    "uncategorized": "Imported without a category (name not found)",
     "errors": "Errors",
+    "row": "Row {row}",
+    "errors_more": "...and {count} more",
+    "date_format": "Date format",
     "completed": "Import completed",
     "fields": {
       "date": "Date",
@@ -482,7 +487,12 @@
     "users_created": "Created",
     "users_reset_password": "Reset password",
     "users_new_password_prompt": "New password for {login} (min 8 chars):",
-    "users_delete_confirm": "Delete user {login} with ALL their data? This cannot be undone."
+    "users_delete_confirm": "Delete user {login} with ALL their data? This cannot be undone.",
+    "users_2fa_on": "2FA on",
+    "users_2fa_off": "2FA off",
+    "users_reset_2fa": "Reset 2FA",
+    "users_reset_2fa_confirm": "Turn off two-factor authentication for {login}? Their authenticator secret is removed and they can sign in with the password alone until they set 2FA up again.",
+    "users_reset_2fa_done": "Two-factor authentication reset for {login}"
   },
   "common": {
     "save": "Save",

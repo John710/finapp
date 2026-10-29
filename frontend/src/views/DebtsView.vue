@@ -42,6 +42,7 @@
         </div>
         <div class="flex gap-2">
           <button v-if="debt.status !== 'paid'" class="text-xs px-2 py-1 rounded bg-primary-100 dark:bg-primary-500/15 text-primary-600 hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors" @click="openPaymentModal(debt)">{{ $t('debts.pay') }}</button>
+          <button v-if="!debt.owner_login" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click="editDebt(debt)">{{ $t('common.edit') }}</button>
           <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click="openHistory(debt)">{{ $t('debts.history') }}</button>
           <button class="text-xs px-2 py-1 rounded-full border-0 flex items-center gap-1 transition-colors font-medium" :class="debt.is_shared ? 'bg-primary-100 dark:bg-primary-500/20 text-primary-600 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-500/30' : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700'" @click="openShare(debt)">
             <Icon name="share" class="w-3 h-3" />{{ debt.is_shared ? $t('sharing.shared_badge') : $t('sharing.title') }}
@@ -64,23 +65,27 @@
             <label class="block text-sm font-medium mb-1">{{ $t('common.name') }}</label>
             <input v-model="form.name" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
           </div>
+          <p v-if="hasPayments" class="text-xs text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-2xl px-3 py-2">{{ $t('debts.locked_by_payments') }}</p>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('debts.amount') }}</label>
-              <input v-model.number="form.amount" type="number" step="0.01" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+              <label for="debt-amount" class="block text-sm font-medium mb-1">{{ $t('debts.amount') }}</label>
+              <input id="debt-amount" v-model.number="form.amount" type="number" step="0.01" required :disabled="hasPayments" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 disabled:opacity-60 disabled:cursor-not-allowed" />
             </div>
             <div>
               <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
-              <CurrencySelect
+              <!-- A disabled fieldset also disables the buttons inside CurrencySelect -->
+              <fieldset :disabled="hasPayments" class="min-w-0 border-0 p-0 m-0" :class="hasPayments ? 'opacity-60' : ''">
+                <CurrencySelect
 v-model="form.currency" required
-                :placeholder="$t('common.currency')"
-                :search-placeholder="$t('common.search')"
-                :empty-text="$t('common.empty')" />
+                  :placeholder="$t('common.currency')"
+                  :search-placeholder="$t('common.search')"
+                  :empty-text="$t('common.empty')" />
+              </fieldset>
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('debts.type') }}</label>
-            <select v-model="form.type" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+            <label for="debt-type" class="block text-sm font-medium mb-1">{{ $t('debts.type') }}</label>
+            <select id="debt-type" v-model="form.type" :disabled="hasPayments" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 disabled:opacity-60 disabled:cursor-not-allowed">
               <option value="borrow">{{ $t('debts.i_owe') }}</option>
               <option value="lend">{{ $t('debts.they_owe') }}</option>
             </select>
@@ -90,13 +95,13 @@ v-model="form.currency" required
             <input v-model="form.due_date" type="date" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('debts.account') }}</label>
+            <label for="debt-account" class="block text-sm font-medium mb-1">{{ $t('debts.account') }}</label>
             <div class="flex gap-2">
-              <select v-model="form.account_id" class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+              <select id="debt-account" v-model="form.account_id" :disabled="hasPayments" class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 disabled:opacity-60 disabled:cursor-not-allowed">
                 <option :value="null">-</option>
                 <option v-for="acc in accountsStore.accounts" :key="acc.id" :value="acc.id">{{ acc.name }}</option>
               </select>
-              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" @click="showQuickAccount = true">
+              <button type="button" :disabled="hasPayments" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600 disabled:opacity-60" :title="$t('common.add')" :aria-label="$t('common.add')" @click="showQuickAccount = true">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
             </div>
@@ -188,6 +193,7 @@ import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { formatDate, parseAmount } from '@/utils/format'
 import { logger } from '@/utils/logger.js'
+import { debtPayload } from '@/utils/debts.js'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import BaseModal from '@/components/BaseModal.vue'
 import BaseSkeleton from '@/components/BaseSkeleton.vue'
@@ -217,10 +223,12 @@ const showQuickAccount = ref(false)
 const isEditing = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
+const opening = ref(false)
+const hasPayments = ref(false)
 const currentDebtId = ref(null)
 const historyPayments = ref([])
 const historyDebt = ref(null)
-const form = reactive({ name: '', counterparty: '', amount: 0, currency: '', type: 'borrow', due_date: '', description: '', account_id: null })
+const form = reactive({ id: null, name: '', counterparty: '', amount: 0, currency: '', type: 'borrow', due_date: '', description: '', account_id: null })
 const paymentForm = reactive({ amount: 0, currency: '', note: '', account_id: null })
 
 onMounted(() => {
@@ -234,8 +242,38 @@ function formatConverted(value, currency) {
 
 function openModal() {
   isEditing.value = false
-  Object.assign(form, { name: '', counterparty: '', amount: 0, currency: baseCurrency.value, type: 'borrow', due_date: '', description: '', account_id: null })
+  hasPayments.value = false
+  Object.assign(form, { id: null, name: '', counterparty: '', amount: 0, currency: baseCurrency.value, type: 'borrow', due_date: '', description: '', account_id: null })
   showModal.value = true
+}
+
+// Once a payment exists the server refuses to change amount, currency, type or
+// account (409), so the edit form locks those fields up front.
+async function editDebt(debt) {
+  if (opening.value) return
+  opening.value = true
+  try {
+    const payments = await debtsStore.getPayments(debt.id)
+    hasPayments.value = payments.length > 0
+    isEditing.value = true
+    Object.assign(form, {
+      id: debt.id,
+      name: debt.name,
+      counterparty: debt.counterparty,
+      amount: Number(debt.amount),
+      currency: debt.currency || baseCurrency.value,
+      type: debt.type,
+      due_date: debt.due_date ? String(debt.due_date).slice(0, 10) : '',
+      description: debt.description || '',
+      account_id: debt.account_id ?? null
+    })
+    showModal.value = true
+  } catch (e) {
+    logger.error('Failed to load payments', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    opening.value = false
+  }
 }
 
 function openPaymentModal(debt) {
@@ -270,9 +308,9 @@ async function saveDebt() {
   saving.value = true
   try {
     if (isEditing.value) {
-      await debtsStore.updateDebt(form.id, { ...form })
+      await debtsStore.updateDebt(form.id, debtPayload(form))
     } else {
-      await debtsStore.createDebt({ ...form })
+      await debtsStore.createDebt(debtPayload(form))
     }
     closeModal()
   } catch (e) {
@@ -310,7 +348,7 @@ async function deleteDebt(id) {
         message: t('common.undo_delete'),
         action: async () => {
           try {
-            await debtsStore.createDebt({ ...item })
+            await debtsStore.createDebt(debtPayload(item))
           } catch (e) {
             logger.error('Failed to restore debt', e)
             window.$toast?.error(e.message || t('common.error'))

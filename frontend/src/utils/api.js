@@ -105,9 +105,12 @@ export async function api(path, options = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    // Rate-limit rejections arrive as raw framework messages — surface a
-    // localized, actionable error instead of the English default
-    if (res.status === 429 || err.statusCode === 429) {
+    // Rate-limit rejections from the framework arrive as raw English messages
+    // (they carry statusCode) — surface a localized, actionable error instead.
+    // A route that answers 429 itself (e.g. the rates refresh throttle) sends
+    // its own localized `error` without statusCode, which is kept.
+    const ownThrottleMessage = res.status === 429 && err.statusCode === undefined && typeof err.error === 'string' && err.error
+    if (!ownThrottleMessage && (res.status === 429 || err.statusCode === 429)) {
       throw new Error(t('errors.rate_limited'))
     }
     const e = new Error(err.error || t('errors.http_status', { status: res.status }))
