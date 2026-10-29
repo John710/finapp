@@ -136,18 +136,23 @@
         </div>
         <div v-if="upcomingOccurrences.length === 0" class="px-5 lg:px-7 py-8 text-center text-slate-500 text-sm">{{ $t('recurring.empty') }}</div>
         <div v-else class="divide-y divide-slate-100 dark:divide-slate-800">
-          <div v-for="occurrence in upcomingOccurrences" :key="`${occurrence.rule_id}-${occurrence.date}`" class="px-5 lg:px-7 py-4 flex items-center justify-between gap-3">
+          <div v-for="occurrence in upcomingOccurrences" :key="occurrenceKey(occurrence)" class="px-5 lg:px-7 py-4 flex items-center justify-between gap-3">
             <div class="flex items-center gap-3.5 min-w-0">
-              <div class="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0" :class="occurrence.type === 'income' ? 'bg-primary-100 dark:bg-primary-500/15 text-primary-600 dark:text-primary-400' : 'bg-rose-100 dark:bg-rose-500/15 text-rose-500'">
+              <div class="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0" :class="isIncomingRow(occurrence) ? 'bg-primary-100 dark:bg-primary-500/15 text-primary-600 dark:text-primary-400' : 'bg-rose-100 dark:bg-rose-500/15 text-rose-500'">
                 <Icon name="repeat" class="w-5 h-5" />
               </div>
               <div class="min-w-0">
-                <p class="font-semibold text-sm truncate">{{ occurrence.name || '-' }}</p>
-                <p class="text-xs text-slate-400 mt-0.5">{{ formatDate(occurrence.date) }} • {{ occurrence.account_name }}</p>
+                <p class="font-semibold text-sm truncate">
+                  <template v-if="isInstallmentRow(occurrence)">
+                    <span aria-hidden="true">{{ occurrence.debt_type === 'lend' ? '↑' : '↓' }} </span><span class="sr-only">{{ $t(occurrence.debt_type === 'lend' ? 'recurring.calendar.debt_lend' : 'recurring.calendar.debt_borrow') }}: </span>
+                  </template>
+                  {{ occurrence.name || '-' }}
+                </p>
+                <p class="text-xs text-slate-400 mt-0.5">{{ formatDate(occurrence.date) }}<template v-if="isInstallmentRow(occurrence)"> • {{ $t('recurring.calendar.installment') }}</template><template v-else> • {{ occurrence.account_name }}</template></p>
               </div>
             </div>
-            <span class="font-display font-semibold text-sm whitespace-nowrap" :class="occurrence.type === 'income' ? 'text-primary-600 dark:text-primary-400' : 'text-danger-500'">
-              {{ occurrence.type === 'income' ? '+' : '−' }}{{ formatFull(occurrence.amount, occurrence.currency, baseCurrency, ratesStore.rates) }}
+            <span class="font-display font-semibold text-sm whitespace-nowrap" :class="isIncomingRow(occurrence) ? 'text-primary-600 dark:text-primary-400' : 'text-danger-500'">
+              {{ isIncomingRow(occurrence) ? '+' : '−' }}{{ formatFull(occurrence.amount, occurrence.currency, baseCurrency, ratesStore.rates) }}
             </span>
           </div>
         </div>
@@ -191,6 +196,7 @@ import { useReportsStore } from '../stores/reports'
 import { useRatesStore } from '../stores/rates'
 import { useDebtsStore } from '../stores/debts'
 import { formatFull } from '@/utils/currency'
+import { isInstallmentRow, isIncomingRow, occurrenceKey } from '@/utils/installments'
 import { getUserLocale } from '@/utils/locale'
 import { formatCurrency as formatCurrencyValue, formatDate as formatDateValue } from '@/utils/format'
 import { logger } from '@/utils/logger.js'
