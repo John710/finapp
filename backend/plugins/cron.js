@@ -160,7 +160,7 @@ async function cronPlugin(fastify, opts) {
       const userId = user.id
       const lang = await getUserLang(fastify.db, userId)
       const result = await fastify.db.query(
-        `SELECT id, name, counterparty, due_date, type
+        `SELECT id, name, counterparty, due_date::text AS due_date, type
          FROM debts
          WHERE status != 'paid' AND due_date IS NOT NULL AND due_date <= CURRENT_DATE + INTERVAL '3 days' AND user_id = $1`,
         [userId]

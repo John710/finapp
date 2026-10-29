@@ -44,6 +44,14 @@ export function shiftDays(dateStr, days) {
   return format(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate())
 }
 
+// 'YYYY-MM' shifted by whole months — pure string arithmetic, so no process
+// timezone can move a month boundary.
+export function shiftMonth(key, delta) {
+  const index = Number(key.slice(0, 4)) * 12 + Number(key.slice(5, 7)) - 1 + delta
+  const year = Math.floor(index / 12)
+  return `${year}-${String(index - year * 12 + 1).padStart(2, '0')}`
+}
+
 function daysInMonth(year, month) {
   return new Date(Date.UTC(year, month, 0)).getUTCDate()
 }

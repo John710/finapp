@@ -37,21 +37,26 @@ async function exportRoutes(fastify, opts) {
 
     const whereClause = where.join(' AND ')
 
-    const result = await fastify.db.query(`
-      SELECT
-        t.date::text AS date,
-        a.name as account_name,
-        t.type,
-        c.name as category_name,
-        t.amount,
-        a.currency,
-        t.note
-      FROM transactions t
-      LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
-      LEFT JOIN categories c ON c.id = t.category_id
-      WHERE ${whereClause}
-      ORDER BY t.date DESC
-    `, params)
+    const [result, todayRes] = await Promise.all([
+      fastify.db.query(`
+        SELECT
+          t.date::text AS date,
+          a.name as account_name,
+          t.type,
+          c.name as category_name,
+          t.amount,
+          a.currency,
+          t.note
+        FROM transactions t
+        LEFT JOIN accounts a ON a.id = t.account_id AND a.user_id = $1
+        LEFT JOIN categories c ON c.id = t.category_id
+        WHERE ${whereClause}
+        ORDER BY t.date DESC
+      `, params),
+      // The file is named after the database day, the same calendar the
+      // exported dates use — not the UTC day of the Node clock.
+      fastify.db.query('SELECT CURRENT_DATE::text AS today')
+    ])
 
     const rows = result.rows.map(r => ({
       Date: r.date,
@@ -68,7 +73,7 @@ async function exportRoutes(fastify, opts) {
       header: true
     })
 
-    const filename = `finapp_export_${new Date().toISOString().split('T')[0]}.csv`
+    const filename = `finapp_export_${todayRes.rows[0].today}.csv`
 
     reply.header('Content-Type', 'text/csv; charset=utf-8')
     reply.header('Content-Disposition', `attachment; filename="${filename}"`)

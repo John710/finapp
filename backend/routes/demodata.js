@@ -1,5 +1,6 @@
 import { loadRates, convertAmount } from '../services/currency.js'
 import { t, getUserLang } from '../services/i18n.js'
+import { shiftDays, shiftMonth } from '../services/recurring-schedule.js'
 
 async function demodataRoutes(fastify, opts) {
   // Clear all data for current user (except users)
@@ -131,8 +132,12 @@ async function demodataRoutes(fastify, opts) {
       }
 
       // --- Transactions ---
-      const today = new Date()
-      const transactions = []
+      // Calendar days are computed from the database's CURRENT_DATE with string
+      // arithmetic: the Node clock runs in another timezone, and local-midnight
+      // Dates passed through toISOString() landed a day early.
+      const { rows: [{ today }] } = await client.query('SELECT CURRENT_DATE::text AS today')
+      const currentMonth = today.slice(0, 7)
+      const dayInMonth = (monthOffset, day) => `${shiftMonth(currentMonth, monthOffset)}-${String(day).padStart(2, '0')}`
 
       async function createTransaction(txData, pairId = null) {
         const result = await client.query(
@@ -153,11 +158,10 @@ async function demodataRoutes(fastify, opts) {
       const transactionIds = []
 
       for (let i = 30; i >= 0; i--) {
-        const date = new Date(today)
-        date.setDate(date.getDate() - i)
-        const dateStr = date.toISOString().split('T')[0]
+        const dateStr = shiftDays(today, -i)
+        const dayOfMonth = Number(dateStr.slice(8, 10))
 
-        if (date.getDate() === 1 || date.getDate() === 15) {
+        if (dayOfMonth === 1 || dayOfMonth === 15) {
           const txId = await createTransaction({
             account_id: accountIds[0],
             category_id: categoryIds[0],
@@ -169,7 +173,7 @@ async function demodataRoutes(fastify, opts) {
           transactionIds.push(txId)
         }
 
-        if (date.getDate() === 10) {
+        if (dayOfMonth === 10) {
           const txId = await createTransaction({
             account_id: accountIds[0],
             category_id: categoryIds[1],
@@ -331,36 +335,32 @@ async function demodataRoutes(fastify, opts) {
         if (categoryId === null) continue
         await client.query(
           'INSERT INTO budgets (user_id, category_id, amount, currency, period, start_date) VALUES ($1, $2, $3, $4, $5, $6)',
-          [userId, categoryId, amount, 'USD', 'month', today.toISOString().split('T')[0]]
+          [userId, categoryId, amount, 'USD', 'month', today]
         )
       }
 
       // --- Debts ---
       await client.query(
         'INSERT INTO debts (user_id, name, counterparty, amount, currency, type, due_date, description, status, account_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-        [userId, 'Loan to friend', 'John Doe', 300, 'USD', 'lend', new Date(today.getFullYear(), today.getMonth() + 1, 15).toISOString().split('T')[0], 'Borrowed until payday', 'active', accountIds[0]]
+        [userId, 'Loan to friend', 'John Doe', 300, 'USD', 'lend', dayInMonth(1, 15), 'Borrowed until payday', 'active', accountIds[0]]
       )
       await client.query(
         'INSERT INTO debts (user_id, name, counterparty, amount, currency, type, due_date, description, status, account_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-        [userId, 'Phone Loan', 'Bank of America', 1200, 'USD', 'borrow', new Date(today.getFullYear(), today.getMonth() + 6, 1).toISOString().split('T')[0], '12-month installment', 'active', accountIds[0]]
+        [userId, 'Phone Loan', 'Bank of America', 1200, 'USD', 'borrow', dayInMonth(6, 1), '12-month installment', 'active', accountIds[0]]
       )
 
       // --- Recurring ---
-      const nextMonth1 = new Date(today.getFullYear(), today.getMonth() + 1, 5)
-      const nextMonth2 = new Date(today.getFullYear(), today.getMonth() + 1, 10)
-      const nextMonth3 = new Date(today.getFullYear(), today.getMonth() + 1, 15)
-
       await client.query(
         'INSERT INTO recurring_rules (user_id, account_id, category_id, amount, currency, type, frequency, next_date, note, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-        [userId, accountIds[0], categoryIds[5], 150, 'USD', 'expense', 'monthly', nextMonth1.toISOString().split('T')[0], 'Utility bills', true]
+        [userId, accountIds[0], categoryIds[5], 150, 'USD', 'expense', 'monthly', dayInMonth(1, 5), 'Utility bills', true]
       )
       await client.query(
         'INSERT INTO recurring_rules (user_id, account_id, category_id, amount, currency, type, frequency, next_date, note, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-        [userId, accountIds[0], categoryIds[8], 15, 'USD', 'expense', 'monthly', nextMonth2.toISOString().split('T')[0], 'Netflix subscription', true]
+        [userId, accountIds[0], categoryIds[8], 15, 'USD', 'expense', 'monthly', dayInMonth(1, 10), 'Netflix subscription', true]
       )
       await client.query(
         'INSERT INTO recurring_rules (user_id, account_id, category_id, amount, currency, type, frequency, next_date, note, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-        [userId, accountIds[0], categoryIds[0], 2500, 'USD', 'income', 'monthly', nextMonth3.toISOString().split('T')[0], 'Salary', true]
+        [userId, accountIds[0], categoryIds[0], 2500, 'USD', 'income', 'monthly', dayInMonth(1, 15), 'Salary', true]
       )
 
       await client.query('COMMIT')

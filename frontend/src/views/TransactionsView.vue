@@ -480,7 +480,9 @@ function resetFilters() {
   filters.type = ''
   filters.tag_id = ''
   applyFilters()
-}function formatDate(date) {
+}
+
+function formatDate(date) {
   return formatDateValue(date)
 }
 

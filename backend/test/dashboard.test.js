@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import dashboardRoutes, { shiftMonth } from '../routes/dashboard.js'
+import dashboardRoutes from '../routes/dashboard.js'
+import { shiftMonth } from '../services/recurring-schedule.js'
 import { buildStubServer, TEST_USER as USER } from './helpers/stub-db.js'
 
 // GET /reports/dashboard on a recording stub db. The handlers are matched in

@@ -6,8 +6,9 @@ import { buildStubServer } from './helpers/stub-db.js'
 // Report aggregation on stubbed SQL groups. The groups carry the flow type the
 // SQL computes: the incoming leg of a transfer arrives as 'transfer_in'.
 
-function reportServer(groups) {
+function reportServer(groups, { today = '2026-03-05' } = {}) {
   return buildStubServer(reportRoutes, [
+    { match: /SELECT CURRENT_DATE::text AS today/, rows: () => [{ today }] },
     { match: /UNION/, rows: () => [{ id: 1 }, { id: 2 }] },
     { match: /FROM exchange_rates/, rows: () => [] },
     { match: /FROM accounts WHERE id = ANY/, rows: () => [{ balance: '1000', currency: 'USD' }] },
@@ -39,8 +40,7 @@ describe('transfer legs in reports', () => {
   })
 
   it('counts the incoming leg as an inflow when walking net worth back', async () => {
-    const now = new Date()
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const month = '2026-03'
     const { app } = reportServer([
       { month, type: 'transfer', account_currency: 'USD', sum: '300' },
       { month, type: 'transfer_in', account_currency: 'USD', sum: '300' }
@@ -82,11 +82,14 @@ describe('GET /reports/by-category', () => {
 describe('GET /export/csv', () => {
   it('joins the global categories without a user_id predicate and exports text dates', async () => {
     const { app, queries } = buildStubServer(exportRoutes, [
+      { match: /SELECT CURRENT_DATE::text AS today/, rows: () => [{ today: '2026-03-05' }] },
       { match: /FROM transactions t/, rows: () => [{ date: '2026-03-01', account_name: 'Cash', type: 'expense', category_name: '=SUM(A1)', amount: '5.000000000000', currency: 'USD', note: null }] }
     ])
     const res = await app.inject({ method: 'GET', url: '/export/csv' })
     expect(res.statusCode).toBe(200)
-    const [q] = queries
+    // Named after the database day, not the UTC day of the Node clock
+    expect(res.headers['content-disposition']).toBe('attachment; filename="finapp_export_2026-03-05.csv"')
+    const q = queries.find(entry => /FROM transactions t/.test(entry.sql))
     expect(q.sql).not.toContain('c.user_id')
     expect(q.sql).toContain('t.date::text AS date')
     expect(res.body).toContain('2026-03-01;Cash;expense;\'=SUM(A1)')
