@@ -229,7 +229,7 @@ v-for="t in ['expense', 'income']" :key="t" class="px-3 py-1 rounded-md text-xs 
                 <td class="px-5 py-3">{{ d.counterparty || d.name }}</td>
                 <td class="px-5 py-3 text-right font-medium">{{ formatCurrency(d.amount) }}</td>
                 <td class="px-5 py-3 text-right text-danger-500 font-medium">{{ formatCurrency(d.remaining) }}</td>
-                <td class="px-5 py-3 text-right">{{ d.due_date ? new Date(d.due_date).toLocaleDateString(getUserLocale()) : '-' }}</td>
+                <td class="px-5 py-3 text-right">{{ formatDate(d.due_date) }}</td>
                 <td class="px-5 py-3 text-right">
                   <span class="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">{{ d.status }}</span>
                 </td>
@@ -283,7 +283,7 @@ v-for="t in ['expense', 'income']" :key="t" class="px-3 py-1 rounded-md text-xs 
                 {{ r.type === 'income' ? '+' : '−' }}{{ formatCurrency(r.amount) }}
               </td>
               <td class="px-5 py-3 text-right">{{ $t('recurring.frequencies.' + r.frequency) || r.frequency }}</td>
-              <td class="px-5 py-3 text-right">{{ new Date(r.next_date).toLocaleDateString(getUserLocale()) }}</td>
+              <td class="px-5 py-3 text-right">{{ formatDate(r.next_date) }}</td>
             </tr>
           </tbody>
         </table>
@@ -307,7 +307,7 @@ import { logger } from '@/utils/logger.js'
   import { format as echartsFormat } from 'echarts/core'
   import { formatFull } from '@/utils/currency'
   import { getUserLocale } from '@/utils/locale'
-  import { formatCurrency as formatCurrencyValue } from '@/utils/format'
+  import { formatCurrency as formatCurrencyValue, formatDate } from '@/utils/format'
   const BaseChart = defineAsyncComponent(() => import('@/components/BaseChart.vue'))
 
   const { t } = useI18n()
@@ -424,14 +424,16 @@ import { logger } from '@/utils/logger.js'
 
   const unpaidDebts = computed(() => debtsStore.debts.filter(d => d.status !== 'paid'))
 
+  // next_date is a 'YYYY-MM-DD' calendar day: compare it as text against the
+  // local day instead of parsing it as UTC midnight (which dropped today's
+  // payments east of UTC and kept yesterday's west of it).
   const upcomingRecurring = computed(() => {
     const now = new Date()
-    const thirtyDaysLater = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30)
-    return recurringStore.rules.filter(r => {
-      if (!r.is_active) return false
-      const nextDate = new Date(r.next_date)
-      return nextDate >= now && nextDate <= thirtyDaysLater
-    })
+    const today = now.toLocaleDateString('sv-SE')
+    const thirtyDaysLater = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30).toLocaleDateString('sv-SE')
+    return recurringStore.rules.filter(r =>
+      r.is_active && typeof r.next_date === 'string' && r.next_date >= today && r.next_date <= thirtyDaysLater
+    )
   })
 
 const trendChartOption = computed(() => buildTrendOption(reportsStore.trend))
