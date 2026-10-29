@@ -36,7 +36,7 @@
           <div class="flex flex-col gap-1 mt-1">
             <button
 v-for="occurrence in cell.visible" :key="occurrence.key" type="button"
-              class="w-full text-left px-1.5 py-1 rounded-md text-[10px] lg:text-[11px] font-medium border-0 truncate transition-opacity hover:opacity-80"
+              class="w-full text-left px-1.5 py-1 rounded-md text-[10px] lg:text-[11px] font-medium truncate transition-opacity hover:opacity-80"
               :class="chipClass(occurrence)" @click="openOccurrence(occurrence)">
               <template v-if="isInstallment(occurrence)">
                 <span aria-hidden="true">{{ occurrence.debt_type === 'lend' ? '↑' : '↓' }} </span><span class="sr-only">{{ directionLabel(occurrence) }}: </span>
@@ -50,7 +50,7 @@ v-for="occurrence in cell.visible" :key="occurrence.key" type="button"
 
       <div class="flex flex-wrap gap-3 mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">
         <span v-for="entry in legend" :key="entry.key" class="flex items-center gap-1.5 text-xs text-slate-500">
-          <span class="w-2.5 h-2.5 rounded-full" :class="entry.dot"></span>{{ entry.label }}
+          <span class="w-2.5 h-2.5" :class="entry.dot"></span>{{ entry.label }}
         </span>
       </div>
     </div>
@@ -87,13 +87,14 @@ import { useI18n } from 'vue-i18n'
 import { useRecurringStore } from '../stores/recurring'
 import { useDebtsStore } from '../stores/debts'
 import { useRatesStore } from '../stores/rates'
-import { isInstallmentRow, isIncomingRow, occurrenceKey } from '@/utils/installments'
+import { isInstallmentRow, isIncomingRow, occurrenceKey, canEditRow } from '@/utils/installments'
 import { formatDate, formatCurrency, parseAmount } from '@/utils/format'
 import { getUserLocale, getFirstDayOfWeek } from '@/utils/locale'
 import BaseModal from '@/components/BaseModal.vue'
 import BaseSkeleton from '@/components/BaseSkeleton.vue'
 
 const ITEMS_PER_CELL = 3
+const DEBT_ACCENT = 'border-l-[3px] border-violet-500'
 
 const RULE_TOASTS = {
   pay: 'recurring.paid_toast',
@@ -185,12 +186,13 @@ const monthLabel = computed(() =>
 )
 
 const legend = computed(() => [
-  { key: 'upcoming', label: t('recurring.calendar.legend_upcoming'), dot: 'bg-primary-500' },
-  { key: 'due', label: t('recurring.calendar.legend_due'), dot: 'bg-amber-500' },
-  { key: 'overdue', label: t('recurring.calendar.legend_overdue'), dot: 'bg-danger-500' },
-  { key: 'paid', label: t('recurring.calendar.legend_paid'), dot: 'bg-emerald-500' },
-  { key: 'skipped', label: t('recurring.calendar.legend_skipped'), dot: 'bg-slate-400' },
-  { key: 'debts', label: t('recurring.calendar.legend_debts'), dot: 'bg-violet-500' }
+  { key: 'upcoming', label: t('recurring.calendar.legend_upcoming'), dot: 'rounded-full bg-primary-500' },
+  { key: 'due', label: t('recurring.calendar.legend_due'), dot: 'rounded-full bg-amber-500' },
+  { key: 'overdue', label: t('recurring.calendar.legend_overdue'), dot: 'rounded-full bg-danger-500' },
+  { key: 'paid', label: t('recurring.calendar.legend_paid'), dot: 'rounded-full bg-emerald-500' },
+  { key: 'skipped', label: t('recurring.calendar.legend_skipped'), dot: 'rounded-full bg-slate-400' },
+  // Same violet left edge as a debt installment chip.
+  { key: 'debts', label: t('recurring.calendar.legend_debts'), dot: `rounded-sm bg-slate-200 dark:bg-slate-700 ${DEBT_ACCENT}` }
 ])
 
 const isInstallment = isInstallmentRow
@@ -208,8 +210,10 @@ function undoLabelKey(occurrence) {
 const canManage = computed(() => {
   const occurrence = selected.value.occurrence
   if (!occurrence) return false
-  if (isInstallment(occurrence)) return occurrence.is_owner !== false
-  return recurringStore.rules.find(rule => rule.id === occurrence.rule_id)?.is_owner !== false
+  // `can_edit` (owner or edit share) wins; ownership of the row / rule is the fallback.
+  if (isInstallment(occurrence)) return canEditRow(occurrence)
+  const rule = recurringStore.rules.find(item => item.id === occurrence.rule_id)
+  return canEditRow(occurrence, rule?.is_owner !== false)
 })
 
 onMounted(() => recurringStore.fetchRules())
@@ -233,7 +237,12 @@ function cellClass(cell) {
   return cell.inMonth ? 'bg-slate-100/70 dark:bg-slate-800/40' : 'bg-slate-50 dark:bg-slate-900/40'
 }
 
+// The fill says the status; a violet left edge marks a debt installment (the "Debts" legend entry).
 function chipClass(occurrence) {
+  return [statusChipClass(occurrence), isInstallment(occurrence) ? DEBT_ACCENT : '']
+}
+
+function statusChipClass(occurrence) {
   if (occurrence.paid) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
   if (occurrence.skipped) return 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500 line-through'
   if (occurrence.date < today) return 'bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-300'

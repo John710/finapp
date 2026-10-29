@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   parseUnits, formatUnits, currencyDigits, splitInstallments, checkSchedule, rescaleSchedule,
   isScheduleLocked, installmentProgress, schedulePayload, shiftMonths, shiftDays,
-  isInstallmentRow, isIncomingRow, occurrenceKey
+  isInstallmentRow, isIncomingRow, occurrenceKey, canEditRow, amountToText, sameAmount, installmentActions
 } from './installments.js'
 
 const sumOf = rows => rows.reduce((sum, row) => sum + parseUnits(row.amount), 0n)
@@ -28,7 +28,59 @@ describe('currencyDigits', () => {
     expect(currencyDigits('USD')).toBe(2)
     expect(currencyDigits('JPY')).toBe(0)
     expect(currencyDigits('USD', '0.00123')).toBe(5)
-    expect(currencyDigits(undefined)).toBe(2)
+    expect(currencyDigits('BHD')).toBe(3)
+  })
+
+  it('uses 8 digits for codes ISO 4217 does not know, like the backend', () => {
+    expect(currencyDigits('BTC')).toBe(8)
+    expect(currencyDigits('USDT')).toBe(8)
+    expect(currencyDigits('btc')).toBe(8)
+    expect(currencyDigits('')).toBe(8)
+    expect(currencyDigits(undefined)).toBe(8)
+  })
+
+  it('splits 0.001 BTC in three without losing a satoshi', () => {
+    const result = splitInstallments({
+      total: '0.001', count: 3, startDate: '2026-01-01', digits: currencyDigits('BTC', '0.001')
+    })
+    expect(result.rows.map(row => row.amount)).toEqual(['0.00033333', '0.00033333', '0.00033334'])
+    expect(sumOf(result.rows)).toBe(parseUnits('0.001'))
+  })
+})
+
+describe('amountToText / sameAmount', () => {
+  it('keeps tiny and long decimals exact, without exponent notation', () => {
+    expect(amountToText('100.00')).toBe('100')
+    expect(amountToText('0.000000500000')).toBe('0.0000005')
+    expect(amountToText('123456789.123456789')).toBe('123456789.123456789')
+    expect(amountToText(null)).toBe('')
+    expect(amountToText('5e-7')).toBe('5e-7')
+  })
+
+  it('compares amounts as numbers, not as text', () => {
+    expect(sameAmount('100.00', '100')).toBe(true)
+    expect(sameAmount('100,5', 100.5)).toBe(true)
+    expect(sameAmount('100', '100.01')).toBe(false)
+    expect(sameAmount('x', 'x')).toBe(false)
+  })
+})
+
+describe('installmentActions', () => {
+  it('offers pay / skip while due, and the matching undo afterwards', () => {
+    expect(installmentActions('due')).toEqual(['pay', 'skip'])
+    expect(installmentActions('paid')).toEqual(['unpay'])
+    expect(installmentActions('skipped')).toEqual(['unskip'])
+  })
+})
+
+describe('canEditRow', () => {
+  it('prefers can_edit, falls back to is_owner, then to the given default', () => {
+    expect(canEditRow({ can_edit: true, is_owner: false })).toBe(true)
+    expect(canEditRow({ can_edit: false, is_owner: true })).toBe(false)
+    expect(canEditRow({ is_owner: false })).toBe(false)
+    expect(canEditRow({ is_owner: true }, false)).toBe(true)
+    expect(canEditRow({}, false)).toBe(false)
+    expect(canEditRow({})).toBe(true)
   })
 })
 

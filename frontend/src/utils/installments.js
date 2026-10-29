@@ -45,16 +45,31 @@ export function shiftMonths(date, months) {
   return formatDay(nextYear, nextMonth, Math.min(day, daysInMonth(nextYear, nextMonth)))
 }
 
-// Minor-unit digits of a currency from Intl (JPY 0, USD 2, BHD 3); 2 when Intl
-// does not know the code. Never fewer than the digits the amount itself uses.
-export function currencyDigits(currency, total) {
-  let digits = 2
-  if (typeof currency === 'string' && /^[A-Za-z]{3}$/.test(currency)) {
+// Same rule as backend/services/debt-schedule.js currencyDigits: ISO 4217 minor
+// units for fiat (JPY 0, USD 2, BHD 3), 8 for any code ISO does not know (BTC,
+// USDT: crypto tickers). Intl.NumberFormat accepts any three letters and would
+// answer 2 for those, so the ISO list comes from Intl.supportedValuesOf.
+const CRYPTO_DIGITS = 8
+let isoCodes
+
+function isIsoCurrency(currency) {
+  if (isoCodes === undefined) {
     try {
-      digits = new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits
+      isoCodes = new Set(Intl.supportedValuesOf('currency'))
     } catch {
-      digits = 2
+      // A browser without the list: trust Intl for any three-letter code.
+      isoCodes = null
     }
+  }
+  return isoCodes ? isoCodes.has(currency) : /^[A-Z]{3}$/.test(currency)
+}
+
+// Never fewer digits than the amount itself uses.
+export function currencyDigits(currency, total) {
+  const code = typeof currency === 'string' ? currency.trim().toUpperCase() : ''
+  let digits = CRYPTO_DIGITS
+  if (code && isIsoCurrency(code)) {
+    digits = new Intl.NumberFormat('en', { style: 'currency', currency: code }).resolvedOptions().maximumFractionDigits
   }
   const units = parseUnits(total)
   if (units !== null) {
@@ -183,6 +198,38 @@ export function isIncomingRow(row) {
 export function occurrenceKey(row) {
   const id = isInstallmentRow(row) ? `i${row.installment_id}` : `r${row.rule_id}`
   return `${id}-${row.date}`
+}
+
+// Whether the caller may pay / skip / undo this calendar row. The server sends
+// `can_edit` (owner or edit share); `is_owner` is the fallback for an older
+// answer, `ownerFallback` for a row that carries neither (a rule's own flag).
+export function canEditRow(row, ownerFallback = true) {
+  if (typeof row?.can_edit === 'boolean') return row.can_edit
+  if (typeof row?.is_owner === 'boolean') return row.is_owner
+  return ownerFallback
+}
+
+// The actions an installment offers in its status; each name is also the
+// `debts.installments.<kind>` label and the store call it triggers.
+export function installmentActions(status) {
+  if (status === 'paid') return ['unpay']
+  if (status === 'skipped') return ['unskip']
+  return ['pay', 'skip']
+}
+
+// The API's decimal string as the editor shows it: no trailing zeros ("100.00"
+// -> "100") and never exponent notation. Anything that is not a plain decimal
+// comes back as text untouched, so it still shows up (and fails validation).
+export function amountToText(value) {
+  if (value === null || value === undefined) return ''
+  const units = parseUnits(value)
+  return units === null ? String(value) : formatUnits(units, 0)
+}
+
+// Whether two amounts (decimal strings or numbers) are the same number.
+export function sameAmount(a, b) {
+  const x = parseUnits(a)
+  return x !== null && x === parseUnits(b)
 }
 
 // Any installment that is no longer 'due' freezes the schedule (409 installments_locked).

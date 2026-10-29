@@ -40,13 +40,16 @@ export const useDebtsStore = defineStore('debts', () => {
   }
 
   // The server reverses the money the debt moved and answers
-  // { success, reversed_transactions, kept_transactions } (kept = edited by hand).
+  // { success, reversed_transactions, kept_transactions, unmatched_payments }
+  // (kept = edited by hand; unmatched = payments [{ id, amount, currency }]
+  // whose transaction could not be found, so nothing was reversed for them).
   async function deleteDebt(id) {
     const result = await api(`/debts/${id}`, { method: 'DELETE' })
     debts.value = debts.value.filter(d => d.id !== id)
     return {
       reversed: result?.reversed_transactions ?? [],
-      kept: result?.kept_transactions ?? []
+      kept: result?.kept_transactions ?? [],
+      unmatched: result?.unmatched_payments ?? []
     }
   }
 
