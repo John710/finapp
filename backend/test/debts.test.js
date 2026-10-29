@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import debtRoutes, { convertForAccount, debtBookingChanged } from '../routes/debts.js'
+import debtRoutes, { bookingEditedByHand, debtBookingChanged } from '../routes/debts.js'
+import { convertForAccount } from '../services/debt-payments.js'
 import { buildStubServer, TEST_USER as USER } from './helpers/stub-db.js'
 
 const BTC_RATES = [{ from_currency: 'BTC', to_currency: 'USD', rate: '50000' }]
@@ -181,12 +182,20 @@ describe('GET /debts', () => {
 })
 
 describe('DELETE /debts/:id', () => {
+  const owned = { id: 9, name: 'Loan', amount: '100.000000000000', currency: 'USD', type: 'lend', account_id: 3 }
+  const lockOwned = (debt = owned) => ({ match: /FROM debts WHERE id = \$1 AND user_id = \$2 FOR UPDATE/, rows: () => [debt] })
+  const booking = (overrides = {}) => ({
+    id: 70, account_id: 3, user_id: USER, amount: '100.000000000000', type: 'expense', is_split: false, account_currency: 'USD', ...overrides
+  })
+  const paymentTx = (overrides = {}) => ({
+    payment_id: 1, id: 71, account_id: 3, user_id: USER, amount: '40.000000000000', type: 'income', untouched: true, ...overrides
+  })
+
   it('removes only the owner\'s share rows, after the owned delete', async () => {
-    const { app, queries } = buildServer([
-      { match: /DELETE FROM debts/, rows: () => [{ id: 9 }] }
-    ])
+    const { app, queries } = buildServer([lockOwned({ ...owned, account_id: null })])
     const res = await app.inject({ method: 'DELETE', url: '/debts/9' })
-    expect(res.statusCode).toBe(204)
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ success: true, reversed_transactions: [], kept_transactions: [] })
     const order = queries.map(q => q.sql).filter(sql => /^(BEGIN|COMMIT|DELETE)/.test(sql))
     expect(order[0]).toBe('BEGIN')
     expect(order[1]).toMatch(/^DELETE FROM debts/)
@@ -200,5 +209,68 @@ describe('DELETE /debts/:id', () => {
     const res = await app.inject({ method: 'DELETE', url: '/debts/9' })
     expect(res.statusCode).toBe(404)
     expect(statements(queries, /entity_shares/)).toHaveLength(0)
+    expect(statements(queries, /DELETE FROM transactions|UPDATE accounts/)).toHaveLength(0)
+  })
+
+  it('reverses the creation booking and the payment transactions with their balance effect', async () => {
+    const { app, queries } = buildServer([
+      lockOwned(),
+      { match: /FROM transactions t\s+JOIN debts d/, rows: () => [booking()] },
+      { match: /SELECT id FROM debt_payments/, rows: () => [{ id: 1 }] },
+      { match: /FROM debt_payments p\s+JOIN transactions t/, rows: () => [paymentTx()] }
+    ])
+    const res = await app.inject({ method: 'DELETE', url: '/debts/9' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ success: true, reversed_transactions: [70, 71], kept_transactions: [] })
+    expect(statements(queries, /DELETE FROM transactions/).map(q => q.params)).toEqual([[70], [71]])
+    // the lend booking (-100) and the repayment (+40) are taken off the account
+    const balances = statements(queries, /UPDATE accounts SET balance = balance - \$1/)
+    expect(balances.map(q => q.params)).toEqual([['-100', 3, USER], ['40', 3, USER]])
+    // all of it before the debt row goes, inside the one transaction
+    const order = queries.map(q => q.sql)
+    expect(order.findIndex(sql => sql.startsWith('DELETE FROM transactions'))).toBeLessThan(order.findIndex(sql => sql.startsWith('DELETE FROM debts')))
+    expect(order.at(-1)).toBe('COMMIT')
+  })
+
+  it('keeps a booking whose amount was edited by hand and a payment transaction rewritten by hand', async () => {
+    const { app, queries } = buildServer([
+      lockOwned(),
+      { match: /FROM transactions t\s+JOIN debts d/, rows: () => [booking({ amount: '90' })] },
+      { match: /SELECT id FROM debt_payments/, rows: () => [{ id: 1 }] },
+      { match: /FROM debt_payments p\s+JOIN transactions t/, rows: () => [paymentTx({ untouched: false })] }
+    ])
+    const res = await app.inject({ method: 'DELETE', url: '/debts/9' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ success: true, reversed_transactions: [], kept_transactions: [70, 71] })
+    expect(statements(queries, /DELETE FROM transactions|UPDATE accounts/)).toHaveLength(0)
+    expect(statements(queries, /DELETE FROM debts/)).toHaveLength(1)
+  })
+
+  it('keeps a payment transaction on an account the owner may not write', async () => {
+    const { app, queries } = buildServer([
+      lockOwned({ ...owned, account_id: null }),
+      { match: /SELECT id FROM debt_payments/, rows: () => [{ id: 1 }] },
+      { match: /FROM debt_payments p\s+JOIN transactions t/, rows: () => [paymentTx({ account_id: 8, user_id: 2 })] }
+    ])
+    const res = await app.inject({ method: 'DELETE', url: '/debts/9' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().kept_transactions).toEqual([71])
+    expect(statements(queries, /DELETE FROM transactions|UPDATE accounts/)).toHaveLength(0)
+  })
+})
+
+describe('bookingEditedByHand', () => {
+  const debt = { amount: '100.000000000000', currency: 'USD', type: 'lend' }
+  const booking = { amount: '100', type: 'expense', is_split: false, account_currency: 'USD' }
+  it('accepts the booking as PUT /debts keeps it', () => {
+    expect(bookingEditedByHand(booking, debt)).toBe(false)
+  })
+  it('flags a changed amount, type or a split', () => {
+    expect(bookingEditedByHand({ ...booking, amount: '99.99' }, debt)).toBe(true)
+    expect(bookingEditedByHand({ ...booking, type: 'income' }, debt)).toBe(true)
+    expect(bookingEditedByHand({ ...booking, is_split: true }, debt)).toBe(true)
+  })
+  it('cannot check the amount of a booking in another currency', () => {
+    expect(bookingEditedByHand({ ...booking, amount: '0.002', account_currency: 'BTC' }, debt)).toBe(false)
   })
 })

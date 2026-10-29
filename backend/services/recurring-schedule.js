@@ -56,14 +56,15 @@ function daysInMonth(year, month) {
   return new Date(Date.UTC(year, month, 0)).getUTCDate()
 }
 
-function monthIndex(dateStr) {
+export function monthIndex(dateStr) {
   const { year, month } = parts(dateStr)
   return year * 12 + (month - 1)
 }
 
 // The anchor day is kept unless the target month is shorter, so Jan 31 + 1 month
 // is Feb 28 but Jan 31 + 2 months is still Mar 31 — no ratchet, unlike `date + INTERVAL`.
-function monthDay(monthIdx, anchorDay) {
+// Shared with debt-schedule.js so installments and subscriptions anchor alike.
+export function monthDay(monthIdx, anchorDay) {
   const year = Math.floor(monthIdx / 12)
   const month = (monthIdx % 12) + 1
   return format(year, month, Math.min(anchorDay, daysInMonth(year, month)))
@@ -250,7 +251,7 @@ export function initialNextDate(rawRule, todayStr) {
   return occurrenceAtIndex(s, firstIndexAtOrAfter(s, todayStr))
 }
 
-function isRealDateStr(value) {
+export function isRealDateStr(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
   const { year, month, day } = parts(value)
   return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month)
