@@ -93,6 +93,48 @@ describe('GET /recurring', () => {
     expect(res.json()[0].status).toBe('overdue')
     await app.close()
   })
+
+  it('shows the monthly equivalent at the currency precision, not cents for crypto', async () => {
+    const { app } = buildServer([
+      CURRENT_DATE,
+      {
+        match: /FROM recurring_rules/,
+        rows: () => [
+          // 0.0001 BTC a week: 0.000434821… a month — '0.00' when cut to cents
+          baseRule({ id: 1, currency: 'BTC', amount: '0.000100000000', interval_unit: 'week', frequency: 'weekly', billing_anchor_day: null, start_date: '2026-03-02', next_date: '2026-03-09' }),
+          baseRule({ id: 2, currency: 'JPY', amount: '1000.000000000000', interval_unit: 'week', frequency: 'weekly', billing_anchor_day: null, start_date: '2026-03-02', next_date: '2026-03-09' })
+        ]
+      },
+      { match: /FROM transactions/, rows: () => [] },
+      { match: /FROM recurring_exceptions/, rows: () => [] }
+    ])
+    const res = await app.inject({ method: 'GET', url: '/recurring' })
+    const [btc, jpy] = res.json()
+    expect(btc.monthly_equivalent).toBe('0.00043482')
+    expect(jpy.monthly_equivalent).toBe('4348')
+    await app.close()
+  })
+})
+
+describe('shared rule visibility', () => {
+  // A rule shared both to the whole family and to the user directly has two
+  // entity_shares rows; a join on them listed the rule twice.
+  it('reads the list and a single rule through EXISTS, never a share join', async () => {
+    const { app, queries } = buildServer([
+      CURRENT_DATE,
+      { match: /FROM recurring_rules/, rows: () => [] }
+    ])
+    await app.inject({ method: 'GET', url: '/recurring' })
+    await app.inject({ method: 'GET', url: '/recurring/5/history' })
+    const reads = queries.filter(q => /FROM recurring_rules r/.test(q.sql))
+    expect(reads).toHaveLength(2)
+    for (const { sql } of reads) {
+      expect(sql).not.toMatch(/JOIN entity_shares/)
+      expect(sql).toContain("r.user_id = $1 OR EXISTS (SELECT 1 FROM entity_shares es WHERE es.entity_type = 'recurring' AND es.entity_id = r.id AND es.owner_id = r.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL))")
+    }
+    expect(reads[1].params).toEqual([USER, 5])
+    await app.close()
+  })
 })
 
 describe('shared rule account names', () => {

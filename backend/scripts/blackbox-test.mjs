@@ -468,6 +468,95 @@ let eurRate = null
   assert('deleted rules leave the list', !(goneFromList.json || []).some(r => [ruleId, expiredId, feedRuleId].includes(r.id)), `${(goneFromList.json || []).length} rules left`)
 }
 
+// ---------- W: debt installments in the calendar, dashboard and feed ----------
+// Like V, anchored to the clock: the feed and the dashboard project from the
+// server's today. Three weekly installments starting three days out.
+{
+  const addDays = (dateStr, days) => {
+    const [y, m, d] = dateStr.split('-').map(Number)
+    return new Date(Date.UTC(y, m - 1, d) + days * 86400000).toISOString().slice(0, 10)
+  }
+  const icsDay = dateStr => dateStr.replace(/-/g, '')
+  const start = addDays(new Date().toISOString().slice(0, 10), 3)
+  const expectedDates = [start, addDays(start, 7), addDays(start, 14)]
+
+  const wallet = await req('POST', '/accounts', { body: { name: 'DebtWallet', type: 'cash', currency: 'USD', balance: 1000 } })
+  const walletId = wallet.json?.id
+  assert('debt wallet created', wallet.status === 201 && !!walletId, `status=${wallet.status}`)
+
+  const debt = await req('POST', '/debts', {
+    body: { name: 'Audit Loan', counterparty: 'Bob; Smith, Jr', amount: 300, currency: 'USD', type: 'borrow', account_id: walletId }
+  })
+  const debtId = debt.json?.id
+  assert('debt with account created', debt.status === 201 && !!debtId, `status=${debt.status} body=${JSON.stringify(debt.json).slice(0, 160)}`)
+  assert('borrowing booked on the account', near(bal(await getAccounts(), walletId), 1300), `${bal(await getAccounts(), walletId)}`)
+
+  const schedule = await req('PUT', `/debts/${debtId}/installments`, { body: { split: { count: 3, start_date: start, unit: 'week', value: 1 } } })
+  const rows = schedule.json?.installments || []
+  assert('3-part schedule saved', schedule.status === 200 && rows.length === 3, `status=${schedule.status} body=${JSON.stringify(schedule.json).slice(0, 200)}`)
+  assert('schedule dates are weekly from the start', JSON.stringify(rows.map(r => r.due_date)) === JSON.stringify(expectedDates), JSON.stringify(rows.map(r => r.due_date)))
+  const [first, second, third] = rows
+
+  const debtOccs = async () => {
+    const r = await req('GET', `/recurring/occurrences?from=${start}&to=${addDays(start, 30)}`)
+    const all = r.json?.occurrences || []
+    return { status: r.status, all, list: all.filter(o => o.kind === 'debt_installment' && o.debt_id === debtId) }
+  }
+  const before = await debtOccs()
+  assert('occurrences show the three installment dates', before.status === 200 && JSON.stringify(before.list.map(o => o.date)) === JSON.stringify(expectedDates), JSON.stringify(before.list.map(o => o.date)))
+  assert('installment rows carry the calendar contract', before.list.every(o => o.is_owner === true && o.debt_type === 'borrow' && o.currency === 'USD' && o.name === 'Audit Loan · Bob; Smith, Jr' && o.paid === false && o.skipped === false), JSON.stringify(before.list[0]))
+  assert('every occurrence carries a kind', before.all.every(o => o.kind === 'subscription' || o.kind === 'debt_installment'), JSON.stringify(before.all.map(o => o.kind)))
+
+  const paid = await req('POST', `/debts/installments/${first?.id}/pay`, { body: {} })
+  assert('pay installment -> 201', paid.status === 201 && paid.json?.installment?.status === 'paid', `status=${paid.status} body=${JSON.stringify(paid.json).slice(0, 200)}`)
+  assert('pay records a debt payment linked to the installment', paid.json?.payment?.installment_id === first?.id && near(paid.json?.payment?.amount, 100), JSON.stringify(paid.json?.payment))
+  const paidTxId = paid.json?.transaction?.id
+  assert('pay books a transaction on the debt account', !!paidTxId && paid.json?.transaction?.account_id === walletId && paid.json?.transaction?.type === 'expense', JSON.stringify(paid.json?.transaction))
+  assert('pay moved the balance by the installment', near(bal(await getAccounts(), walletId), 1200), `${bal(await getAccounts(), walletId)}`)
+  const repay = await req('POST', `/debts/installments/${first?.id}/pay`, { body: {} })
+  assert('paying it again -> 409', repay.status === 409, `status=${repay.status}`)
+  const afterPay = await debtOccs()
+  assert('projection marks the paid installment', afterPay.list.find(o => o.installment_id === first?.id)?.paid === true, JSON.stringify(afterPay.list.map(o => o.paid)))
+
+  const skipped = await req('POST', `/debts/installments/${second?.id}/skip`, { body: {} })
+  assert('skip installment -> 200', skipped.status === 200 && skipped.json?.installment?.status === 'skipped', `status=${skipped.status}`)
+  assert('skip left the balance alone', near(bal(await getAccounts(), walletId), 1200), `${bal(await getAccounts(), walletId)}`)
+
+  const dash = await req('GET', '/reports/dashboard?upcoming_limit=20')
+  const upcomingIds = (dash.json?.recurring?.upcoming || []).filter(o => o.kind === 'debt_installment' && o.debt_id === debtId).map(o => o.installment_id)
+  assert('dashboard lists only the outstanding installment', dash.status === 200 && JSON.stringify(upcomingIds) === JSON.stringify([third?.id]), JSON.stringify(upcomingIds))
+
+  const issued = await req('POST', '/recurring/feed-tokens', { body: { name: 'Blackbox debt calendar' } })
+  const feedRes = await fetch(`${BASE}/recurring.ics?token=${encodeURIComponent(issued.json?.token)}`, { signal: AbortSignal.timeout(20000) })
+  const feed = (await feedRes.text()).replace(/\r\n /g, '')
+  const debtUids = (feed.match(/^UID:finapp-debt-[^\r\n]*/gm) || [])
+  assert('feed -> 200 with installment events', feedRes.status === 200 && debtUids.length === 2, `status=${feedRes.status} uids=${JSON.stringify(debtUids)}`)
+  assert('installment UIDs use the debt prefix', debtUids.every(u => /^UID:finapp-debt-\d+-\d+-\d{4}-\d{2}-\d{2}@finapp$/.test(u)) && debtUids.some(u => u.includes(`-${first?.id}-${first?.due_date}@`)) && debtUids.some(u => u.includes(`-${third?.id}-${third?.due_date}@`)), JSON.stringify(debtUids))
+  assert('feed leaves the skipped installment out', !debtUids.some(u => u.includes(`-${second?.id}-${second?.due_date}@`)) && !feed.includes(`DTSTART;VALUE=DATE:${icsDay(second?.due_date ?? '')}`), JSON.stringify(debtUids))
+  assert('feed marks only the paid installment', (feed.match(/X-FINAPP-PAID:/g) || []).length === 1 && feed.includes(`X-FINAPP-PAID:${icsDay(first?.due_date ?? '')}`), 'X-FINAPP-PAID count/date mismatch')
+  assert('feed escapes the counterparty', feed.includes('SUMMARY:Audit Loan · Bob\\; Smith\\, Jr'), (feed.match(/^SUMMARY:Audit[^\r\n]*/m) || ['<none>'])[0])
+  assert('feed names the visible debt account', feed.includes('DESCRIPTION:100 · USD · DebtWallet'), (feed.match(/^DESCRIPTION:100[^\r\n]*/m) || ['<none>'])[0])
+  await req('DELETE', `/recurring/feed-tokens/${issued.json?.id}`)
+
+  const locked = await req('PUT', `/debts/${debtId}/installments`, { body: { rows: [{ due_date: start, amount: '300' }] } })
+  assert('replacing a schedule with a paid installment -> 409', locked.status === 409, `status=${locked.status}`)
+
+  const undone = await req('DELETE', `/debts/installments/${first?.id}/pay`)
+  assert('undo installment payment -> 200', undone.status === 200 && undone.json?.installment?.status === 'due', `status=${undone.status} body=${JSON.stringify(undone.json).slice(0, 200)}`)
+  assert('undo reversed the booked transaction', JSON.stringify(undone.json?.reversed_transactions) === JSON.stringify([paidTxId]), JSON.stringify(undone.json?.reversed_transactions))
+  assert('undo restored the balance', near(bal(await getAccounts(), walletId), 1300), `${bal(await getAccounts(), walletId)}`)
+  const txList = await req('GET', '/transactions?limit=50')
+  assert('undone transaction is gone', !(txList.json?.items || []).some(t => t.id === paidTxId), `tx ${paidTxId} still listed`)
+  const afterUndo = await debtOccs()
+  assert('projection unmarks the undone installment', afterUndo.list.find(o => o.installment_id === first?.id)?.paid === false, JSON.stringify(afterUndo.list.map(o => o.paid)))
+
+  const removed = await req('DELETE', `/debts/${debtId}`)
+  assert('debt delete -> 200', removed.status === 200, `status=${removed.status}`)
+  assert('debt delete reversed the borrowing', near(bal(await getAccounts(), walletId), 1000), `${bal(await getAccounts(), walletId)}`)
+  const gone = await debtOccs()
+  assert('deleted debt leaves the calendar', gone.list.length === 0, `${gone.list.length} rows left`)
+}
+
 console.log(results.join('\n'))
 console.log(`\nRESULT: ${PASS} passed, ${FAIL} failed`)
 process.exit(FAIL > 0 ? 1 : 0)

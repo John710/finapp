@@ -160,6 +160,8 @@ export function occurrenceDates(rawRule, from, to) {
 
 // The same flattened projection the calendar, the dashboard and the reports read:
 // keeping the label order and the paid/skipped flags here means all three agree.
+// Rows are tagged kind 'subscription' so they merge with the debt installments
+// of debt-schedule.js projectInstallments() (see mergeOccurrences).
 export function projectOccurrences(rules, flags = {}, from, to) {
   const { paid = new Map(), skipped = new Map() } = flags
   const occurrences = []
@@ -168,6 +170,7 @@ export function projectOccurrences(rules, flags = {}, from, to) {
     const skipSet = skipped.get(rule.id) ?? new Set()
     for (const date of occurrenceDates(rule, from, to)) {
       occurrences.push({
+        kind: 'subscription',
         rule_id: rule.id,
         // A shared rule reaches one calendar feed per owner, so the UID needs the
         // owner id, not only the rule id.
@@ -182,12 +185,29 @@ export function projectOccurrences(rules, flags = {}, from, to) {
         category_name: rule.category_name,
         paid: paidSet.has(date),
         skipped: skipSet.has(date),
-        is_active: rule.is_active
+        is_active: rule.is_active,
+        // Only the owner may pay, skip or undo (routes answer 403 otherwise).
+        is_owner: rule.is_owner === true
       })
     }
   }
   occurrences.sort((a, b) => (a.date === b.date ? a.rule_id - b.rule_id : a.date < b.date ? -1 : 1))
   return occurrences
+}
+
+const occurrenceId = occurrence => (occurrence.kind === 'debt_installment' ? occurrence.installment_id : occurrence.rule_id)
+
+/**
+ * One calendar list from the subscription and the debt-installment
+ * projections: by date, then kind, then the row's own id — a stable order, so
+ * the chips of one day keep their places between requests.
+ */
+export function mergeOccurrences(...lists) {
+  return lists.flat().sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1
+    if (a.kind !== b.kind) return String(a.kind) < String(b.kind) ? -1 : 1
+    return occurrenceId(a) - occurrenceId(b)
+  })
 }
 
 export function nextOccurrenceAfter(rawRule, dateStr) {
@@ -232,10 +252,14 @@ export function statusOf(rawRule, todayStr, paidSet = new Set(), skipSet = new S
   return 'scheduled'
 }
 
+// What a rule costs per average month, in its own currency, kept to the
+// numeric(24,12) scale. Not rounded to cents: 0.0001 BTC a week must not become
+// 0 before a caller converts and sums it. Callers round for display only
+// (toDisplayNumber, or currencyDigits() of debt-schedule.js).
 export function monthlyEquivalent(rawRule) {
   const s = scheduleOf(rawRule)
   const daysPerOccurrence = new Decimal(s.value).times(UNIT_FACTORS[s.unit] ?? '1')
-  return new Decimal(rawRule?.amount || 0).times(AVG_DAYS_PER_MONTH).div(daysPerOccurrence).toFixed(2)
+  return new Decimal(rawRule?.amount || 0).times(AVG_DAYS_PER_MONTH).div(daysPerOccurrence).toDecimalPlaces(12).toFixed()
 }
 
 const LEGACY_BY_UNIT = { day: 'daily', week: 'weekly', month: 'monthly', year: 'yearly' }

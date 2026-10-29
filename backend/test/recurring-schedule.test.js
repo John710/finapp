@@ -13,6 +13,7 @@ import {
   dueOccurrence,
   planRuleRun,
   projectOccurrences,
+  mergeOccurrences,
   buildSchedulePatch
 } from '../services/recurring-schedule.js'
 
@@ -222,26 +223,30 @@ describe('statusOf', () => {
 })
 
 describe('monthlyEquivalent', () => {
-  it('converts each unit to an average calendar month', () => {
-    expect(monthlyEquivalent(rule({ interval_unit: 'day', amount: '10' }))).toBe('304.38')
-    expect(monthlyEquivalent(rule({ interval_unit: 'day', interval_value: 14, amount: '10' }))).toBe('21.74')
-    expect(monthlyEquivalent(rule({ interval_unit: 'week', amount: '100' }))).toBe('434.82')
-    expect(monthlyEquivalent(rule({ interval_unit: 'week', interval_value: 2, amount: '100' }))).toBe('217.41')
-    expect(monthlyEquivalent(rule({ interval_unit: 'month', amount: '250' }))).toBe('250.00')
-    expect(monthlyEquivalent(rule({ interval_unit: 'month', interval_value: 3, amount: '250' }))).toBe('83.33')
-    expect(monthlyEquivalent(rule({ interval_unit: 'year', amount: '3600' }))).toBe('300.00')
-    expect(monthlyEquivalent(rule({ interval_unit: 'year', interval_value: 2, amount: '1200' }))).toBe('50.00')
+  it('converts each unit to an average calendar month, at the numeric(24,12) scale', () => {
+    expect(monthlyEquivalent(rule({ interval_unit: 'day', amount: '10' }))).toBe('304.375')
+    expect(monthlyEquivalent(rule({ interval_unit: 'day', interval_value: 14, amount: '10' }))).toBe('21.741071428571')
+    expect(monthlyEquivalent(rule({ interval_unit: 'week', amount: '100' }))).toBe('434.821428571429')
+    expect(monthlyEquivalent(rule({ interval_unit: 'week', interval_value: 2, amount: '100' }))).toBe('217.410714285714')
+    expect(monthlyEquivalent(rule({ interval_unit: 'month', amount: '250' }))).toBe('250')
+    expect(monthlyEquivalent(rule({ interval_unit: 'month', interval_value: 3, amount: '250' }))).toBe('83.333333333333')
+    expect(monthlyEquivalent(rule({ interval_unit: 'year', amount: '3600' }))).toBe('300')
+    expect(monthlyEquivalent(rule({ interval_unit: 'year', interval_value: 2, amount: '1200' }))).toBe('50')
   })
 
   it('stays consistent when annualised back to twelve months', () => {
     expect(Number(monthlyEquivalent(rule({ interval_unit: 'year', amount: '3600' }))) * 12).toBe(3600)
   })
 
-  it('rounds the exact decimal rather than a binary approximation', () => {
-    expect(monthlyEquivalent(rule({ interval_unit: 'month', amount: '0.000000000001' }))).toBe('0.00')
-    // (1.005).toFixed(2) in JS is '1.00'; the decimal-exact answer is '1.01'.
-    expect(monthlyEquivalent(rule({ interval_unit: 'month', amount: '1.005' }))).toBe('1.01')
-    expect(monthlyEquivalent(rule({ interval_unit: 'month', amount: '123456789.999999' }))).toBe('123456790.00')
+  it('keeps the exact decimal rather than cents or a binary approximation', () => {
+    expect(monthlyEquivalent(rule({ interval_unit: 'month', amount: '0.000000000001' }))).toBe('0.000000000001')
+    expect(monthlyEquivalent(rule({ interval_unit: 'month', amount: '1.005' }))).toBe('1.005')
+    expect(monthlyEquivalent(rule({ interval_unit: 'month', amount: '123456789.999999' }))).toBe('123456789.999999')
+  })
+
+  it('does not zero a small crypto rule before the caller converts it', () => {
+    // 0.0001 BTC a week; cut to cents in its own currency this was '0.00'
+    expect(monthlyEquivalent(rule({ interval_unit: 'week', amount: '0.000100000000', currency: 'BTC' }))).toBe('0.000434821429')
   })
 })
 
@@ -544,5 +549,45 @@ describe('projectOccurrences', () => {
 
   it('returns an empty list for an inverted window', () => {
     expect(projectOccurrences([rent], {}, '2026-04-01', '2026-01-01')).toEqual([])
+  })
+
+  it('tags rows as subscriptions and carries is_owner for the chip actions', () => {
+    const [own] = projectOccurrences([rule({ id: 8, is_owner: true })], {}, '2026-01-01', '2026-01-31')
+    expect(own).toMatchObject({ kind: 'subscription', rule_id: 8, is_owner: true })
+    const [shared] = projectOccurrences([rule({ id: 9, is_owner: false })], {}, '2026-01-01', '2026-01-31')
+    expect(shared.is_owner).toBe(false)
+    // a row without the flag never claims ownership
+    const [unknown] = projectOccurrences([rule({ id: 10 })], {}, '2026-01-01', '2026-01-31')
+    expect(unknown.is_owner).toBe(false)
+  })
+})
+
+describe('mergeOccurrences', () => {
+  const sub = (rule_id, date) => ({ kind: 'subscription', rule_id, date })
+  const inst = (installment_id, date) => ({ kind: 'debt_installment', installment_id, date })
+
+  it('orders by date, then kind, then the row id', () => {
+    const merged = mergeOccurrences(
+      [sub(5, '2026-03-01'), sub(2, '2026-03-01'), sub(1, '2026-03-02')],
+      [inst(9, '2026-03-01'), inst(3, '2026-03-01'), inst(4, '2026-02-28')]
+    )
+    expect(merged.map(o => `${o.date}:${o.kind}:${o.rule_id ?? o.installment_id}`)).toEqual([
+      '2026-02-28:debt_installment:4',
+      '2026-03-01:debt_installment:3',
+      '2026-03-01:debt_installment:9',
+      '2026-03-01:subscription:2',
+      '2026-03-01:subscription:5',
+      '2026-03-02:subscription:1'
+    ])
+  })
+
+  it('gives the same order whichever list comes first', () => {
+    const a = [sub(2, '2026-03-01'), sub(7, '2026-03-04')]
+    const b = [inst(2, '2026-03-01'), inst(1, '2026-03-04')]
+    expect(mergeOccurrences(a, b)).toEqual(mergeOccurrences(b, a))
+  })
+
+  it('is empty for empty inputs', () => {
+    expect(mergeOccurrences([], [])).toEqual([])
   })
 })
