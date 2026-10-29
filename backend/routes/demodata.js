@@ -1,6 +1,14 @@
-import { loadRates, convertAmount } from '../services/currency.js'
+import Decimal from 'decimal.js'
+import { loadRates, convertAmountDecimal } from '../services/currency.js'
 import { t, getUserLang } from '../services/i18n.js'
 import { shiftDays, shiftMonth } from '../services/recurring-schedule.js'
+
+// A random demo amount in [min, min + spread) as a numeric string with a fixed
+// number of decimals — cents for fiat, satoshi-sized steps for crypto. The
+// float from Math.random() only picks the value; it never reaches the ledger.
+export function randomAmount(min, spread, places = 2) {
+  return new Decimal(Math.random()).times(spread).plus(min).toDecimalPlaces(places, Decimal.ROUND_DOWN).toFixed(places)
+}
 
 async function demodataRoutes(fastify, opts) {
   // Clear all data for current user (except users)
@@ -50,11 +58,11 @@ async function demodataRoutes(fastify, opts) {
 
       // --- Accounts ---
       const accounts = [
-        { name: 'Main Card', type: 'card', currency: 'USD', balance: 1250.50, color: '#3b82f6', icon: 'creditCard', sort_order: 1 },
-        { name: 'Cash', type: 'cash', currency: 'USD', balance: 150.00, color: '#10b981', icon: 'banknote', sort_order: 2 },
-        { name: 'Savings Account', type: 'goal', currency: 'USD', balance: 5000.00, target_amount: 15000, color: '#f59e0b', icon: 'piggyBank', sort_order: 3 },
-        { name: 'BTC Wallet', type: 'crypto', currency: 'BTC', balance: 0.05, color: '#f7931a', icon: 'bitcoin', sort_order: 4 },
-        { name: 'ETH Wallet', type: 'crypto', currency: 'ETH', balance: 0.5, color: '#627eea', icon: 'ethereum', sort_order: 5 }
+        { name: 'Main Card', type: 'card', currency: 'USD', balance: '1250.50', color: '#3b82f6', icon: 'creditCard', sort_order: 1 },
+        { name: 'Cash', type: 'cash', currency: 'USD', balance: '150.00', color: '#10b981', icon: 'banknote', sort_order: 2 },
+        { name: 'Savings Account', type: 'goal', currency: 'USD', balance: '5000.00', target_amount: '15000', color: '#f59e0b', icon: 'piggyBank', sort_order: 3 },
+        { name: 'BTC Wallet', type: 'crypto', currency: 'BTC', balance: '0.05', color: '#f7931a', icon: 'bitcoin', sort_order: 4 },
+        { name: 'ETH Wallet', type: 'crypto', currency: 'ETH', balance: '0.5', color: '#627eea', icon: 'ethereum', sort_order: 5 }
       ]
 
       const accountIds = []
@@ -149,7 +157,7 @@ async function demodataRoutes(fastify, opts) {
         const sign = txData.type === 'income' ? 1 : -1
         await client.query(
           'UPDATE accounts SET balance = balance + $1 WHERE id = $2 AND user_id = $3',
-          [txData.amount * sign, txData.account_id, userId]
+          [new Decimal(txData.amount).times(sign).toFixed(), txData.account_id, userId]
         )
 
         return txId
@@ -165,7 +173,7 @@ async function demodataRoutes(fastify, opts) {
           const txId = await createTransaction({
             account_id: accountIds[0],
             category_id: categoryIds[0],
-            amount: 2500 + Math.random() * 300,
+            amount: randomAmount(2500, 300),
             type: 'income',
             date: dateStr,
             note: 'Salary'
@@ -177,7 +185,7 @@ async function demodataRoutes(fastify, opts) {
           const txId = await createTransaction({
             account_id: accountIds[0],
             category_id: categoryIds[1],
-            amount: 500 + Math.random() * 200,
+            amount: randomAmount(500, 200),
             type: 'income',
             date: dateStr,
             note: 'Freelance project'
@@ -188,15 +196,8 @@ async function demodataRoutes(fastify, opts) {
         const expenseCount = Math.floor(Math.random() * 3) + 1
         for (let j = 0; j < expenseCount; j++) {
           const catIndex = 2 + Math.floor(Math.random() * 7)
-          const amount = [
-            10 + Math.random() * 50,
-            5 + Math.random() * 25,
-            20 + Math.random() * 100,
-            50 + Math.random() * 150,
-            30 + Math.random() * 200,
-            20 + Math.random() * 80,
-            10 + Math.random() * 30
-          ][catIndex - 2] || 20
+          const [min, spread] = [[10, 50], [5, 25], [20, 100], [50, 150], [30, 200], [20, 80], [10, 30]][catIndex - 2]
+          const amount = randomAmount(min, spread)
 
           const txId = await createTransaction({
             account_id: Math.random() > 0.7 ? accountIds[1] : accountIds[0],
@@ -210,7 +211,7 @@ async function demodataRoutes(fastify, opts) {
         }
 
         if (Math.random() > 0.85) {
-          const amount = 100 + Math.random() * 300
+          const amount = randomAmount(100, 300)
           const txId = await createTransaction({
             account_id: accountIds[0],
             category_id: null,
@@ -238,13 +239,14 @@ async function demodataRoutes(fastify, opts) {
         if (Math.random() > 0.9) {
           const cryptoAccountId = Math.random() > 0.5 ? accountIds[3] : accountIds[4]
           const cryptoAccount = accountMap.get(cryptoAccountId)
-          const usdAmount = 100 + Math.random() * 500
+          const usdAmount = randomAmount(100, 500)
 
+          // numeric(24,12) holds 12 decimals; the leg keeps them all
           let cryptoAmount = usdAmount
           if (cryptoAccount.currency !== 'USD') {
-            const converted = convertAmount(usdAmount, 'USD', cryptoAccount.currency, rates)
+            const converted = convertAmountDecimal(usdAmount, 'USD', cryptoAccount.currency, rates)
             if (converted !== null) {
-              cryptoAmount = converted
+              cryptoAmount = converted.toDecimalPlaces(12).toFixed()
             }
           }
 
@@ -276,7 +278,7 @@ async function demodataRoutes(fastify, opts) {
           const txId = await createTransaction({
             account_id: accountIds[2],
             category_id: null,
-            amount: 200 + Math.random() * 300,
+            amount: randomAmount(200, 300),
             type: 'income',
             date: dateStr,
             note: 'Deposit to savings',
@@ -289,7 +291,7 @@ async function demodataRoutes(fastify, opts) {
           const txId = await createTransaction({
             account_id: accountIds[2],
             category_id: categoryIds[2],
-            amount: 50 + Math.random() * 150,
+            amount: randomAmount(50, 150),
             type: 'expense',
             date: dateStr,
             note: 'Withdrawal for grocery',
@@ -301,7 +303,7 @@ async function demodataRoutes(fastify, opts) {
         if (Math.random() > 0.95) {
           const cryptoAccountId = Math.random() > 0.5 ? accountIds[3] : accountIds[4]
           const cryptoAccount = accountMap.get(cryptoAccountId)
-          const rewardAmount = cryptoAccount.currency === 'BTC' ? 0.0001 + Math.random() * 0.001 : 0.001 + Math.random() * 0.01
+          const rewardAmount = cryptoAccount.currency === 'BTC' ? randomAmount('0.0001', '0.001', 8) : randomAmount('0.001', '0.01', 8)
 
           const txId = await createTransaction({
             account_id: cryptoAccountId,

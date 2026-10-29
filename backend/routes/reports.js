@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js'
-import { loadRates, convertAmountDecimal } from '../services/currency.js'
+import { loadRates, convertAmountDecimal, toDisplayNumber } from '../services/currency.js'
 import { visibleAccountIds } from '../services/visibility.js'
 import { FLOW_TYPE_SQL, flowSign } from '../services/flows.js'
 import { t, getUserLang } from '../services/i18n.js'
@@ -186,16 +186,17 @@ async function reportRoutes(fastify, opts) {
       cat.count += g.count
     }
 
+    // Ordered on the exact totals, rounded only for the response
     const rows = Array.from(categoryMap.values())
+      .sort((a, b) => b.total.comparedTo(a.total))
       .map(r => {
         const typeTotal = totalsByType.get(r.type)
         return {
           ...r,
-          total: parseFloat(r.total.toFixed(2)),
-          percentage: typeTotal && typeTotal.gt(0) ? parseFloat(r.total.div(typeTotal).times(100).toFixed(1)) : 0
+          total: toDisplayNumber(r.total, base_currency),
+          percentage: typeTotal && typeTotal.gt(0) ? r.total.div(typeTotal).times(100).toDecimalPlaces(1).toNumber() : 0
         }
       })
-      .sort((a, b) => b.total - a.total)
 
     return rows
   })
@@ -231,17 +232,13 @@ async function reportRoutes(fastify, opts) {
 
     return Array.from(monthMap.values())
       .sort((a, b) => a.month.localeCompare(b.month))
-      .map(r => {
-        const income = r.income.toNumber()
-        const expense = r.expense.toNumber()
-        return {
-          month: r.month,
-          income: parseFloat(income.toFixed(2)),
-          expense: parseFloat(expense.toFixed(2)),
-          transfer: parseFloat(r.transfer.toNumber().toFixed(2)),
-          net: parseFloat((income - expense).toFixed(2))
-        }
-      })
+      .map(r => ({
+        month: r.month,
+        income: toDisplayNumber(r.income, base_currency),
+        expense: toDisplayNumber(r.expense, base_currency),
+        transfer: toDisplayNumber(r.transfer, base_currency),
+        net: toDisplayNumber(r.income.minus(r.expense), base_currency)
+      }))
   })
 
   fastify.get('/reports/net-worth', {
@@ -311,8 +308,8 @@ async function reportRoutes(fastify, opts) {
 
     return monthsList.map((month, i) => ({
       month,
-      change: parseFloat((flowByMonth.get(month) || new Decimal(0)).toNumber().toFixed(2)),
-      balance: parseFloat(balances[i].toNumber().toFixed(2))
+      change: toDisplayNumber(flowByMonth.get(month) || 0, base_currency),
+      balance: toDisplayNumber(balances[i], base_currency)
     }))
   })
 
@@ -344,10 +341,10 @@ async function reportRoutes(fastify, opts) {
     const savings = income.minus(expense)
     const rate = income.gt(0) ? savings.div(income).times(100) : new Decimal(0)
     return {
-      income: parseFloat(income.toNumber().toFixed(2)),
-      expense: parseFloat(expense.toNumber().toFixed(2)),
-      savings: parseFloat(savings.toNumber().toFixed(2)),
-      rate: parseFloat(rate.toNumber().toFixed(2)),
+      income: toDisplayNumber(income, base_currency),
+      expense: toDisplayNumber(expense, base_currency),
+      savings: toDisplayNumber(savings, base_currency),
+      rate: rate.toDecimalPlaces(2).toNumber(),
       base_currency
     }
   })
@@ -394,7 +391,7 @@ async function reportRoutes(fastify, opts) {
       booked.get(g.month)[side] = booked.get(g.month)[side].plus(sumInBase(g.sum, g.account_currency, base_currency, rates))
     }
 
-    const money = value => parseFloat(value.toNumber().toFixed(2))
+    const money = value => toDisplayNumber(value, base_currency)
     return {
       from: window.from,
       to: window.to,

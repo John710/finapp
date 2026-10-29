@@ -154,4 +154,36 @@ describe('GET /reports/dashboard', () => {
     const payments = queries.find(q => /FROM debt_payments/.test(q.sql))
     expect(payments.params).toEqual([[10, 11]])
   })
+
+  it('rounds the month, trend and balance totals once from the exact Decimal', async () => {
+    // Through a float, 1.005 printed as 1.00 and 1.255 as 1.25
+    const { app } = buildServer({
+      rates: [{ from_currency: 'EUR', to_currency: 'USD', rate: '1' }],
+      month: [
+        { type: 'income', currency: 'USD', sum: '1.005000000000' },
+        { type: 'expense', currency: 'USD', sum: '0.100000000000' },
+        { type: 'expense', currency: 'EUR', sum: '0.200000000000' }
+      ],
+      trend: [{ month: '2026-03', type: 'income', currency: 'USD', sum: '1.255000000000' }],
+      // 100 accounts of 19.99 and one of 0.005
+      accounts: [...Array.from({ length: 100 }, (_, i) => ({ id: i + 1, currency: 'USD', balance: '19.990000000000' })),
+        { id: 101, currency: 'USD', balance: '0.005000000000' }]
+    })
+    const body = await dashboard(app, '/reports/dashboard?networth_months=1')
+    expect(body.month_summary).toEqual({ income: 1.01, expense: 0.3, net: 0.71 })
+    expect(body.trend[0]).toEqual({ month: '2026-03', income: 1.26, expense: 0, transfer: 0 })
+    expect(body.total_balance).toBe(1999.01)
+    expect(body.net_worth).toEqual([{ month: '2026-03', balance: 1999.01 }])
+  })
+
+  it('keeps satoshis when the base currency is BTC', async () => {
+    const { app } = buildServer({
+      accounts: [{ id: 1, currency: 'BTC', balance: '0.000000010000' }],
+      debts: [{ id: 10, amount: '0.000000020000', currency: 'BTC', type: 'lend', status: 'active' }]
+    })
+    const body = await dashboard(app, '/reports/dashboard?base_currency=BTC&networth_months=1')
+    expect(body.total_balance).toBe(0.00000001)
+    expect(body.net_worth).toEqual([{ month: '2026-03', balance: 0.00000001 }])
+    expect(body.debts_summary).toEqual({ owed: 0, lent: 0.00000002, count: 1 })
+  })
 })

@@ -6,6 +6,22 @@
  * convertAmountDecimal() returns the exact Decimal for aggregation code.
  */
 import Decimal from 'decimal.js'
+import fiatCurrencies from '../data/fiatCurrencies.json' with { type: 'json' }
+
+const FIAT_CODES = new Set(fiatCurrencies.map(c => c.code))
+
+/**
+ * A computed total as the JSON number the report/dashboard clients read.
+ * Only for the serialisation boundary — never feed the result back into
+ * arithmetic. Rounds the exact Decimal once (half-up), so 1.005 stays 1.01
+ * instead of the float detour's 1.00. Fiat keeps two decimals as before; any
+ * other code (a crypto base currency) keeps 8, the most the frontend renders,
+ * so 0.00000001 BTC does not collapse to 0.
+ */
+export function toDisplayNumber(value, currency) {
+  const places = FIAT_CODES.has(currency) ? 2 : 8
+  return new Decimal(value).toDecimalPlaces(places).toNumber()
+}
 
 export async function loadRates(db) {
   const result = await db.query(`

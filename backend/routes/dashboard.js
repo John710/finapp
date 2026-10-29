@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js'
-import { loadRates, convertAmountDecimal } from '../services/currency.js'
+import { loadRates, convertAmountDecimal, toDisplayNumber } from '../services/currency.js'
 import { visibleAccountIds } from '../services/visibility.js'
 import { loadOccurrenceFlags, loadVisibleRules } from '../services/recurring-rules.js'
 import { monthlyEquivalent, projectOccurrences, shiftDays, shiftMonth } from '../services/recurring-schedule.js'
@@ -47,6 +47,8 @@ async function dashboardRoutes(fastify, opts) {
       const converted = convertAmountDecimal(amount, currency, base_currency, rates)
       return converted !== null ? converted : new Decimal(amount)
     }
+    // Exact Decimal totals become JSON numbers only here, in the response
+    const display = value => toDisplayNumber(value, base_currency)
 
     const [monthTotals, trendGroups, accountsRes, recentRes, recurringRules, debtsRes] = await Promise.all([
       // Current-month income/expense (split children excluded: parents carry
@@ -170,7 +172,7 @@ async function dashboardRoutes(fastify, opts) {
     const netWorth = []
     let bal = currentTotal.minus(suffixFlow)
     for (let i = monthsList.length - 1; i >= 0; i--) {
-      netWorth.unshift({ month: monthsList[i], balance: parseFloat(bal.toNumber().toFixed(2)) })
+      netWorth.unshift({ month: monthsList[i], balance: display(bal) })
       bal = bal.minus(flowByMonth.get(monthsList[i]) || new Decimal(0))
     }
 
@@ -214,31 +216,31 @@ async function dashboardRoutes(fastify, opts) {
 
     return {
       month_summary: {
-        income: parseFloat(monthIncome.toNumber().toFixed(2)),
-        expense: parseFloat(monthExpense.toNumber().toFixed(2)),
-        net: parseFloat(monthIncome.minus(monthExpense).toNumber().toFixed(2))
+        income: display(monthIncome),
+        expense: display(monthExpense),
+        net: display(monthIncome.minus(monthExpense))
       },
-      total_balance: parseFloat(currentTotal.toNumber().toFixed(2)),
+      total_balance: display(currentTotal),
       trend: Array.from(trendMap.values())
         .sort((a, b) => a.month.localeCompare(b.month))
         .map(m => ({
           month: m.month,
-          income: parseFloat(m.income.toNumber().toFixed(2)),
-          expense: parseFloat(m.expense.toNumber().toFixed(2)),
-          transfer: parseFloat(m.transfer.toNumber().toFixed(2))
+          income: display(m.income),
+          expense: display(m.expense),
+          transfer: display(m.transfer)
         })),
       net_worth: netWorth,
       accounts: accountsRes.rows,
       recent_transactions: recentRes.rows,
       recurring: {
-        monthly_commitments: parseFloat(commitments.toNumber().toFixed(2)),
+        monthly_commitments: display(commitments),
         active_count: activeRules.length,
         window: { from: serverToday, to: horizon },
         upcoming: upcomingOccurrence
       },
       debts_summary: {
-        owed: parseFloat(owed.toNumber().toFixed(2)),
-        lent: parseFloat(lent.toNumber().toFixed(2)),
+        owed: display(owed),
+        lent: display(lent),
         count: openDebts.length
       },
       base_currency
