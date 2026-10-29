@@ -1,13 +1,19 @@
 import fp from 'fastify-plugin'
 import cron from 'node-cron'
+import Decimal from 'decimal.js'
 import { t, getUserLang } from '../services/i18n.js'
 import { notify, checkDuplicateNotification } from '../services/notify.js'
 import { ruleColumns } from '../services/recurring-schedule.js'
 import { bookDueRules } from '../services/recurring-run.js'
 
-function amountText(amount) {
-  const value = Number(amount)
-  return Number.isFinite(value) ? String(value) : String(amount)
+// numeric(24,12) text without the padding zeros, in plain notation: a float
+// detour printed 0.00000001 BTC as "1e-8" and cut 15+ significant digits.
+export function amountText(amount) {
+  try {
+    return new Decimal(amount).toFixed()
+  } catch {
+    return String(amount)
+  }
 }
 
 async function cronPlugin(fastify, opts) {

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { convertAmount, convertAmountDecimal } from '../services/currency.js'
+import Decimal from 'decimal.js'
+import { convertAmount, convertAmountDecimal, toDisplayNumber } from '../services/currency.js'
 
 const rates = [
   { from_currency: 'USD', to_currency: 'RUB', rate: '92.5' },
@@ -67,5 +68,21 @@ describe('convertAmount (number wrapper)', () => {
   it('returns numbers for route/SQL callers', () => {
     expect(convertAmount('100', 'USD', 'RUB', rates)).toBe(9250)
     expect(convertAmount('1', 'USD', 'JPY', rates)).toBe(null)
+  })
+})
+
+describe('toDisplayNumber', () => {
+  it('rounds fiat once, half-up, from the exact value', () => {
+    // (1.005).toFixed(2) and (2.675).toFixed(2) round down through the float
+    expect(toDisplayNumber('1.005000000000', 'USD')).toBe(1.01)
+    expect(toDisplayNumber(new Decimal('2.675'), 'EUR')).toBe(2.68)
+    expect(toDisplayNumber('-2.675', 'RUB')).toBe(-2.68)
+    expect(toDisplayNumber(new Decimal('0.1').plus('0.2'), 'USD')).toBe(0.3)
+  })
+
+  it('keeps 8 decimals for codes outside the fiat list', () => {
+    expect(toDisplayNumber('0.000000014000', 'BTC')).toBe(0.00000001)
+    expect(toDisplayNumber('0.000000015000', 'ETH')).toBe(0.00000002)
+    expect(toDisplayNumber('0.000000010000', 'USD')).toBe(0)
   })
 })
