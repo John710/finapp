@@ -5,6 +5,7 @@
     :size="size"
     :color="color"
     :stroke-width="strokeWidth"
+    aria-hidden="true"
   />
 </template>
 

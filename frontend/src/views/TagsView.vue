@@ -20,7 +20,7 @@
     </div>
 
     <div v-else class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div v-for="tag in tagsStore.tags" :key="tag.id" class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" @click="goToTransactions(tag.id)">
+      <div v-for="tag in tagsStore.tags" :key="tag.id" role="link" tabindex="0" :aria-label="tag.name" class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" @click="goToTransactions(tag.id)" @keydown.enter.self="goToTransactions(tag.id)" @keydown.space.self.prevent="goToTransactions(tag.id)">
         <div class="flex items-center gap-3">
           <div class="w-4 h-4 rounded-full" :style="{ backgroundColor: tag.color || '#94a3b8' }"></div>
           <span class="font-medium">{{ tag.name }}</span>
@@ -42,13 +42,13 @@
         <h3 class="text-lg font-semibold mb-4">{{ editingTag ? $t('tags.edit') : $t('tags.add') }}</h3>
         <div class="space-y-4">
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('tags.name') }}</label>
-            <input v-model="form.name" type="text" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" :placeholder="$t('tags.name')" />
+            <label :for="`${uid}-name`" class="block text-sm font-medium mb-1">{{ $t('tags.name') }}</label>
+            <input :id="`${uid}-name`" v-model="form.name" type="text" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" :placeholder="$t('tags.name')" />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('tags.color') }}</label>
-            <div class="flex flex-wrap gap-2">
-              <button v-for="c in colors" :key="c" class="w-6 h-6 rounded-full border-2 transition-all" :style="{ backgroundColor: c, borderColor: form.color === c ? c : 'transparent' }" :class="form.color === c ? 'scale-110 ring-2 ring-offset-1 ring-slate-300 dark:ring-slate-600' : ''" @click="form.color = c"></button>
+            <span :id="`${uid}-color`" class="block text-sm font-medium mb-1">{{ $t('tags.color') }}</span>
+            <div class="flex flex-wrap gap-2" role="group" :aria-labelledby="`${uid}-color`">
+              <button v-for="c in colors" :key="c" type="button" :aria-label="c" :aria-pressed="form.color === c" class="w-6 h-6 rounded-full border-2 transition-all" :style="{ backgroundColor: c, borderColor: form.color === c ? c : 'transparent' }" :class="form.color === c ? 'scale-110 ring-2 ring-offset-1 ring-slate-300 dark:ring-slate-600' : ''" @click="form.color = c"></button>
             </div>
           </div>
         </div>
@@ -63,7 +63,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseModal from '@/components/BaseModal.vue'
 import { useRouter } from 'vue-router'
@@ -73,6 +73,7 @@ import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
 
 const { t } = useI18n()
+const uid = useId()
 const router = useRouter()
 const undo = useUndo('tags')
 const tagsStore = useTagsStore()

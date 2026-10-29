@@ -12,6 +12,7 @@
         ref="inputRef"
         v-model="query"
         :placeholder="$t('command_palette.placeholder')"
+        :aria-label="$t('command_palette.placeholder')"
         class="flex-1 bg-transparent outline-none text-sm"
         role="combobox"
         aria-expanded="true"

@@ -20,11 +20,13 @@
           {{ $t('settings.vapid_not_configured') }}
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">{{ $t('settings.vapid_email') }}</label>
-          <p class="text-xs text-slate-500 mb-1">{{ $t('settings.vapid_email_desc') }}</p>
+          <label :for="`${uid}-vapid-email`" class="block text-sm font-medium mb-1">{{ $t('settings.vapid_email') }}</label>
+          <p :id="`${uid}-vapid-email-desc`" class="text-xs text-slate-500 mb-1">{{ $t('settings.vapid_email_desc') }}</p>
           <input
+            :id="`${uid}-vapid-email`"
             v-model="vapidEmail"
             type="email"
+            :aria-describedby="`${uid}-vapid-email-desc`"
             :placeholder="$t('settings.vapid_email')"
             :disabled="vapidLoading || vapidDeleteLoading"
             class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm disabled:opacity-50"
@@ -87,7 +89,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePush } from '@/composables/usePush.js'
 import { api } from '@/utils/api.js'
@@ -96,6 +98,7 @@ import { useAuthStore } from '../../stores/auth'
 import { useSettingsStore } from '../../stores/settings'
 
 const { t } = useI18n()
+const uid = useId()
 const auth = useAuthStore()
 const settingsStore = useSettingsStore()
 const push = usePush()

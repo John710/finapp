@@ -58,12 +58,12 @@
         <h2 class="font-display text-xl font-semibold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
         <form class="space-y-4" @submit.prevent="saveDebt">
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('debts.counterparty') }}</label>
-            <input v-model="form.counterparty" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+            <label for="debt-counterparty" class="block text-sm font-medium mb-1">{{ $t('debts.counterparty') }}</label>
+            <input id="debt-counterparty" v-model="form.counterparty" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('common.name') }}</label>
-            <input v-model="form.name" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+            <label for="debt-name" class="block text-sm font-medium mb-1">{{ $t('common.name') }}</label>
+            <input id="debt-name" v-model="form.name" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
           </div>
           <p v-if="hasPayments" class="text-xs text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-2xl px-3 py-2">{{ $t('debts.locked_by_payments') }}</p>
           <div class="grid grid-cols-2 gap-4">
@@ -72,11 +72,11 @@
               <input id="debt-amount" v-model.number="form.amount" type="number" step="0.01" required :disabled="hasPayments" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 disabled:opacity-60 disabled:cursor-not-allowed" />
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
+              <label for="debt-currency" class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
               <!-- A disabled fieldset also disables the buttons inside CurrencySelect -->
               <fieldset :disabled="hasPayments" class="min-w-0 border-0 p-0 m-0" :class="hasPayments ? 'opacity-60' : ''">
                 <CurrencySelect
-v-model="form.currency" required
+id="debt-currency" v-model="form.currency" required
                   :placeholder="$t('common.currency')"
                   :search-placeholder="$t('common.search')"
                   :empty-text="$t('common.empty')" />
@@ -91,8 +91,8 @@ v-model="form.currency" required
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('debts.due_date') }}</label>
-            <input v-model="form.due_date" type="date" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+            <label for="debt-due-date" class="block text-sm font-medium mb-1">{{ $t('debts.due_date') }}</label>
+            <input id="debt-due-date" v-model="form.due_date" type="date" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
           </div>
           <div>
             <label for="debt-account" class="block text-sm font-medium mb-1">{{ $t('debts.account') }}</label>
@@ -119,28 +119,28 @@ v-model="form.currency" required
         <form class="space-y-4" @submit.prevent="savePayment">
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('debts.pay_amount') }}</label>
-              <input v-model.number="paymentForm.amount" type="number" step="0.01" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+              <label for="debt-pay-amount" class="block text-sm font-medium mb-1">{{ $t('debts.pay_amount') }}</label>
+              <input id="debt-pay-amount" v-model.number="paymentForm.amount" type="number" step="0.01" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
+              <label for="debt-pay-currency" class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
               <CurrencySelect
-v-model="paymentForm.currency" required
+id="debt-pay-currency" v-model="paymentForm.currency" required
                 :placeholder="$t('common.currency')"
                 :search-placeholder="$t('common.search')"
                 :empty-text="$t('common.empty')" />
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('debts.account') }}</label>
-            <select v-model="paymentForm.account_id" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+            <label for="debt-pay-account" class="block text-sm font-medium mb-1">{{ $t('debts.account') }}</label>
+            <select id="debt-pay-account" v-model="paymentForm.account_id" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
               <option :value="null">-</option>
               <option v-for="acc in accountsStore.accounts" :key="acc.id" :value="acc.id">{{ acc.name }}</option>
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('transactions.note') }}</label>
-            <input v-model="paymentForm.note" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+            <label for="debt-pay-note" class="block text-sm font-medium mb-1">{{ $t('transactions.note') }}</label>
+            <input id="debt-pay-note" v-model="paymentForm.note" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
           </div>
           <div class="flex gap-3 mt-6">
             <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closePaymentModal">{{ $t('common.cancel') }}</button>

@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="flex items-center gap-3 mb-6">
-      <button class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" @click="$router.back()">
+      <button type="button" class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" :aria-label="$t('common.back')" @click="$router.back()">
         <Icon name="arrowLeft" class="w-5 h-5" />
       </button>
       <h1 class="font-display text-2xl lg:text-3xl font-semibold tracking-tight">{{ account?.name }}</h1>

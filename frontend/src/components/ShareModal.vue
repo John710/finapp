@@ -11,7 +11,7 @@
           <input type="checkbox" v-model="familyEnabled" class="rounded" />
           {{ $t('sharing.family') }}
         </label>
-        <select v-if="familyEnabled" v-model="familyPermission" class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+        <select v-if="familyEnabled" v-model="familyPermission" :aria-label="$t('sharing.permission')" class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
           <option value="view">{{ $t('sharing.view') }}</option>
           <option value="edit">{{ $t('sharing.edit') }}</option>
         </select>
@@ -24,7 +24,7 @@
           <div v-for="us in userShares" :key="us.id" class="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-100 dark:bg-slate-800">
             <span class="text-sm font-medium truncate">{{ us.login }}</span>
             <div class="flex items-center gap-1.5">
-              <select v-model="us.permission" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 border-0 text-slate-900 dark:text-slate-100 text-xs">
+              <select v-model="us.permission" :aria-label="$t('sharing.permission_for', { user: us.login })" class="px-2 py-1 rounded-lg bg-white dark:bg-slate-700 border-0 text-slate-900 dark:text-slate-100 text-xs">
                 <option value="view">{{ $t('sharing.view') }}</option>
                 <option value="edit">{{ $t('sharing.edit') }}</option>
               </select>
@@ -35,7 +35,7 @@
           </div>
         </div>
         <div class="flex gap-2">
-          <select v-model="pickedUserId" @change="addUser" class="flex-1 px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+          <select v-model="pickedUserId" :aria-label="$t('sharing.pick_user')" @change="addUser" class="flex-1 px-2.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
             <option :value="null" disabled>{{ $t('sharing.pick_user') }}</option>
             <option v-for="u in addableUsers" :key="u.id" :value="u.id">{{ u.login }}</option>
           </select>

@@ -2,7 +2,7 @@
   <BaseModal :model-value="modelValue" width-class="max-w-md" z-class="z-[60]" @update:model-value="$emit('update:modelValue', $event)">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-bold">{{ $t('help.title') }}</h2>
-        <button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" @click="close">
+        <button type="button" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="$t('common.close')" @click="close">
           <Icon name="cancel" class="w-5 h-5" />
         </button>
       </div>

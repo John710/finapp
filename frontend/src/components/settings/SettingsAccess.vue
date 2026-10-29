@@ -20,7 +20,7 @@
       <div v-else class="text-sm text-slate-500 mb-3">{{ $t('settings.totp_disabled') }}</div>
 
       <div v-if="!totpEnabled && setupStage === 'idle'" class="space-y-2 max-w-sm">
-        <input v-model="totpPassword" type="password" autocomplete="current-password" :placeholder="$t('settings.password_current')" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+        <input v-model="totpPassword" type="password" autocomplete="current-password" :placeholder="$t('settings.password_current')" :aria-label="$t('settings.password_current')" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
         <button @click="startTotpSetup" :disabled="totpLoading || !totpPassword" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
           {{ totpLoading ? $t('common.loading') : $t('settings.totp_setup') }}
         </button>
@@ -31,7 +31,7 @@
           <p class="text-xs text-slate-500 break-all text-center">{{ totpSecret }}</p>
         </div>
         <div class="flex gap-2 max-w-xs mx-auto">
-          <input v-model="totpCode" type="text" inputmode="numeric" maxlength="8" :placeholder="$t('auth.totp_code')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm tracking-widest" />
+          <input v-model="totpCode" type="text" inputmode="numeric" maxlength="8" :placeholder="$t('auth.totp_code')" :aria-label="$t('auth.totp_code')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm tracking-widest" />
           <button @click="enableTotp" :disabled="totpLoading || !totpCode" class="px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
             {{ totpLoading ? $t('common.loading') : $t('settings.totp_enable') }}
           </button>
@@ -39,8 +39,8 @@
       </div>
       <div v-else class="space-y-2 max-w-sm">
         <div class="flex gap-2">
-          <input v-model="totpPassword" type="password" autocomplete="current-password" :placeholder="$t('settings.password_current')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-          <input v-model="totpCode" type="text" inputmode="numeric" maxlength="8" :placeholder="$t('auth.totp_code')" class="w-28 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm tracking-widest" />
+          <input v-model="totpPassword" type="password" autocomplete="current-password" :placeholder="$t('settings.password_current')" :aria-label="$t('settings.password_current')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+          <input v-model="totpCode" type="text" inputmode="numeric" maxlength="8" :placeholder="$t('auth.totp_code')" :aria-label="$t('auth.totp_code')" class="w-28 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm tracking-widest" />
         </div>
         <button @click="disableTotp" :disabled="totpLoading || !totpPassword || !totpCode" class="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">
           {{ totpLoading ? $t('common.loading') : $t('settings.totp_disable') }}
@@ -73,7 +73,7 @@
       </ul>
       <p v-else class="text-sm text-slate-500 mb-3">{{ $t('settings.tokens_empty') }}</p>
       <div class="flex gap-2 max-w-sm">
-        <input v-model="newTokenName" type="text" :placeholder="$t('settings.token_name')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+        <input v-model="newTokenName" type="text" :placeholder="$t('settings.token_name')" :aria-label="$t('settings.token_name')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
         <button @click="createToken" :disabled="tokenLoading || !newTokenName.trim()" class="px-4 py-2 rounded-full bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
           {{ tokenLoading ? $t('common.loading') : $t('common.add') }}
         </button>
@@ -109,7 +109,7 @@
       </ul>
       <p v-else class="text-sm text-slate-500 mb-3">{{ $t('settings.feed_empty') }}</p>
       <div class="flex gap-2 max-w-sm">
-        <input v-model="newFeedName" type="text" :placeholder="$t('settings.feed_name')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+        <input v-model="newFeedName" type="text" :placeholder="$t('settings.feed_name')" :aria-label="$t('settings.feed_name')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
         <button @click="createFeed" :disabled="feedLoading || !newFeedName.trim()" class="px-4 py-2 rounded-full bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
           {{ feedLoading ? $t('common.loading') : $t('common.add') }}
         </button>
@@ -145,8 +145,8 @@
         </li>
       </ul>
       <div class="flex flex-col sm:flex-row gap-2 max-w-md">
-        <input v-model="newLogin" type="text" :placeholder="$t('auth.username')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
-        <input v-model="newPassword" type="password" autocomplete="new-password" :placeholder="$t('auth.password')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+        <input v-model="newLogin" type="text" :placeholder="$t('auth.username')" :aria-label="$t('auth.username')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+        <input v-model="newPassword" type="password" autocomplete="new-password" :placeholder="$t('auth.password')" :aria-label="$t('auth.password')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
         <button @click="createUser" :disabled="userLoading || !newLogin.trim() || newPassword.length < 8" class="px-4 py-2 rounded-full bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50">
           {{ userLoading ? $t('common.loading') : $t('common.add') }}
         </button>
