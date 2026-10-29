@@ -195,6 +195,7 @@ The `/health` endpoint returns HTTP 503 when the database connection is lost —
 | `ALLOWED_ORIGINS` | Allowed CORS origins (comma-separated) | — |
 | `TRUSTED_PROXIES` | Trusted reverse proxies (comma-separated) | — |
 | `SHOUTRRR_BLOCK_PRIVATE_TARGETS` | Reject Shoutrrr/webhook targets on private/loopback addresses (SSRF protection). Set `false` to allow notifying services on your local network | `true` |
+| `SHOUTRRR_ALLOWED_HOSTS` | Comma-separated hostnames exempt from the private-address check, e.g. a self-hosted Gotify that resolves to a LAN IP | — |
 | `DATABASE_SSL` | Enable SSL/TLS for PostgreSQL connection | `false` |
 | `DATABASE_SSL_REJECT_UNAUTHORIZED` | Reject unauthorized SSL certificates | `true` |
 | `PUID` | Docker container user ID | `1000` (reuses base image `node` user) |

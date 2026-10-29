@@ -2,7 +2,7 @@ import fp from 'fastify-plugin'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { decrypt } from '../services/crypto.js'
-import { isPrivateTarget } from '../services/network.js'
+import { isPrivateTarget, parseAllowedHosts } from '../services/network.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -15,6 +15,8 @@ export function blockPrivateTargets(value) {
   return !['0', 'false', 'no', 'off'].includes(String(value ?? '').trim().toLowerCase())
 }
 const BLOCK_PRIVATE_TARGETS = blockPrivateTargets(process.env.SHOUTRRR_BLOCK_PRIVATE_TARGETS)
+// Hosts exempt from the guard, e.g. a self-hosted Gotify behind split-horizon DNS
+const ALLOWED_HOSTS = parseAllowedHosts(process.env.SHOUTRRR_ALLOWED_HOSTS)
 
 // Errors from this plugin can surface in API responses; never include the full
 // URL — Shoutrrr URLs embed bot tokens and API keys in userinfo/query.
@@ -38,7 +40,7 @@ async function shoutrrrPlugin(fastify, opts) {
     const errors = []
 
     for (const u of urls) {
-      if (BLOCK_PRIVATE_TARGETS && await isPrivateTarget(u)) {
+      if (BLOCK_PRIVATE_TARGETS && await isPrivateTarget(u, { allowedHosts: ALLOWED_HOSTS })) {
         fastify.log.warn({ url: maskUrl(u) }, 'Shoutrrr target on a private address blocked')
         errors.push(`Target ${maskUrl(u)} is on a private network address, which is not allowed`)
         continue

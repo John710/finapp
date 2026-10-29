@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isPrivateAddress, isPrivateTarget } from '../services/network.js'
+import { isPrivateAddress, isPrivateTarget, parseAllowedHosts } from '../services/network.js'
 
 // dns.lookup stand-in: hostname -> list of addresses; unknown names fail like ENOTFOUND
 function lookupFrom(table) {
@@ -55,6 +55,15 @@ describe('isPrivateTarget', () => {
     expect(await isPrivateTarget('https://internal.example.com/x', { lookup })).toBe(true)
     expect(await isPrivateTarget('https://split.example.com/x', { lookup })).toBe(true)
     expect(await isPrivateTarget('https://v6only.example.com/x', { lookup })).toBe(true)
+  })
+
+  it('lets an allow-listed host through even when it resolves privately', async () => {
+    const allowedHosts = parseAllowedHosts(' Internal.Example.com. , other.example ')
+    expect(allowedHosts).toEqual(new Set(['internal.example.com', 'other.example']))
+    expect(await isPrivateTarget('https://internal.example.com/message?token=x', { lookup, allowedHosts })).toBe(false)
+    expect(await isPrivateTarget('gotify://INTERNAL.example.com/token', { lookup, allowedHosts })).toBe(false)
+    expect(await isPrivateTarget('https://split.example.com/x', { lookup, allowedHosts })).toBe(true)
+    expect(parseAllowedHosts(undefined).size).toBe(0)
   })
 
   it('catches localhost names without a lookup', async () => {

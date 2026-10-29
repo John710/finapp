@@ -87,7 +87,14 @@ function isLocalHostname(hostname) {
 // allowed: shoutrrr services such as telegram:// or discord:// put a token or a
 // service id where the host goes and talk to a fixed public API. A URL that
 // cannot be parsed is refused, since its target cannot be checked.
-export async function isPrivateTarget(rawUrl, { lookup = dns.lookup } = {}) {
+// Comma-separated hostnames an admin trusts even though they resolve to a
+// private address (split-horizon DNS, a self-hosted Gotify on the LAN).
+// Exact names only, compared case-insensitively.
+export function parseAllowedHosts(value) {
+  return new Set(String(value ?? '').split(',').map(h => h.trim().toLowerCase().replace(/\.$/, '')).filter(Boolean))
+}
+
+export async function isPrivateTarget(rawUrl, { lookup = dns.lookup, allowedHosts = new Set() } = {}) {
   let url
   try {
     url = new URL(String(rawUrl))
@@ -101,6 +108,7 @@ export async function isPrivateTarget(rawUrl, { lookup = dns.lookup } = {}) {
   } catch {
     return true
   }
+  if (allowedHosts.has(host.toLowerCase().replace(/\.$/, ''))) return false
   if (isLocalHostname(host)) return true
   if (isIP(host)) return isPrivateAddress(host)
   let addresses
