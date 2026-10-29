@@ -48,13 +48,13 @@ function rule(overrides = {}) {
 
 // Rows of loadVisibleDebts(): what DEBT_VISIBLE_SQL lets the caller see.
 const DEBTS = [
-  { id: 4, user_id: USER, name: 'Car loan', counterparty: 'Bank', amount: '300.000000000000', currency: 'USD', type: 'borrow', status: 'active', account_id: 3, is_owner: true },
-  // shared to the caller by another family member (view or edit share)
-  { id: 5, user_id: OTHER, name: 'Lent', counterparty: 'Ann', amount: '50.000000000000', currency: 'EUR', type: 'lend', status: 'active', account_id: 8, is_owner: false },
+  { id: 4, user_id: USER, name: 'Car loan', counterparty: 'Bank', amount: '300.000000000000', currency: 'USD', type: 'borrow', status: 'active', account_id: 3, is_owner: true, can_edit: true },
+  // shared to the caller by another family member with an 'edit' share
+  { id: 5, user_id: OTHER, name: 'Lent', counterparty: 'Ann', amount: '50.000000000000', currency: 'EUR', type: 'lend', status: 'active', account_id: 8, is_owner: false, can_edit: true },
   // paid off: its installments are closed by money and stay out
-  { id: 6, user_id: USER, name: 'Old', counterparty: 'Tom', amount: '10.000000000000', currency: 'USD', type: 'borrow', status: 'paid', account_id: null, is_owner: true },
+  { id: 6, user_id: USER, name: 'Old', counterparty: 'Tom', amount: '10.000000000000', currency: 'USD', type: 'borrow', status: 'paid', account_id: null, is_owner: true, can_edit: true },
   // no schedule: never in the calendar
-  { id: 7, user_id: USER, name: 'Plain', counterparty: 'Sue', amount: '70.000000000000', currency: 'USD', type: 'lend', status: 'active', account_id: null, is_owner: true }
+  { id: 7, user_id: USER, name: 'Plain', counterparty: 'Sue', amount: '70.000000000000', currency: 'USD', type: 'lend', status: 'active', account_id: null, is_owner: true, can_edit: true }
 ]
 
 const INSTALLMENTS = [
@@ -125,7 +125,8 @@ describe('GET /recurring/occurrences with debt installments', () => {
       paid: false,
       skipped: false,
       is_active: true,
-      is_owner: true
+      is_owner: true,
+      can_edit: true
     })
     expect(occurrences.find(o => o.installment_id === 41)).toEqual({
       kind: 'debt_installment',
@@ -139,7 +140,8 @@ describe('GET /recurring/occurrences with debt installments', () => {
       debt_type: 'borrow',
       paid: true,
       skipped: false,
-      is_owner: true
+      is_owner: true,
+      can_edit: true
     })
     await app.close()
   })
@@ -148,7 +150,8 @@ describe('GET /recurring/occurrences with debt installments', () => {
     const { app } = calendarServer([])
     const res = await app.inject({ method: 'GET', url: '/recurring/occurrences?from=2026-03-01&to=2026-05-31' })
     const { occurrences } = res.json()
-    expect(occurrences.find(o => o.installment_id === 51)).toMatchObject({ is_owner: false, user_id: OTHER, currency: 'EUR', debt_type: 'lend' })
+    // an 'edit' share may pay and skip: can_edit, though not the owner
+    expect(occurrences.find(o => o.installment_id === 51)).toMatchObject({ is_owner: false, can_edit: true, user_id: OTHER, currency: 'EUR', debt_type: 'lend' })
     expect(occurrences.find(o => o.installment_id === 42)).toMatchObject({ paid: false, skipped: true })
     await app.close()
   })
@@ -174,6 +177,16 @@ describe('GET /recurring/occurrences with debt installments', () => {
     expect(debts.sql).toContain('d.user_id = $1 OR EXISTS')
     expect(debts.sql).toContain('es.shared_with = $1 OR es.shared_with IS NULL')
     expect(debts.sql).not.toMatch(/JOIN entity_shares/)
+    // can_edit: the owner, else the most permissive share the caller holds is 'edit'
+    expect(debts.sql).toMatch(/\(CASE WHEN d\.user_id = \$1 THEN 'edit' ELSE COALESCE\(\(SELECT es\.permission .*'none'\) END\) = 'edit' AS can_edit/)
+    await app.close()
+  })
+
+  it('gives a subscription chip can_edit only for the owner, whose routes alone pay and skip', async () => {
+    const { app } = calendarServer([rule({ id: 2, user_id: OTHER, is_owner: false })])
+    const res = await app.inject({ method: 'GET', url: '/recurring/occurrences?from=2026-03-01&to=2026-03-31' })
+    const shared = res.json().occurrences.find(o => o.kind === 'subscription')
+    expect(shared).toMatchObject({ rule_id: 2, is_owner: false, can_edit: false })
     await app.close()
   })
 

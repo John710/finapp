@@ -4,6 +4,7 @@ import { loadRates, convertAmountDecimal } from '../services/currency.js'
 import { accountForWrite, visibleAccountIds, canModifyTransaction } from '../services/visibility.js'
 import {
   paidInDebtCurrency,
+  debtCovered,
   convertForAccount,
   bookingType,
   signOf,
@@ -39,9 +40,10 @@ export function debtBookingChanged(old, next) {
 // the account shares the debt's currency — the debt's amount. Anything else
 // (or a split) was changed in the transactions view and is the user's now.
 // A booking in another currency cannot be checked by amount: the rate of the
-// day it was booked is not stored.
+// day it was booked is not stored. A booking with a receipt attached is the
+// user's too: deleting it would take the attachments with it.
 export function bookingEditedByHand(booking, debt) {
-  if (booking.is_split) return true
+  if (booking.is_split || booking.has_attachments) return true
   if (booking.type !== bookingType(debt.type)) return true
   return booking.account_currency === (debt.currency || 'USD') &&
     !new Decimal(booking.amount).eq(new Decimal(debt.amount))
@@ -53,6 +55,36 @@ const ID_PARAMS = {
   properties: { id: { type: 'integer', minimum: 1 } }
 }
 
+// Hand-entered schedule rows: PUT /debts/:id/installments and the
+// `installments` of PUT /debts/:id take the same list.
+const INSTALLMENT_ROWS_SCHEMA = {
+  type: 'array',
+  maxItems: MAX_INSTALLMENTS,
+  items: {
+    type: 'object',
+    required: ['due_date', 'amount'],
+    properties: {
+      due_date: { type: 'string', format: 'date' },
+      // a JSON number is coerced to its decimal text; parsed exactly later
+      amount: { type: 'string', maxLength: 40 }
+    }
+  }
+}
+
+// Why a debt of `amount` cannot hold `schedule` (a splitSchedule /
+// normalizeSchedule result), as [status, errors.* key, params]; null when it can.
+function scheduleError(schedule, amount, currency) {
+  if (!schedule.ok) return [400, schedule.error, schedule.params]
+  if (schedule.rows.length && !scheduleMatchesDebt(schedule.rows, amount)) {
+    return [422, 'installments_sum_mismatch', {
+      sum: scheduleTotal(schedule.rows).toFixed(),
+      amount: new Decimal(amount).toFixed(),
+      currency
+    }]
+  }
+  return null
+}
+
 async function debtRoutes(fastify, opts) {
   // The transaction booked when the debt was created. It is inserted in the
   // same DB transaction as the debt (or later with the debt's created_at), so
@@ -60,7 +92,8 @@ async function debtRoutes(fastify, opts) {
   // for transfer legs. The note pins it to this debt's name.
   async function findDebtBooking(client, debtId) {
     const res = await client.query(
-      `SELECT t.id, t.account_id, t.user_id, t.amount, t.type, t.is_split, a.currency AS account_currency
+      `SELECT t.id, t.account_id, t.user_id, t.amount, t.type, t.is_split, a.currency AS account_currency,
+              EXISTS (SELECT 1 FROM attachments x WHERE x.transaction_id = t.id) AS has_attachments
        FROM transactions t
        JOIN debts d ON d.id = $1
        JOIN accounts a ON a.id = t.account_id
@@ -149,6 +182,37 @@ async function debtRoutes(fastify, opts) {
     })
     if (after) await after()
     return body.body
+  }
+
+  // How many installments a debt has, and how many are paid or skipped (a
+  // schedule with any of those can no longer be replaced).
+  async function installmentCounts(client, debtId) {
+    const { rows } = await client.query(
+      `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status <> 'due')::int AS settled
+       FROM debt_installments WHERE debt_id = $1`,
+      [debtId]
+    )
+    return { total: rows[0]?.total ?? 0, settled: rows[0]?.settled ?? 0 }
+  }
+
+  // Replaces a debt's schedule with validated rows (normalizeSchedule /
+  // splitSchedule), stored under the debt's owner; [] removes it. Returns the
+  // installments as stored.
+  async function replaceSchedule(client, debtId, ownerId, rows) {
+    await client.query('DELETE FROM debt_installments WHERE debt_id = $1', [debtId])
+    if (rows.length === 0) return []
+    const inserted = await client.query(
+      `INSERT INTO debt_installments (debt_id, user_id, position, due_date, amount)
+       SELECT $1, $2, r.position, r.due_date, r.amount
+       FROM unnest($3::int[], $4::date[], $5::numeric[]) AS r(position, due_date, amount)
+       RETURNING id`,
+      [debtId, ownerId, rows.map(r => r.position), rows.map(r => r.due_date), rows.map(r => r.amount)]
+    )
+    const reread = await client.query(
+      `SELECT ${INSTALLMENT_COLUMNS} FROM debt_installments i WHERE i.id = ANY($1::int[]) ORDER BY i.position`,
+      [inserted.rows.map(r => r.id)]
+    )
+    return reread.rows
   }
 
   // List with converted paid_amount and remaining in the debt's currency
@@ -279,6 +343,13 @@ async function debtRoutes(fastify, opts) {
   // Update. The amount, currency, type and account were booked on the account
   // when the debt was created: without payments an edit moves that booking
   // along; with payments those fields are settled history (409).
+  //
+  // The installment schedule is in the debt's amount and currency, so it
+  // changes with them, in this transaction: `installments: { rows }` replaces
+  // it as PUT /debts/:id/installments does (`rows: []` removes it). A new
+  // amount or currency on a debt with a schedule needs one (409
+  // installments_need_update); once part of it is paid or skipped, neither the
+  // schedule nor the amount/currency can change (409 installments_locked).
   fastify.put('/debts/:id', {
     schema: {
       params: ID_PARAMS,
@@ -294,7 +365,12 @@ async function debtRoutes(fastify, opts) {
           due_date: { type: 'string', format: 'date' },
           description: { type: 'string', maxLength: 2000 },
           status: { type: 'string', enum: ['active', 'paid'] },
-          account_id: { type: ['integer', 'null'] }
+          account_id: { type: ['integer', 'null'] },
+          installments: {
+            type: 'object',
+            required: ['rows'],
+            properties: { rows: INSTALLMENT_ROWS_SCHEMA }
+          }
         }
       }
     }
@@ -302,7 +378,7 @@ async function debtRoutes(fastify, opts) {
     const userId = request.user.userId
     const lang = await getUserLang(fastify.db, userId)
     const { id } = request.params
-    const { name, counterparty, amount, currency, type, due_date, description, status, account_id } = request.body
+    const { name, counterparty, amount, currency, type, due_date, description, status, account_id, installments } = request.body
     const client = await fastify.db.connect()
     try {
       await client.query('BEGIN')
@@ -327,6 +403,18 @@ async function debtRoutes(fastify, opts) {
         account_id: account_id === undefined ? old.account_id : account_id
       }
       const bookingChanged = debtBookingChanged(old, next)
+
+      const schedule = installments ? normalizeSchedule(installments.rows) : null
+      if (schedule) {
+        const invalid = scheduleError(schedule, amount, next.currency)
+        if (invalid) return abort(client, reply, invalid[0], invalid[1], lang, invalid[2])
+      }
+      const sizeChanged = !new Decimal(old.amount).eq(new Decimal(amount)) || old.currency !== next.currency
+      if (schedule || sizeChanged) {
+        const counts = await installmentCounts(client, id)
+        if (counts.settled > 0) return abort(client, reply, 409, 'installments_locked', lang)
+        if (!schedule && counts.total > 0) return abort(client, reply, 409, 'installments_need_update', lang)
+      }
 
       let account = null
       let txAmount = null
@@ -389,12 +477,15 @@ async function debtRoutes(fastify, opts) {
       // A booking edited or removed by hand (not found) is left alone: the
       // ledger is not rebooked behind the user's back.
 
+      // A status the owner sets by hand is theirs: auto_paid (set by payments)
+      // only survives while the status stays as it was.
       const result = await client.query(
-        'UPDATE debts SET name = $1, counterparty = $2, amount = $3, currency = $4, type = $5, due_date = $6, description = $7, status = COALESCE($8, status), account_id = $9, updated_at = NOW() WHERE id = $10 AND user_id = $11 RETURNING *',
+        'UPDATE debts SET name = $1, counterparty = $2, amount = $3, currency = $4, type = $5, due_date = $6, description = $7, status = COALESCE($8, status), auto_paid = (auto_paid AND COALESCE($8, status) = status), account_id = $9, updated_at = NOW() WHERE id = $10 AND user_id = $11 RETURNING *',
         [name, counterparty, amount, next.currency, type, due_date, description, status ?? null, next.account_id, id, userId]
       )
+      const saved = schedule ? await replaceSchedule(client, id, userId, schedule.rows) : null
       await client.query('COMMIT')
-      return result.rows[0]
+      return schedule ? { ...result.rows[0], installments: saved } : result.rows[0]
     } catch (err) {
       await client.query('ROLLBACK')
       throw err
@@ -492,8 +583,11 @@ async function debtRoutes(fastify, opts) {
   //
   // The money the debt moved goes with it: the creation booking and the
   // payment transactions are deleted and their balance effect reversed. A
-  // transaction the user changed by hand, or one on an account the caller may
-  // not write, is left as it is and reported in kept_transactions.
+  // transaction the user changed by hand (or attached a receipt to), or one on
+  // an account the caller may not write, is left as it is and reported in
+  // kept_transactions. A booked payment whose transaction cannot be found any
+  // more (deleted or moved by hand, legacy rows) reverses nothing and is
+  // reported in unmatched_payments, so the client can say so.
   fastify.delete('/debts/:id', {
     schema: { params: ID_PARAMS }
   }, async (request, reply) => {
@@ -502,6 +596,7 @@ async function debtRoutes(fastify, opts) {
     const { id } = request.params
     const reversed = []
     const kept = []
+    const unmatched = []
     const client = await fastify.db.connect()
     try {
       await client.query('BEGIN')
@@ -521,11 +616,14 @@ async function debtRoutes(fastify, opts) {
       const booking = debt.account_id ? await findDebtBooking(client, id) : null
       if (booking) candidates.push({ tx: booking, untouched: !bookingEditedByHand(booking, debt) })
       const paymentsRes = await client.query(
-        'SELECT id FROM debt_payments WHERE debt_id = $1 AND account_id IS NOT NULL ORDER BY id',
+        'SELECT id, amount::text AS amount, currency FROM debt_payments WHERE debt_id = $1 AND account_id IS NOT NULL ORDER BY id',
         [id]
       )
       const paymentTxs = await findPaymentTransactions(client, paymentsRes.rows.map(p => p.id))
       for (const tx of paymentTxs.values()) candidates.push({ tx, untouched: tx.untouched })
+      for (const p of paymentsRes.rows) {
+        if (!paymentTxs.has(p.id)) unmatched.push({ id: p.id, amount: p.amount, currency: p.currency })
+      }
 
       for (const { tx, untouched } of candidates) {
         if (untouched && (await canModifyTransaction(client, userId, tx))) {
@@ -548,10 +646,13 @@ async function debtRoutes(fastify, opts) {
     } finally {
       client.release()
     }
-    if (kept.length) {
-      request.log.info({ debtId: id, keptTransactions: kept }, 'Debt deleted; transactions edited by hand or not writable were kept')
+    if (kept.length || unmatched.length) {
+      request.log.info(
+        { debtId: id, keptTransactions: kept, unmatchedPayments: unmatched.map(p => p.id) },
+        'Debt deleted; transactions edited by hand or not writable were kept, payments without a transaction reversed nothing'
+      )
     }
-    return { success: true, reversed_transactions: reversed, kept_transactions: kept }
+    return { success: true, reversed_transactions: reversed, kept_transactions: kept, unmatched_payments: unmatched }
   })
 
   // ---------------------------------------------------------------------------
@@ -568,19 +669,7 @@ async function debtRoutes(fastify, opts) {
       body: {
         type: 'object',
         properties: {
-          rows: {
-            type: 'array',
-            maxItems: MAX_INSTALLMENTS,
-            items: {
-              type: 'object',
-              required: ['due_date', 'amount'],
-              properties: {
-                due_date: { type: 'string', format: 'date' },
-                // a JSON number is coerced to its decimal text; parsed exactly later
-                amount: { type: 'string', maxLength: 40 }
-              }
-            }
-          },
+          rows: INSTALLMENT_ROWS_SCHEMA,
           split: {
             type: 'object',
             required: ['count', 'start_date'],
@@ -608,40 +697,13 @@ async function debtRoutes(fastify, opts) {
       const schedule = split
         ? splitSchedule(debt.amount, split.count, split.start_date, { unit: split.unit, value: split.value }, currencyDigits(debt.currency))
         : normalizeSchedule(rows)
-      if (!schedule.ok) return { aborted: true, body: await abort(client, reply, 400, schedule.error, lang, schedule.params) }
-      if (schedule.rows.length && !scheduleMatchesDebt(schedule.rows, debt.amount)) {
-        return {
-          aborted: true,
-          body: await abort(client, reply, 422, 'installments_sum_mismatch', lang, {
-            sum: scheduleTotal(schedule.rows).toFixed(),
-            amount: new Decimal(debt.amount).toFixed(),
-            currency: debt.currency
-          })
-        }
+      const invalid = scheduleError(schedule, debt.amount, debt.currency)
+      if (invalid) return { aborted: true, body: await abort(client, reply, invalid[0], invalid[1], lang, invalid[2]) }
+      if ((await installmentCounts(client, id)).settled > 0) {
+        return { aborted: true, body: await abort(client, reply, 409, 'installments_locked', lang) }
       }
-      const locked = await client.query(
-        "SELECT 1 FROM debt_installments WHERE debt_id = $1 AND status <> 'due' LIMIT 1",
-        [id]
-      )
-      if (locked.rows.length) return { aborted: true, body: await abort(client, reply, 409, 'installments_locked', lang) }
 
-      await client.query('DELETE FROM debt_installments WHERE debt_id = $1', [id])
-      let installments = []
-      if (schedule.rows.length) {
-        const inserted = await client.query(
-          `INSERT INTO debt_installments (debt_id, user_id, position, due_date, amount)
-           SELECT $1, $2, r.position, r.due_date, r.amount
-           FROM unnest($3::int[], $4::date[], $5::numeric[]) AS r(position, due_date, amount)
-           RETURNING id`,
-          [id, debt.owner_id, schedule.rows.map(r => r.position), schedule.rows.map(r => r.due_date), schedule.rows.map(r => r.amount)]
-        )
-        const ids = inserted.rows.map(r => r.id)
-        const reread = await client.query(
-          `SELECT ${INSTALLMENT_COLUMNS} FROM debt_installments i WHERE i.id = ANY($1::int[]) ORDER BY i.position`,
-          [ids]
-        )
-        installments = reread.rows
-      }
+      const installments = await replaceSchedule(client, id, debt.owner_id, schedule.rows)
       return { body: { debt_id: id, installments } }
     })
     return out.body
@@ -700,7 +762,9 @@ async function debtRoutes(fastify, opts) {
 
   // Undo an installment payment: its payments go, and so do their
   // transactions with their balance effect — but only while every one of
-  // those transactions is as the payment booked it (409 payment_edited).
+  // those transactions is as the payment booked it (409 payment_edited). A
+  // payment whose transaction no longer exists (deleted or moved to another
+  // account by hand) has nothing left to reverse: the payment row just goes.
   fastify.delete('/debts/installments/:id/pay', {
     schema: { params: ID_PARAMS }
   }, async (request, reply) => {
@@ -713,15 +777,13 @@ async function debtRoutes(fastify, opts) {
       const payments = paymentsRes.rows
       const booked = payments.filter(p => p.account_id !== null && p.account_id !== undefined)
       const txs = await findPaymentTransactions(client, booked.map(p => p.id))
-      for (const payment of booked) {
-        const tx = txs.get(payment.id)
-        if (!tx || !tx.untouched) return { abort: [409, 'payment_edited'] }
+      for (const tx of txs.values()) {
+        if (!tx.untouched) return { abort: [409, 'payment_edited'] }
         if (!(await canModifyTransaction(client, userId, tx))) return { abort: [403, 'not_allowed'] }
       }
 
       const reversedIds = []
-      for (const payment of booked) {
-        const tx = txs.get(payment.id)
+      for (const tx of txs.values()) {
         await reverseTransaction(client, tx)
         reversedIds.push(tx.id)
       }
@@ -735,13 +797,14 @@ async function debtRoutes(fastify, opts) {
         [installment.id]
       )
 
-      // The automatic 'paid' status follows the payments back.
-      if (debt.status === 'paid') {
+      // The automatic 'paid' status follows the payments back; one the owner
+      // set by hand (auto_paid false) stays.
+      if (debt.status === 'paid' && debt.auto_paid) {
         const rates = await loadRates(client)
         const left = await client.query('SELECT amount, currency FROM debt_payments WHERE debt_id = $1', [debt.id])
         const paid = paidInDebtCurrency(left.rows, debt.currency || 'USD', rates)
-        if (paid.lt(new Decimal(debt.amount))) {
-          await client.query("UPDATE debts SET status = 'active', updated_at = NOW() WHERE id = $1", [debt.id])
+        if (!debtCovered(paid, debt.amount, debt.currency)) {
+          await client.query("UPDATE debts SET status = 'active', auto_paid = false, updated_at = NOW() WHERE id = $1", [debt.id])
         }
       }
       return { body: { installment: rows[0], removed_payments: paymentIds, reversed_transactions: reversedIds } }

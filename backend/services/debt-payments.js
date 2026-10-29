@@ -3,7 +3,7 @@ import { convertAmountDecimal } from './currency.js'
 import { t, getUserLang } from './i18n.js'
 import { accountForWrite } from './visibility.js'
 import { notify } from './notify.js'
-import { projectInstallments } from './debt-schedule.js'
+import { currencyDigits, projectInstallments } from './debt-schedule.js'
 
 /**
  * Sum of a debt's payments in the debt's own currency, as an exact Decimal.
@@ -23,6 +23,16 @@ export function paidInDebtCurrency(payments, debtCurrency, rates, onMissingRate)
     }
   }
   return paid
+}
+
+// Whether payments worth `paid` (already in the debt's currency) settle a debt
+// of `amount`. A payment converted from another currency can leave dust
+// (…99.999999999999 of 100), so a shortfall of up to half a minor unit of the
+// debt's currency (0.005 USD, 0.5 JPY) — what rounds away at the currency's
+// precision — counts as paid.
+export function debtCovered(paid, amount, currency) {
+  const halfUnit = new Decimal(10).pow(-currencyDigits(currency || 'USD')).div(2)
+  return new Decimal(amount).minus(paid).lte(halfUnit)
 }
 
 // What is still owed on a debt; never negative (overpayment means settled).
@@ -70,7 +80,7 @@ export function debtAccessSql(param) {
  */
 export async function lockDebt(client, debtId, userId) {
   const { rows } = await client.query(
-    `SELECT d.id, d.amount, d.currency, d.type, d.name, d.status, d.account_id, d.user_id AS owner_id,
+    `SELECT d.id, d.amount, d.currency, d.type, d.name, d.status, d.auto_paid, d.account_id, d.user_id AS owner_id,
             ${debtAccessSql('$2')} AS access
      FROM debts d WHERE d.id = $1
      FOR UPDATE OF d`,
@@ -156,8 +166,10 @@ export async function recordDebtPayment(client, { debt, userId, amount, currency
     log?.warn(`Debt payment conversion failed on full-paid check: ${pCurrency} -> ${debtCurrency}`)
   })
   let fullyPaid = false
-  if (paid.gte(new Decimal(debt.amount))) {
-    await client.query('UPDATE debts SET status = $1 WHERE id = $2', ['paid', debt.id])
+  if (debtCovered(paid, debt.amount, debtCurrency)) {
+    // auto_paid marks a status the payments set, which undoing a payment may
+    // take back; a debt the owner had already closed by hand stays theirs.
+    await client.query('UPDATE debts SET status = $1, auto_paid = (auto_paid OR status <> $1) WHERE id = $2', ['paid', debt.id])
     fullyPaid = true
   }
   return { payment: paymentRes.rows[0], transaction, fullyPaid }
@@ -184,7 +196,8 @@ export async function notifyDebtPaid(fastify, debt) {
  * The transactions recorded with the given payments, locked, one per payment
  * at most: same account and created_at as the payment, a 'debt_payment:' note
  * (by prefix — the debt may have been renamed since). `untouched` is false once
- * the transactions route rewrote the row (it bumps updated_at) or split it;
+ * the transactions route rewrote the row (it bumps updated_at), split it or a
+ * receipt was attached to it (deleting the row would cascade the attachments);
  * such rows are the user's now and are never reversed automatically. A payment
  * whose transaction was deleted or moved to another account has no entry.
  */
@@ -192,7 +205,8 @@ export async function findPaymentTransactions(client, paymentIds) {
   if (paymentIds.length === 0) return new Map()
   const { rows } = await client.query(
     `SELECT p.id AS payment_id, t.id, t.account_id, t.user_id, t.amount::text AS amount, t.type,
-            (t.updated_at = t.created_at AND NOT t.is_split) AS untouched
+            (t.updated_at = t.created_at AND NOT t.is_split
+              AND NOT EXISTS (SELECT 1 FROM attachments x WHERE x.transaction_id = t.id)) AS untouched
      FROM debt_payments p
      JOIN transactions t ON t.account_id = p.account_id AND t.created_at = p.created_at
        AND starts_with(t.note, 'debt_payment:') AND t.parent_id IS NULL
@@ -223,13 +237,14 @@ export const INSTALLMENT_COLUMNS =
   'i.id, i.debt_id, i.user_id, i.position, i.due_date::text AS due_date, i.amount::text AS amount, i.status, i.paid_on::text AS paid_on, i.note'
 
 /**
- * Debts the user may see (own + shared to them), with is_owner. Shared by the
- * calendar projection and the iCal feed so both read one scope.
+ * Debts the user may see (own + shared to them), with is_owner and can_edit
+ * (owner or an 'edit' share: may pay, skip and undo installments). Shared by
+ * the calendar projection and the iCal feed so both read one scope.
  */
 export async function loadVisibleDebts(db, userId) {
   const { rows } = await db.query(
     `SELECT d.id, d.user_id, d.name, d.counterparty, d.amount::text AS amount, d.currency, d.type, d.status,
-            d.account_id, (d.user_id = $1) AS is_owner
+            d.account_id, (d.user_id = $1) AS is_owner, (${debtAccessSql('$1')}) = 'edit' AS can_edit
      FROM debts d
      WHERE ${DEBT_VISIBLE_SQL}
      ORDER BY d.id`,

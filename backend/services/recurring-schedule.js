@@ -186,8 +186,10 @@ export function projectOccurrences(rules, flags = {}, from, to) {
         paid: paidSet.has(date),
         skipped: skipSet.has(date),
         is_active: rule.is_active,
-        // Only the owner may pay, skip or undo (routes answer 403 otherwise).
-        is_owner: rule.is_owner === true
+        // Only the owner may pay, skip or undo (routes answer 403 otherwise),
+        // so an 'edit' share does not make a subscription chip actionable.
+        is_owner: rule.is_owner === true,
+        can_edit: rule.is_owner === true
       })
     }
   }

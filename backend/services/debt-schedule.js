@@ -125,7 +125,7 @@ export function installmentStatus(row, today) {
 /**
  * Calendar rows for the installments that fall in [from, to], in the flat
  * shape of projectOccurrences, tagged kind 'debt_installment'. `debts` are the
- * debts the caller may see (with is_owner); installments of any other debt,
+ * debts the caller may see (with is_owner, can_edit); installments of any other debt,
  * and of debts already paid off, are left out.
  */
 export function projectInstallments(debts, installments, from, to) {
@@ -147,7 +147,9 @@ export function projectInstallments(debts, installments, from, to) {
       debt_type: debt.type,
       paid: installment.status === 'paid',
       skipped: installment.status === 'skipped',
-      is_owner: debt.is_owner === true
+      is_owner: debt.is_owner === true,
+      // pay / skip / undo are open to the owner and to an 'edit' share
+      can_edit: debt.can_edit === true
     })
   }
   rows.sort((a, b) => (a.date === b.date ? a.installment_id - b.installment_id : a.date < b.date ? -1 : 1))

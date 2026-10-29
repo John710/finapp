@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import debtRoutes from '../routes/debts.js'
 import { buildStubServer, TEST_USER as USER } from './helpers/stub-db.js'
+import { debtCovered } from '../services/debt-payments.js'
 
 // Pins what POST /debts/:id/payments writes, statement by statement. The
 // payment logic moved into services/debt-payments.js (recordDebtPayment) so
@@ -102,6 +103,29 @@ describe('POST /debts/:id/payments ledger effects', () => {
     expect(w.at(-1)).toEqual(['INSERT INTO notifications', [String(OWNER), 'debt_paid', expect.any(String), expect.any(String), expect.any(String)]])
   })
 
+  it('closes the debt when a converted payment leaves it short only by dust, marking the status automatic', async () => {
+    const { app, queries } = buildServer([
+      { match: /FROM debts d WHERE d\.id = \$1/, rows: () => [lockedDebt()] },
+      { match: /INSERT INTO debt_payments/, rows: () => [{ id: 4 }] },
+      { match: /SELECT amount, currency FROM debt_payments/, rows: () => [{ amount: '99.999999999999', currency: 'USD' }] }
+    ])
+    const res = await app.inject({ method: 'POST', url: '/debts/9/payments', payload: { amount: 99.999999999999 } })
+    expect(res.statusCode).toBe(201)
+    const [status] = queries.filter(q => /^UPDATE debts/.test(q.sql))
+    expect(status.sql).toBe('UPDATE debts SET status = $1, auto_paid = (auto_paid OR status <> $1) WHERE id = $2')
+    expect(status.params).toEqual(['paid', 9])
+  })
+
+  it('does not close the debt a whole cent short', async () => {
+    const { app, queries } = buildServer([
+      { match: /FROM debts d WHERE d\.id = \$1/, rows: () => [lockedDebt()] },
+      { match: /INSERT INTO debt_payments/, rows: () => [{ id: 4 }] },
+      { match: /SELECT amount, currency FROM debt_payments/, rows: () => [{ amount: '99.99', currency: 'USD' }] }
+    ])
+    await app.inject({ method: 'POST', url: '/debts/9/payments', payload: { amount: 99.99 } })
+    expect(queries.filter(q => /^UPDATE debts/.test(q.sql))).toHaveLength(0)
+  })
+
   it('answers 404 to a view-only share and writes nothing', async () => {
     const { app, queries } = buildServer([
       { match: /FROM debts d WHERE d\.id = \$1/, rows: () => [lockedDebt({ owner_id: OWNER, access: 'view' })] }
@@ -109,5 +133,25 @@ describe('POST /debts/:id/payments ledger effects', () => {
     const res = await app.inject({ method: 'POST', url: '/debts/9/payments', payload: { amount: 10 } })
     expect(res.statusCode).toBe(404)
     expect(writes(queries).map(([head]) => head)).toEqual(['BEGIN', 'ROLLBACK'])
+  })
+})
+
+describe('debtCovered', () => {
+  it('accepts a shortfall of up to half a minor unit of the debt currency', () => {
+    expect(debtCovered('99.999999999999', '100', 'USD')).toBe(true)
+    expect(debtCovered('99.995', '100', 'USD')).toBe(true)
+    expect(debtCovered('99.994', '100', 'USD')).toBe(false)
+    expect(debtCovered('100.5', '100', 'USD')).toBe(true)
+  })
+
+  it('uses the currency\'s own precision: whole yen, 8 decimals for crypto', () => {
+    expect(debtCovered('9999.6', '10000', 'JPY')).toBe(true)
+    expect(debtCovered('9999.4', '10000', 'JPY')).toBe(false)
+    expect(debtCovered('0.999999996', '1', 'BTC')).toBe(true)
+    expect(debtCovered('0.99999999', '1', 'BTC')).toBe(false)
+  })
+
+  it('falls back to USD precision for a debt without a currency', () => {
+    expect(debtCovered('99.996', '100', null)).toBe(true)
   })
 })

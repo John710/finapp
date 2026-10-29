@@ -112,7 +112,7 @@ describe('PUT /debts/:id/installments', () => {
   it('answers 409 installments_locked once part of the schedule is paid or skipped', async () => {
     const { app, queries } = buildServer([
       lock(),
-      { match: /status <> 'due'/, rows: () => [{ '?column?': 1 }] }
+      { match: /COUNT\(\*\) FILTER \(WHERE status <> 'due'\)::int AS settled/, rows: () => [{ total: 3, settled: 1 }] }
     ])
     const res = await app.inject({
       method: 'PUT', url: '/debts/9/installments',
@@ -251,7 +251,7 @@ describe('DELETE /debts/installments/:id/pay', () => {
 
   it('reverses an untouched payment transaction, removes the payment and reopens the installment and the debt', async () => {
     const { app, queries } = buildServer([
-      ...installmentHandlers({ debt: lockedDebt({ status: 'paid' }), inst: paid }),
+      ...installmentHandlers({ debt: lockedDebt({ status: 'paid', auto_paid: true }), inst: paid }),
       { match: /SELECT id, account_id FROM debt_payments/, rows: () => [{ id: 5, account_id: 3 }] },
       { match: /FROM debt_payments p\s+JOIN transactions t/, rows: () => [tx()] },
       { match: /SELECT amount, currency FROM debt_payments/, rows: () => [{ amount: '66.66', currency: 'USD' }] },
@@ -263,10 +263,39 @@ describe('DELETE /debts/installments/:id/pay', () => {
     expect(statements(queries, /DELETE FROM transactions/)[0].params).toEqual([80])
     expect(statements(queries, /UPDATE accounts SET balance = balance - \$1/)[0].params).toEqual(['33.33', 3, USER])
     expect(statements(queries, /DELETE FROM debt_payments/)[0].params).toEqual([[5]])
-    expect(statements(queries, /UPDATE debts SET status = 'active'/)[0].params).toEqual([9])
+    const [reopen] = statements(queries, /UPDATE debts SET status = 'active'/)
+    expect(reopen.sql).toContain('auto_paid = false')
+    expect(reopen.params).toEqual([9])
     const [find] = statements(queries, /FROM debt_payments p\s+JOIN transactions t/)
     expect(find.sql).toContain("starts_with(t.note, 'debt_payment:')")
     expect(find.sql).toContain('t.created_at = p.created_at')
+    expect(find.sql).toContain('NOT EXISTS (SELECT 1 FROM attachments x WHERE x.transaction_id = t.id)')
+  })
+
+  it('leaves a debt the owner closed by hand closed', async () => {
+    const { app, queries } = buildServer([
+      ...installmentHandlers({ debt: lockedDebt({ status: 'paid', auto_paid: false }), inst: paid }),
+      { match: /SELECT id, account_id FROM debt_payments/, rows: () => [{ id: 5, account_id: 3 }] },
+      { match: /FROM debt_payments p\s+JOIN transactions t/, rows: () => [tx()] },
+      { match: /SELECT amount, currency FROM debt_payments/, rows: () => [{ amount: '10', currency: 'USD' }] },
+      { match: /UPDATE debt_installments i SET status = 'due'/, rows: () => [installment()] }
+    ])
+    const res = await app.inject({ method: 'DELETE', url: '/debts/installments/21/pay' })
+    expect(res.statusCode).toBe(200)
+    expect(statements(queries, /UPDATE debts/)).toHaveLength(0)
+  })
+
+  it('keeps an automatically closed debt closed while the payments left cover it up to conversion dust', async () => {
+    const { app, queries } = buildServer([
+      ...installmentHandlers({ debt: lockedDebt({ status: 'paid', auto_paid: true }), inst: paid }),
+      { match: /SELECT id, account_id FROM debt_payments/, rows: () => [{ id: 5, account_id: null }] },
+      // what a converted payment leaves after numeric(24,12) cuts it: 1e-12 short of 100 USD
+      { match: /SELECT amount, currency FROM debt_payments/, rows: () => [{ amount: '99.999999999999', currency: 'USD' }] },
+      { match: /UPDATE debt_installments i SET status = 'due'/, rows: () => [installment()] }
+    ])
+    const res = await app.inject({ method: 'DELETE', url: '/debts/installments/21/pay' })
+    expect(res.statusCode).toBe(200)
+    expect(statements(queries, /UPDATE debts/)).toHaveLength(0)
   })
 
   it('answers 409 payment_edited when the transaction was rewritten by hand', async () => {
@@ -282,14 +311,31 @@ describe('DELETE /debts/installments/:id/pay', () => {
     expect(queries.at(-1).sql).toBe('ROLLBACK')
   })
 
-  it('answers 409 payment_edited when the transaction is gone or was moved', async () => {
+  it('removes the payment without reversing anything when its transaction is gone or was moved', async () => {
     const { app, queries } = buildServer([
       ...installmentHandlers({ inst: paid }),
-      { match: /SELECT id, account_id FROM debt_payments/, rows: () => [{ id: 5, account_id: 3 }] }
+      { match: /SELECT id, account_id FROM debt_payments/, rows: () => [{ id: 5, account_id: 3 }] },
+      { match: /UPDATE debt_installments i SET status = 'due'/, rows: () => [installment()] }
     ])
     const res = await app.inject({ method: 'DELETE', url: '/debts/installments/21/pay' })
-    expect(res.statusCode).toBe(409)
-    expect(writes(queries)).toHaveLength(0)
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ installment: installment(), removed_payments: [5], reversed_transactions: [] })
+    expect(statements(queries, /DELETE FROM transactions|UPDATE accounts/)).toHaveLength(0)
+    expect(statements(queries, /DELETE FROM debt_payments/)[0].params).toEqual([[5]])
+    expect(queries.at(-1).sql).toBe('COMMIT')
+  })
+
+  it('reverses the payment that still has its transaction and drops the one that lost it', async () => {
+    const { app, queries } = buildServer([
+      ...installmentHandlers({ inst: paid }),
+      { match: /SELECT id, account_id FROM debt_payments/, rows: () => [{ id: 5, account_id: 3 }, { id: 6, account_id: 3 }] },
+      { match: /FROM debt_payments p\s+JOIN transactions t/, rows: () => [tx({ payment_id: 6, id: 81 })] },
+      { match: /UPDATE debt_installments i SET status = 'due'/, rows: () => [installment()] }
+    ])
+    const res = await app.inject({ method: 'DELETE', url: '/debts/installments/21/pay' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({ removed_payments: [5, 6], reversed_transactions: [81] })
+    expect(statements(queries, /DELETE FROM transactions/).map(q => q.params)).toEqual([[81]])
   })
 
   it('removes a payment that never had an account without touching any balance', async () => {
