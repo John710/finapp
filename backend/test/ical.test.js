@@ -77,6 +77,14 @@ describe('buildFeed', () => {
     expect(summary).toBe('SUMMARY:Groceries\\, milk\\; eggs\\nand \\\\more')
   })
 
+  it('turns every kind of line break — CRLF, lone CR, LF — into one escaped \\n', () => {
+    const text = buildFeed([occurrence({ name: 'a\r\nb\rc\nd' })], opts)
+    const summary = text.split('\r\n').find(line => line.startsWith('SUMMARY:'))
+    expect(summary).toBe('SUMMARY:a\\nb\\nc\\nd')
+    // no raw CR is left anywhere outside the CRLF line endings
+    expect(text.replace(/\r\n/g, '')).not.toContain('\r')
+  })
+
   it('folds lines longer than 75 octets', () => {
     const text = buildFeed([occurrence({ name: 'A'.repeat(200) })], opts)
     for (const line of text.split('\r\n')) {

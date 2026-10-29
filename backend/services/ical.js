@@ -12,12 +12,15 @@ import { shiftDays } from './recurring-schedule.js'
 const CRLF = '\r\n'
 const LINE_LIMIT = 75
 
+// Every line break (CRLF, a lone CR or LF) becomes one escaped \n: a raw CR
+// would end the content line early in clients that split on it.
 function escapeText(value) {
   return String(value)
+    .replace(/\r\n?/g, '\n')
     .replace(/\\/g, '\\\\')
     .replace(/;/g, '\\;')
     .replace(/,/g, '\\,')
-    .replace(/\r?\n/g, '\\n')
+    .replace(/\n/g, '\\n')
 }
 
 function utcStamp(iso) {

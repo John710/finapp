@@ -540,6 +540,9 @@ let eurRate = null
 
   const locked = await req('PUT', `/debts/${debtId}/installments`, { body: { rows: [{ due_date: start, amount: '300' }] } })
   assert('replacing a schedule with a paid installment -> 409', locked.status === 409, `status=${locked.status}`)
+  const debtBody = amount => ({ name: 'Audit Loan', counterparty: 'Bob; Smith, Jr', amount, currency: 'USD', type: 'borrow', account_id: walletId })
+  const lockedAmount = await req('PUT', `/debts/${debtId}`, { body: debtBody(330) })
+  assert('changing the amount under a paid installment -> 409 installments_locked', lockedAmount.status === 409 && lockedAmount.json?.code === 'installments_locked', `status=${lockedAmount.status} body=${JSON.stringify(lockedAmount.json).slice(0, 160)}`)
 
   const undone = await req('DELETE', `/debts/installments/${first?.id}/pay`)
   assert('undo installment payment -> 200', undone.status === 200 && undone.json?.installment?.status === 'due', `status=${undone.status} body=${JSON.stringify(undone.json).slice(0, 200)}`)
@@ -549,6 +552,23 @@ let eurRate = null
   assert('undone transaction is gone', !(txList.json?.items || []).some(t => t.id === paidTxId), `tx ${paidTxId} still listed`)
   const afterUndo = await debtOccs()
   assert('projection unmarks the undone installment', afterUndo.list.find(o => o.installment_id === first?.id)?.paid === false, JSON.stringify(afterUndo.list.map(o => o.paid)))
+  assert('own installments are actionable (can_edit)', afterUndo.list.length === 3 && afterUndo.list.every(o => o.can_edit === true), JSON.stringify(afterUndo.list.map(o => o.can_edit)))
+
+  // The schedule follows the debt amount: with every installment due again, a
+  // new amount needs a new schedule in the same PUT.
+  const unskipped = await req('DELETE', `/debts/installments/${second?.id}/skip`)
+  assert('un-skip installment -> 200', unskipped.status === 200 && unskipped.json?.installment?.status === 'due', `status=${unskipped.status}`)
+  const bare = await req('PUT', `/debts/${debtId}`, { body: debtBody(330) })
+  assert('amount change without a schedule -> 409 installments_need_update', bare.status === 409 && bare.json?.code === 'installments_need_update', `status=${bare.status} body=${JSON.stringify(bare.json).slice(0, 160)}`)
+  assert('refused amount change left the booking alone', near(bal(await getAccounts(), walletId), 1300), `${bal(await getAccounts(), walletId)}`)
+  const resized = await req('PUT', `/debts/${debtId}`, {
+    body: { ...debtBody(330), installments: { rows: expectedDates.map(date => ({ due_date: date, amount: '110' })) } }
+  })
+  assert('amount change with a new schedule -> 200', resized.status === 200 && (resized.json?.installments || []).length === 3, `status=${resized.status} body=${JSON.stringify(resized.json).slice(0, 200)}`)
+  const listed = (await req('GET', '/debts')).json?.find(d => d.id === debtId)
+  const scheduleSum = (listed?.installments || []).reduce((sum, i) => sum + parseFloat(i.amount), 0)
+  assert('schedule still adds up to the debt amount', near(listed?.amount, 330) && near(scheduleSum, 330) && (listed?.installments || []).every(i => near(i.amount, 110)), `amount=${listed?.amount} sum=${scheduleSum}`)
+  assert('amount change moved the booking along', near(bal(await getAccounts(), walletId), 1330), `${bal(await getAccounts(), walletId)}`)
 
   const removed = await req('DELETE', `/debts/${debtId}`)
   assert('debt delete -> 200', removed.status === 200, `status=${removed.status}`)

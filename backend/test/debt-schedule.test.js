@@ -130,9 +130,10 @@ describe('installmentStatus', () => {
 
 describe('projectInstallments', () => {
   const debts = [
-    { id: 1, user_id: 7, name: 'Car', counterparty: 'Bank', currency: 'EUR', type: 'borrow', status: 'active', is_owner: true },
-    { id: 2, user_id: 9, name: 'Loan', counterparty: 'Ann', currency: 'USD', type: 'lend', status: 'active', is_owner: false },
-    { id: 3, user_id: 7, name: 'Old', counterparty: 'Bob', currency: 'USD', type: 'lend', status: 'paid', is_owner: true }
+    { id: 1, user_id: 7, name: 'Car', counterparty: 'Bank', currency: 'EUR', type: 'borrow', status: 'active', is_owner: true, can_edit: true },
+    // a 'view' share: seen, not actionable
+    { id: 2, user_id: 9, name: 'Loan', counterparty: 'Ann', currency: 'USD', type: 'lend', status: 'active', is_owner: false, can_edit: false },
+    { id: 3, user_id: 7, name: 'Old', counterparty: 'Bob', currency: 'USD', type: 'lend', status: 'paid', is_owner: true, can_edit: true }
   ]
   const installments = [
     { id: 10, debt_id: 1, due_date: '2026-03-01', amount: '50.000000000000', status: 'due' },
@@ -158,9 +159,10 @@ describe('projectInstallments', () => {
       debt_type: 'borrow',
       paid: true,
       skipped: false,
-      is_owner: true
+      is_owner: true,
+      can_edit: true
     })
-    expect(rows[1]).toMatchObject({ skipped: true, paid: false, is_owner: false, debt_type: 'lend', user_id: 9 })
+    expect(rows[1]).toMatchObject({ skipped: true, paid: false, is_owner: false, can_edit: false, debt_type: 'lend', user_id: 9 })
   })
 
   it('leaves out installments outside the window, of paid-off debts and of debts not passed in', () => {
