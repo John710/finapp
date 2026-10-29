@@ -10,16 +10,16 @@
       </div>
       <form class="space-y-4" @submit.prevent="handleLogin">
         <div>
-          <label class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">{{ $t('auth.username') }}</label>
-          <input v-model="form.login" type="text" autocomplete="username" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-400" />
+          <label :for="`${uid}-login`" class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">{{ $t('auth.username') }}</label>
+          <input :id="`${uid}-login`" v-model="form.login" type="text" autocomplete="username" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-400" />
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">{{ $t('auth.password') }}</label>
-          <input v-model="form.password" type="password" autocomplete="current-password" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-400" />
+          <label :for="`${uid}-password`" class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">{{ $t('auth.password') }}</label>
+          <input :id="`${uid}-password`" v-model="form.password" type="password" autocomplete="current-password" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-400" />
         </div>
         <div v-if="totpRequired">
-          <label class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">{{ $t('auth.totp_code') }}</label>
-          <input v-model="form.totp_code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-400 tracking-widest" />
+          <label :for="`${uid}-totp`" class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">{{ $t('auth.totp_code') }}</label>
+          <input :id="`${uid}-totp`" v-model="form.totp_code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-400 tracking-widest" />
         </div>
         <button type="submit" :disabled="loading" class="w-full py-2.5 rounded-full bg-primary-500 hover:bg-primary-600 shadow-card disabled:opacity-50 text-white font-medium transition-colors">
           {{ loading ? $t('common.loading') : $t('auth.submit') }}
@@ -36,12 +36,13 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { reactive, ref, useId } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 
 const { t } = useI18n()
+const uid = useId()
 
 const route = useRoute()
 const router = useRouter()

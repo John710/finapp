@@ -32,6 +32,7 @@
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div
 v-for="account in regularAccounts" :key="account.id"
+            role="link" tabindex="0" :aria-label="account.name"
             class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark relative overflow-hidden cursor-pointer"
             :class="{
               'opacity-60': account.is_archived,
@@ -40,7 +41,9 @@ v-for="account in regularAccounts" :key="account.id"
             }"
             @dragover.prevent="onDragOver($event, account)"
             @drop="onDrop($event, account)"
-            @click="$router.push(`/accounts/${account.id}`)">
+            @click="$router.push(`/accounts/${account.id}`)"
+            @keydown.enter.self="$router.push(`/accounts/${account.id}`)"
+            @keydown.space.self.prevent="$router.push(`/accounts/${account.id}`)">
             <div class="absolute top-0 right-0 w-24 h-24 rounded-bl-full" :style="{ backgroundColor: account.color + '10' }"></div>
             <button
 class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
@@ -89,6 +92,7 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div
 v-for="account in cryptoAccounts" :key="account.id"
+            role="link" tabindex="0" :aria-label="account.name"
             class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark relative overflow-hidden cursor-pointer"
             :class="{
               'opacity-60': account.is_archived,
@@ -97,7 +101,9 @@ v-for="account in cryptoAccounts" :key="account.id"
             }"
             @dragover.prevent="onDragOver($event, account)"
             @drop="onDrop($event, account)"
-            @click="$router.push(`/accounts/${account.id}`)">
+            @click="$router.push(`/accounts/${account.id}`)"
+            @keydown.enter.self="$router.push(`/accounts/${account.id}`)"
+            @keydown.space.self.prevent="$router.push(`/accounts/${account.id}`)">
             <div class="absolute top-0 right-0 w-24 h-24 rounded-bl-full" :style="{ backgroundColor: account.color + '10' }"></div>
             <button
 class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
@@ -149,6 +155,7 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div
 v-for="account in goalAccounts" :key="account.id"
+            role="link" tabindex="0" :aria-label="account.name"
             class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-card dark:shadow-card-dark relative overflow-hidden cursor-pointer"
             :class="{
               'opacity-60': account.is_archived,
@@ -157,7 +164,9 @@ v-for="account in goalAccounts" :key="account.id"
             }"
             @dragover.prevent="onDragOver($event, account)"
             @drop="onDrop($event, account)"
-            @click="$router.push(`/accounts/${account.id}`)">
+            @click="$router.push(`/accounts/${account.id}`)"
+            @keydown.enter.self="$router.push(`/accounts/${account.id}`)"
+            @keydown.space.self.prevent="$router.push(`/accounts/${account.id}`)">
             <div class="absolute top-0 right-0 w-24 h-24 rounded-bl-full" :style="{ backgroundColor: account.color + '10' }"></div>
             <button
 class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
@@ -215,13 +224,13 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
         <h2 class="font-display text-xl font-semibold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
         <form class="space-y-4" @submit.prevent="saveAccount">
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('common.name') }}</label>
-            <input v-model="form.name" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 focus:outline-none focus:ring-2 focus:ring-primary-400" />
+            <label :for="`${uid}-name`" class="block text-sm font-medium mb-1">{{ $t('common.name') }}</label>
+            <input :id="`${uid}-name`" v-model="form.name" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 focus:outline-none focus:ring-2 focus:ring-primary-400" />
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('common.type') }}</label>
-              <select v-model="form.type" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+              <label :for="`${uid}-type`" class="block text-sm font-medium mb-1">{{ $t('common.type') }}</label>
+              <select :id="`${uid}-type`" v-model="form.type" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
                 <option value="card">{{ $t('accounts.types.card') }}</option>
                 <option value="cash">{{ $t('accounts.types.cash') }}</option>
                 <option value="crypto">{{ $t('accounts.types.crypto') }}</option>
@@ -230,16 +239,16 @@ class="absolute top-2 right-2 z-10 p-1 rounded hover:bg-slate-100 dark:hover:bg-
               </select>
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
+              <label :for="`${uid}-currency`" class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
               <div v-if="form.type === 'crypto'" ref="cryptoSelectRef" class="relative">
-                <button type="button" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-left text-sm flex items-center justify-between" @click="showCryptoDropdown = !showCryptoDropdown">
+                <button :id="`${uid}-currency`" type="button" :aria-expanded="showCryptoDropdown" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-left text-sm flex items-center justify-between" @click="showCryptoDropdown = !showCryptoDropdown">
                   <span v-if="form.currency">{{ form.currency }} — {{ cryptoList.find(c => c.symbol === form.currency)?.name || '' }}</span>
                   <span v-else class="text-slate-400">{{ $t('common.search') }}...</span>
                   <Icon name="arrowDown" class="w-4 h-4 text-slate-400" />
                 </button>
                 <div v-if="showCryptoDropdown" class="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 rounded-2xl border-0 shadow-float max-h-60 overflow-hidden flex flex-col">
                   <div class="p-2 border-b border-slate-100 dark:border-slate-800">
-                    <input ref="cryptoSearchInput" v-model="cryptoSearch" type="text" :placeholder="$t('common.search')" class="w-full px-2 py-1.5 text-sm rounded-md border-0 bg-slate-100 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-400" @keydown="onCryptoKeydown" />
+                    <input ref="cryptoSearchInput" v-model="cryptoSearch" type="text" :placeholder="$t('common.search')" :aria-label="$t('common.search')" class="w-full px-2 py-1.5 text-sm rounded-md border-0 bg-slate-100 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-400" @keydown="onCryptoKeydown" />
                   </div>
                   <div class="overflow-y-auto flex-1">
                     <button
@@ -256,25 +265,26 @@ v-for="c in filteredCryptoList" :key="c.symbol" type="button" class="w-full text
                 </div>
               </div>
               <CurrencySelect
-v-else v-model="form.currency" required
+v-else :id="`${uid}-currency`" v-model="form.currency" required
                 :placeholder="$t('common.currency')"
                 :search-placeholder="$t('common.search')"
                 :empty-text="$t('common.empty')" />
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ form.type === 'crypto' ? $t('accounts.coin_amount') : $t('accounts.initial_balance') }}</label>
-            <input v-model.number="form.balance" type="number" :step="form.type === 'crypto' ? '0.00000001' : '0.01'" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+            <label :for="`${uid}-balance`" class="block text-sm font-medium mb-1">{{ form.type === 'crypto' ? $t('accounts.coin_amount') : $t('accounts.initial_balance') }}</label>
+            <input :id="`${uid}-balance`" v-model.number="form.balance" type="number" :step="form.type === 'crypto' ? '0.00000001' : '0.01'" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
           </div>
           <div v-if="form.type === 'goal'">
-            <label class="block text-sm font-medium mb-1">{{ $t('accounts.target_amount') }}</label>
-            <input v-model.number="form.target_amount" type="number" step="0.01" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+            <label :for="`${uid}-target`" class="block text-sm font-medium mb-1">{{ $t('accounts.target_amount') }}</label>
+            <input :id="`${uid}-target`" v-model.number="form.target_amount" type="number" step="0.01" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('accounts.color') }}</label>
-            <div class="flex flex-wrap gap-2">
+            <span :id="`${uid}-color`" class="block text-sm font-medium mb-1">{{ $t('accounts.color') }}</span>
+            <div class="flex flex-wrap gap-2" role="group" :aria-labelledby="`${uid}-color`">
               <button
 v-for="color in presetColors" :key="color" type="button" class="w-8 h-8 rounded-full transition-all"
+                :aria-label="color" :aria-pressed="form.color === color"
                 :class="form.color === color ? 'ring-2 ring-offset-2 dark:ring-offset-slate-900' : ''"
                 :style="{ backgroundColor: color, ringColor: color }"
                 @click="form.color = color"></button>
@@ -292,7 +302,7 @@ v-for="color in presetColors" :key="color" type="button" class="w-8 h-8 rounded-
 
 <script setup>
 import { logger } from '@/utils/logger.js'
-import { ref, onMounted, onBeforeUnmount, reactive, computed, watch, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, reactive, computed, watch, nextTick, useId } from 'vue'
 import { useAccountsStore } from '../stores/accounts'
 import { useRatesStore } from '../stores/rates'
 import { useI18n } from 'vue-i18n'
@@ -307,6 +317,7 @@ import BaseSkeleton from '@/components/BaseSkeleton.vue'
 import ShareModal from '@/components/ShareModal.vue'
 
 const { t } = useI18n()
+const uid = useId()
 const ratesStore = useRatesStore()
 
 useHotkeys({

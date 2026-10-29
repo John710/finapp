@@ -10,7 +10,7 @@ v-for="toast in toasts" :key="toast.id"
         <Icon v-else-if="toast.type === 'warning'" name="alert" class="w-5 h-5 shrink-0" />
         <Icon v-else name="info" class="w-5 h-5 shrink-0" />
         <span>{{ toast.message }}</span>
-        <button class="ml-auto text-current opacity-60 hover:opacity-100" @click="remove(toast.id)">
+        <button type="button" class="ml-auto text-current opacity-60 hover:opacity-100" :aria-label="$t('common.close')" @click="remove(toast.id)">
           <Icon name="cancel" class="w-4 h-4" />
         </button>
       </div>

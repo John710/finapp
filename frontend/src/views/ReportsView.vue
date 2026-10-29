@@ -12,19 +12,20 @@
       <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark mb-6 flex flex-wrap gap-3 items-center">
         <div class="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
           <button
-v-for="p in periodOptions" :key="p.value" class="px-3 py-2 rounded-md text-sm font-medium transition-colors"
+v-for="p in periodOptions" :key="p.value" type="button" class="px-3 py-2 rounded-md text-sm font-medium transition-colors"
+            :aria-pressed="selectedPeriod === p.value"
             :class="selectedPeriod === p.value ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-500'"
             @click="setPeriod(p.value)">
             {{ p.label }}
           </button>
         </div>
         <div class="flex items-center gap-2">
-          <label class="text-xs text-slate-500">{{ $t('reports.from') }}</label>
-          <input v-model="filters.from" type="date" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" />
+          <label :for="`${uid}-from`" class="text-xs text-slate-500">{{ $t('reports.from') }}</label>
+          <input :id="`${uid}-from`" v-model="filters.from" type="date" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" />
         </div>
         <div class="flex items-center gap-2">
-          <label class="text-xs text-slate-500">{{ $t('reports.to') }}</label>
-          <input v-model="filters.to" type="date" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" />
+          <label :for="`${uid}-to`" class="text-xs text-slate-500">{{ $t('reports.to') }}</label>
+          <input :id="`${uid}-to`" v-model="filters.to" type="date" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" />
         </div>
         <button :disabled="loading" class="px-4 py-2 bg-primary-500 hover:bg-primary-600 shadow-card disabled:opacity-50 text-white rounded-full text-sm font-medium transition-colors" @click="applyFilters">
           {{ loading ? $t('common.loading') + '...' : $t('reports.apply') }}
@@ -67,7 +68,8 @@ v-for="p in periodOptions" :key="p.value" class="px-3 py-2 rounded-md text-sm fo
             <h3 class="font-semibold">{{ categoryType === 'income' ? $t('reports.income_by_category') : $t('reports.expenses_by_category') }}</h3>
             <div class="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
               <button
-v-for="t in ['expense', 'income']" :key="t" class="px-3 py-1 rounded-md text-xs font-medium transition-colors"
+v-for="t in ['expense', 'income']" :key="t" type="button" class="px-3 py-1 rounded-md text-xs font-medium transition-colors"
+                :aria-pressed="categoryType === t"
                 :class="categoryType === t ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-500'"
                 @click="categoryType = t">
                 {{ $t('categories.types.' + t) }}
@@ -293,7 +295,7 @@ v-for="t in ['expense', 'income']" :key="t" class="px-3 py-1 rounded-md text-xs 
 
   <script setup>
 import { logger } from '@/utils/logger.js'
-  import { ref, computed, defineAsyncComponent, onMounted, reactive } from 'vue'
+  import { ref, computed, defineAsyncComponent, onMounted, reactive, useId } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { useDarkMode } from '@/composables/useDarkMode.js'
   import { useChartOptions } from '@/composables/useChartOptions'
@@ -311,6 +313,7 @@ import { logger } from '@/utils/logger.js'
   const BaseChart = defineAsyncComponent(() => import('@/components/BaseChart.vue'))
 
   const { t } = useI18n()
+  const uid = useId()
   const route = useRoute()
   const router = useRouter()
 

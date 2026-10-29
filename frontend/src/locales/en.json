@@ -150,6 +150,7 @@
     "empty": "No recurring rules",
     "amount": "Amount",
     "currency_from_account": "Taken from the selected account",
+    "toggle_active": "Active",
     "frequency": "Frequency",
     "next_date": "Next date",
     "next": "Next",
@@ -181,6 +182,7 @@
       "status": "Any status"
     },
     "sorts": {
+      "label": "Sort by",
       "next": "Next date",
       "amount": "Amount",
       "name": "Name"
@@ -517,6 +519,7 @@
     "saved": "Saved",
     "created": "Created",
     "error": "Error",
+    "back": "Back",
     "prev": "Previous",
     "next": "Next",
     "confirm": "Confirm",
@@ -580,6 +583,8 @@
     "view": "Can view",
     "edit": "Can edit",
     "pick_user": "Select a user…",
+    "permission": "Permission",
+    "permission_for": "Permission for {user}",
     "shared_badge": "Shared"
   },
   "errors": {

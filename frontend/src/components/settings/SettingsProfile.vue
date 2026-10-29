@@ -30,14 +30,14 @@
           </button>
         </div>
       </div>
-      <input ref="avatarFileInput" type="file" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" class="hidden" @change="onAvatarChange" />
+      <input ref="avatarFileInput" type="file" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" :aria-label="$t('settings.avatar')" class="hidden" @change="onAvatarChange" />
     </div>
     <div class="p-5 flex items-center justify-between">
       <div>
         <p class="font-medium">{{ $t('settings.theme') }}</p>
         <p class="text-sm text-slate-500">{{ $t('settings.theme_desc') }}</p>
       </div>
-      <select v-model="theme" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="changeTheme">
+      <select v-model="theme" :aria-label="$t('settings.theme')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="changeTheme">
         <option value="auto">{{ $t('settings.theme_auto') }}</option>
         <option value="light">{{ $t('settings.theme_light') }}</option>
         <option value="dark">{{ $t('settings.theme_dark') }}</option>
@@ -48,7 +48,7 @@
         <p class="font-medium">{{ $t('settings.language') }}</p>
         <p class="text-sm text-slate-500">{{ $t('settings.language_desc') }}</p>
       </div>
-      <select v-model="locale" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="changeLang">
+      <select v-model="locale" :aria-label="$t('settings.language')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="changeLang">
         <option value="ru">{{ $t('settings.lang_ru') }}</option>
         <option value="en">{{ $t('settings.lang_en') }}</option>
       </select>
@@ -65,7 +65,7 @@
         </button>
         <div v-if="showDropdown" class="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 rounded-lg border-0 bg-slate-100 dark:bg-slate-800 shadow-lg max-h-60 overflow-hidden flex flex-col">
           <div class="p-2 border-b border-slate-100 dark:border-slate-800">
-            <input ref="searchInput" v-model="search" type="text" :placeholder="$t('common.search')" class="w-full px-2 py-1.5 text-sm rounded-md border-0 bg-slate-100 dark:bg-slate-800 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-400" @keydown="onKeydown" />
+            <input ref="searchInput" v-model="search" type="text" :placeholder="$t('common.search')" :aria-label="$t('common.search')" class="w-full px-2 py-1.5 text-sm rounded-md border-0 bg-slate-100 dark:bg-slate-800 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-400" @keydown="onKeydown" />
           </div>
           <div class="overflow-y-auto flex-1">
             <button

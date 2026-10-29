@@ -3,13 +3,13 @@
     <h2 class="font-display text-xl font-semibold mb-4">{{ $t('common.add') }} {{ $t('accounts.title').toLowerCase() }}</h2>
     <form class="space-y-4" @submit.prevent="save">
       <div>
-        <label class="block text-sm font-medium mb-1">{{ $t('common.name') }}</label>
-        <input v-model="form.name" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 focus:outline-none focus:ring-2 focus:ring-primary-400" />
+        <label :for="`${uid}-name`" class="block text-sm font-medium mb-1">{{ $t('common.name') }}</label>
+        <input :id="`${uid}-name`" v-model="form.name" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 focus:outline-none focus:ring-2 focus:ring-primary-400" />
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-sm font-medium mb-1">{{ $t('common.type') }}</label>
-          <select v-model="form.type" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+          <label :for="`${uid}-type`" class="block text-sm font-medium mb-1">{{ $t('common.type') }}</label>
+          <select :id="`${uid}-type`" v-model="form.type" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
             <option value="card">{{ $t('accounts.types.card') }}</option>
             <option value="cash">{{ $t('accounts.types.cash') }}</option>
             <option value="crypto">{{ $t('accounts.types.crypto') }}</option>
@@ -17,19 +17,20 @@
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
-          <input v-model="form.currency" maxlength="3" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 uppercase" />
+          <label :for="`${uid}-currency`" class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
+          <input :id="`${uid}-currency`" v-model="form.currency" maxlength="3" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 uppercase" />
         </div>
       </div>
       <div>
-        <label class="block text-sm font-medium mb-1">{{ $t('accounts.initial_balance') }}</label>
-        <input v-model.number="form.balance" type="number" step="0.01" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+        <label :for="`${uid}-balance`" class="block text-sm font-medium mb-1">{{ $t('accounts.initial_balance') }}</label>
+        <input :id="`${uid}-balance`" v-model.number="form.balance" type="number" step="0.01" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
       </div>
       <div>
-        <label class="block text-sm font-medium mb-1">{{ $t('accounts.color') }}</label>
-        <div class="flex flex-wrap gap-2">
+        <span :id="`${uid}-color`" class="block text-sm font-medium mb-1">{{ $t('accounts.color') }}</span>
+        <div class="flex flex-wrap gap-2" role="group" :aria-labelledby="`${uid}-color`">
           <button
 v-for="color in presetColors" :key="color" type="button" class="w-8 h-8 rounded-full transition-all"
+            :aria-label="color" :aria-pressed="form.color === color"
             :class="form.color === color ? 'ring-2 ring-offset-2 dark:ring-offset-slate-900' : ''"
             :style="{ backgroundColor: color, ringColor: color }"
             @click="form.color = color"></button>
@@ -44,7 +45,7 @@ v-for="color in presetColors" :key="color" type="button" class="w-8 h-8 rounded-
 </template>
 
 <script setup>
-import { reactive, watch, computed } from 'vue'
+import { reactive, watch, computed, useId } from 'vue'
 import { useAccountsStore } from '../stores/accounts'
 import { useRatesStore } from '../stores/rates'
 import { presetColors } from '@/utils/colors'
@@ -53,6 +54,7 @@ import BaseModal from '@/components/BaseModal.vue'
 const props = defineProps({ modelValue: Boolean })
 const emit = defineEmits(['update:modelValue', 'created'])
 
+const uid = useId()
 const accountsStore = useAccountsStore()
 const ratesStore = useRatesStore()
 const baseCurrency = computed(() => ratesStore.baseCurrency)

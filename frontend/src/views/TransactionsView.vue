@@ -16,22 +16,22 @@
 
     <!-- Filters -->
     <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark mb-4 flex flex-wrap gap-3">
-      <input v-model="filters.search" type="text" :placeholder="$t('common.search') + '...'" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm w-full lg:w-64 focus:outline-none focus:ring-2 focus:ring-primary-400" @input="debouncedApplyFilters" />
-      <select v-model="filters.account_id" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="applyFilters">
+      <input v-model="filters.search" type="text" :placeholder="$t('common.search') + '...'" :aria-label="$t('common.search')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm w-full lg:w-64 focus:outline-none focus:ring-2 focus:ring-primary-400" @input="debouncedApplyFilters" />
+      <select v-model="filters.account_id" :aria-label="$t('accounts.title')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="applyFilters">
         <option value="">{{ $t('accounts.title') }}</option>
         <option v-for="acc in accountsStore.accounts" :key="acc.id" :value="acc.id">{{ acc.name }}</option>
       </select>
-      <select v-model="filters.category_id" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="applyFilters">
+      <select v-model="filters.category_id" :aria-label="$t('categories.title')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="applyFilters">
         <option value="">{{ $t('categories.title') }}</option>
         <option v-for="cat in categoriesStore.categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
       </select>
-      <select v-model="filters.type" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="applyFilters">
+      <select v-model="filters.type" :aria-label="$t('common.type')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="applyFilters">
         <option value="">{{ $t('common.type') }}</option>
         <option value="income">{{ $t('categories.types.income') }}</option>
         <option value="expense">{{ $t('categories.types.expense') }}</option>
         <option value="transfer">{{ $t('transactions.types.transfer') }}</option>
       </select>
-      <select v-model="filters.tag_id" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="applyFilters">
+      <select v-model="filters.tag_id" :aria-label="$t('tags.title')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" @change="applyFilters">
         <option value="">{{ $t('tags.title') }}</option>
         <option v-for="tag in tagsStore.tags" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
       </select>
@@ -167,39 +167,39 @@
         <h2 class="font-display text-xl font-semibold mb-4">{{ editingId ? $t('common.edit') : $t('common.add') }}</h2>
         <form class="space-y-4" @submit.prevent="saveTransaction">
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('common.type') }}</label>
-            <div class="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
-              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.type === 'expense' ? 'bg-white dark:bg-slate-700 shadow-sm text-danger-500' : 'text-slate-500'" @click="form.type = 'expense'">{{ $t('categories.types.expense') }}</button>
-              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.type === 'income' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-500' : 'text-slate-500'" @click="form.type = 'income'">{{ $t('categories.types.income') }}</button>
-              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.type === 'transfer' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-500' : 'text-slate-500'" @click="form.type = 'transfer'">{{ $t('transactions.types.transfer') }}</button>
+            <span :id="`${uid}-type`" class="block text-sm font-medium mb-1">{{ $t('common.type') }}</span>
+            <div class="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg" role="group" :aria-labelledby="`${uid}-type`">
+              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :aria-pressed="form.type === 'expense'" :class="form.type === 'expense' ? 'bg-white dark:bg-slate-700 shadow-sm text-danger-500' : 'text-slate-500'" @click="form.type = 'expense'">{{ $t('categories.types.expense') }}</button>
+              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :aria-pressed="form.type === 'income'" :class="form.type === 'income' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-500' : 'text-slate-500'" @click="form.type = 'income'">{{ $t('categories.types.income') }}</button>
+              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :aria-pressed="form.type === 'transfer'" :class="form.type === 'transfer' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-500' : 'text-slate-500'" @click="form.type = 'transfer'">{{ $t('transactions.types.transfer') }}</button>
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ selectedAccount?.type === 'crypto' ? $t('transactions.quantity') : $t('transactions.amount') }}</label>
+            <label :for="`${uid}-amount`" class="block text-sm font-medium mb-1">{{ selectedAccount?.type === 'crypto' ? $t('transactions.quantity') : $t('transactions.amount') }}</label>
             <div class="relative">
               <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">{{ selectedAccount?.currency || baseCurrency }}</span>
-              <input v-model.number="form.amount" type="number" :step="selectedAccount?.type === 'crypto' ? '0.00000001' : '0.01'" required class="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 focus:outline-none focus:ring-2 focus:ring-primary-400" />
+              <input :id="`${uid}-amount`" v-model.number="form.amount" type="number" :step="selectedAccount?.type === 'crypto' ? '0.00000001' : '0.01'" required class="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 focus:outline-none focus:ring-2 focus:ring-primary-400" />
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('accounts.title') }}</label>
+            <label :for="`${uid}-account`" class="block text-sm font-medium mb-1">{{ $t('accounts.title') }}</label>
             <div class="flex gap-2">
-              <select v-model="form.account_id" required class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+              <select :id="`${uid}-account`" v-model="form.account_id" required class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
                 <option v-for="acc in accountsStore.accounts" :key="acc.id" :value="acc.id">{{ acc.name }}</option>
               </select>
-              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" @click="openQuickAccount('account_id')">
+              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" :aria-label="$t('common.add')" @click="openQuickAccount('account_id')">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
             </div>
           </div>
           <div v-if="form.type !== 'transfer' && !useSplits">
-            <label class="block text-sm font-medium mb-1">{{ $t('categories.title') }}</label>
+            <label :for="`${uid}-category`" class="block text-sm font-medium mb-1">{{ $t('categories.title') }}</label>
             <div class="flex gap-2">
-              <select v-model="form.category_id" class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+              <select :id="`${uid}-category`" v-model="form.category_id" class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
                 <option :value="null">-</option>
                 <option v-for="cat in filteredCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
               </select>
-              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" @click="showQuickCategory = true">
+              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" :aria-label="$t('common.add')" @click="showQuickCategory = true">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
             </div>
@@ -211,11 +211,11 @@
             </label>
             <div v-if="useSplits" class="space-y-2">
               <div v-for="(row, i) in splitRows" :key="i" class="flex gap-2 items-center">
-                <select v-model="row.category_id" class="flex-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+                <select v-model="row.category_id" :aria-label="$t('categories.title')" class="flex-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
                   <option :value="null">-</option>
                   <option v-for="cat in filteredCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
                 </select>
-                <input v-model.number="row.amount" type="number" step="0.01" min="0" class="w-24 px-2 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+                <input v-model.number="row.amount" type="number" step="0.01" min="0" :aria-label="$t('transactions.amount')" class="w-24 px-2 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
                 <button v-if="splitRows.length > 1" type="button" class="text-slate-400 hover:text-danger-500 shrink-0" :aria-label="$t('common.delete')" @click="splitRows.splice(i, 1)">
                   <Icon name="cancel" class="w-4 h-4" />
                 </button>
@@ -229,41 +229,43 @@
             </div>
           </div>
           <div v-if="form.type === 'transfer'">
-            <label class="block text-sm font-medium mb-1">{{ $t('transactions.to_account') }}</label>
+            <label :for="`${uid}-to-account`" class="block text-sm font-medium mb-1">{{ $t('transactions.to_account') }}</label>
             <div class="flex gap-2">
-              <select v-model="form.transfer_to_account_id" class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+              <select :id="`${uid}-to-account`" v-model="form.transfer_to_account_id" class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
                 <option v-for="acc in accountsStore.accounts.filter(a => a.id !== form.account_id)" :key="acc.id" :value="acc.id">{{ acc.name }}</option>
               </select>
-              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" @click="openQuickAccount('transfer_to_account_id')">
+              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" :aria-label="$t('common.add')" @click="openQuickAccount('transfer_to_account_id')">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
             </div>
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('transactions.date') }}</label>
-              <input v-model="form.date" type="date" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+              <label :for="`${uid}-date`" class="block text-sm font-medium mb-1">{{ $t('transactions.date') }}</label>
+              <input :id="`${uid}-date`" v-model="form.date" type="date" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('transactions.note') }}</label>
-            <textarea v-model="form.note" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 resize-none h-20" :placeholder="$t('transactions.note_placeholder')"></textarea>
+            <label :for="`${uid}-note`" class="block text-sm font-medium mb-1">{{ $t('transactions.note') }}</label>
+            <textarea :id="`${uid}-note`" v-model="form.note" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 resize-none h-20" :placeholder="$t('transactions.note_placeholder')"></textarea>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('tags.title') }}</label>
-            <div class="flex flex-wrap gap-2 mb-2">
+            <span :id="`${uid}-tags`" class="block text-sm font-medium mb-1">{{ $t('tags.title') }}</span>
+            <div class="flex flex-wrap gap-2 mb-2" role="group" :aria-labelledby="`${uid}-tags`">
               <button
 v-for="tag in tagsStore.tags" :key="tag.id" type="button" class="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors"
+                :aria-pressed="form.tags.includes(tag.id)"
                 :class="form.tags.includes(tag.id) ? 'bg-primary-600 text-white border-primary-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'"
                 @click="toggleTag(tag.id)">
                 {{ tag.name }}
               </button>
             </div>
             <div class="flex gap-2 items-center">
-              <input v-model="newTagName" :placeholder="$t('tags.add')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" @keyup.enter="addTag" />
+              <input v-model="newTagName" :placeholder="$t('tags.add')" :aria-label="$t('tags.add')" class="flex-1 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" @keyup.enter="addTag" />
               <div class="flex flex-wrap gap-1">
                 <button
 v-for="color in presetColors" :key="color" type="button" class="w-6 h-6 rounded-full transition-all"
+                  :aria-label="color" :aria-pressed="newTagColor === color"
                   :class="newTagColor === color ? 'ring-2 ring-offset-1 dark:ring-offset-slate-900' : ''"
                   :style="{ backgroundColor: color, ringColor: color }"
                   @click="newTagColor = color"></button>
@@ -296,7 +298,7 @@ v-for="color in presetColors" :key="color" type="button" class="w-6 h-6 rounded-
           <p v-if="attachments.length === 0" class="text-sm text-slate-500">{{ $t('transactions.attachments_empty') }}</p>
         </template>
         <div class="flex gap-2">
-          <input ref="attachmentInput" type="file" class="hidden" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain" @change="uploadAttachment" />
+          <input ref="attachmentInput" type="file" :aria-label="$t('transactions.attachments_upload')" class="hidden" accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain" @change="uploadAttachment" />
           <button type="button" :disabled="attachmentUploading" class="flex-1 py-2 rounded-full bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium disabled:opacity-50" @click="attachmentInput?.click()">
             {{ attachmentUploading ? $t('common.loading') : $t('transactions.attachments_upload') }}
           </button>
@@ -310,7 +312,7 @@ v-for="color in presetColors" :key="color" type="button" class="w-6 h-6 rounded-
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, reactive, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, computed, watch, useId } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTransactionsStore } from '../stores/transactions'
 import { useAccountsStore } from '../stores/accounts'
@@ -335,6 +337,7 @@ import BaseSkeleton from '@/components/BaseSkeleton.vue'
 import { presetColors } from '@/utils/colors'
 
 const { t } = useI18n()
+const uid = useId()
 const route = useRoute()
 const router = useRouter()
 const ratesStore = useRatesStore()

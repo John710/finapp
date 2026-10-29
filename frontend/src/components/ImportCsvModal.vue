@@ -5,22 +5,22 @@
 
       <!-- Profile selector -->
       <div class="mb-4">
-        <label class="block text-sm font-medium mb-1">{{ $t('import.profile') }}</label>
-        <select v-model="profile" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" @change="onProfileChange">
+        <label :for="`${uid}-profile`" class="block text-sm font-medium mb-1">{{ $t('import.profile') }}</label>
+        <select :id="`${uid}-profile`" v-model="profile" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm" @change="onProfileChange">
           <option v-for="p in profiles" :key="p.key" :value="p.key">{{ p.name }}</option>
         </select>
       </div>
 
       <!-- File upload -->
       <div class="mb-4">
-        <label class="block text-sm font-medium mb-1">{{ $t('import.file') }}</label>
-        <input ref="fileInput" type="file" accept=".csv" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" @change="onFileChange" />
+        <label :for="`${uid}-file`" class="block text-sm font-medium mb-1">{{ $t('import.file') }}</label>
+        <input :id="`${uid}-file`" ref="fileInput" type="file" accept=".csv" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" @change="onFileChange" />
       </div>
 
       <!-- Delimiter -->
       <div class="mb-4">
-        <label class="block text-sm font-medium mb-1">{{ $t('import.delimiter') }}</label>
-        <select v-model="delimiter" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm">
+        <label :for="`${uid}-delimiter`" class="block text-sm font-medium mb-1">{{ $t('import.delimiter') }}</label>
+        <select :id="`${uid}-delimiter`" v-model="delimiter" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm">
           <option value=";">;</option>
           <option value=",">,</option>
           <option :value="'\t'">{{ $t('import.delimiter_tab') }}</option>
@@ -29,8 +29,8 @@
 
       <!-- Date format -->
       <div class="mb-4">
-        <label for="import-date-format" class="block text-sm font-medium mb-1">{{ $t('import.date_format') }}</label>
-        <select id="import-date-format" v-model="dateFormat" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm">
+        <label :for="`${uid}-date-format`" class="block text-sm font-medium mb-1">{{ $t('import.date_format') }}</label>
+        <select :id="`${uid}-date-format`" v-model="dateFormat" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm">
           <option v-for="f in DATE_FORMATS" :key="f" :value="f">{{ f }}</option>
         </select>
       </div>
@@ -57,8 +57,8 @@
       <!-- Mapping -->
       <div v-if="headers.length" class="mb-4 grid grid-cols-2 gap-3">
         <div v-for="(label, key) in mappingLabels" :key="key">
-          <label class="block text-xs text-slate-500 mb-1">{{ label }}</label>
-          <select v-model="mapping[key]" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm">
+          <label :for="`${uid}-map-${key}`" class="block text-xs text-slate-500 mb-1">{{ label }}</label>
+          <select :id="`${uid}-map-${key}`" v-model="mapping[key]" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm">
             <option :value="null">—</option>
             <option v-for="h in headers" :key="h" :value="h">{{ h }}</option>
           </select>
@@ -91,12 +91,13 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/utils/api.js'
 import BaseModal from '@/components/BaseModal.vue'
 
 const { t } = useI18n()
+const uid = useId()
 
 // Same list the server accepts; anything else is rejected with a 400
 const DATE_FORMATS = ['YYYY-MM-DD', 'DD.MM.YYYY', 'DD/MM/YYYY', 'MM/DD/YYYY']

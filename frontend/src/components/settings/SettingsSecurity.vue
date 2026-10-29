@@ -12,19 +12,19 @@
       </div>
       <div class="space-y-3 max-w-md">
         <div class="relative">
-          <input v-model="currentPassword" autocomplete="current-password" :type="showPasswords.current ? 'text' : 'password'" :placeholder="$t('settings.password_current')" class="w-full px-3 pr-10 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+          <input v-model="currentPassword" autocomplete="current-password" :type="showPasswords.current ? 'text' : 'password'" :placeholder="$t('settings.password_current')" :aria-label="$t('settings.password_current')" class="w-full px-3 pr-10 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
           <button type="button" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.current ? $t('settings.password_hide') : $t('settings.password_show')" @click="showPasswords.current = !showPasswords.current">
             <Icon :name="showPasswords.current ? 'eyeOff' : 'eye'" size="18" />
           </button>
         </div>
         <div class="relative">
-          <input v-model="newPassword" autocomplete="new-password" :type="showPasswords.new ? 'text' : 'password'" :placeholder="$t('settings.password_new')" class="w-full px-3 pr-10 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+          <input v-model="newPassword" autocomplete="new-password" :type="showPasswords.new ? 'text' : 'password'" :placeholder="$t('settings.password_new')" :aria-label="$t('settings.password_new')" class="w-full px-3 pr-10 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
           <button type="button" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.new ? $t('settings.password_hide') : $t('settings.password_show')" @click="showPasswords.new = !showPasswords.new">
             <Icon :name="showPasswords.new ? 'eyeOff' : 'eye'" size="18" />
           </button>
         </div>
         <div class="relative">
-          <input v-model="confirmPassword" autocomplete="new-password" :type="showPasswords.confirm ? 'text' : 'password'" :placeholder="$t('settings.password_confirm')" class="w-full px-3 pr-10 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
+          <input v-model="confirmPassword" autocomplete="new-password" :type="showPasswords.confirm ? 'text' : 'password'" :placeholder="$t('settings.password_confirm')" :aria-label="$t('settings.password_confirm')" class="w-full px-3 pr-10 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm" />
           <button type="button" class="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" :aria-label="showPasswords.confirm ? $t('settings.password_hide') : $t('settings.password_show')" @click="showPasswords.confirm = !showPasswords.confirm">
             <Icon :name="showPasswords.confirm ? 'eyeOff' : 'eye'" size="18" />
           </button>

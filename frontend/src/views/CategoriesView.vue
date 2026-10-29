@@ -31,7 +31,11 @@
 v-for="cat in filteredCategories(type)" :key="cat.id"
             class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark flex items-center gap-3 transition-shadow"
             :class="isAdmin ? 'hover:shadow-md cursor-pointer' : ''"
-            @click="isAdmin && editCategory(cat)">
+            :role="isAdmin ? 'button' : undefined"
+            :tabindex="isAdmin ? 0 : undefined"
+            @click="isAdmin && editCategory(cat)"
+            @keydown.enter.self="isAdmin && editCategory(cat)"
+            @keydown.space.self.prevent="isAdmin && editCategory(cat)">
             <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" :style="{ backgroundColor: cat.color + '20', color: cat.color }">
               <SafeSvg v-if="cat.icon_custom" :svg="cat.icon_custom" class="w-5 h-5" />
               <Icon v-else-if="cat.icon" :name="cat.icon" set="category" class="w-5 h-5" />
@@ -54,7 +58,7 @@ v-for="cat in filteredCategories(type)" :key="cat.id"
       <h2 class="font-display text-xl font-semibold mb-2">{{ $t('categories.merge') }}</h2>
       <p class="text-sm text-slate-500 mb-4">{{ $t('categories.merge_desc', { name: mergeSource?.name || '' }) }}</p>
       <form class="space-y-4" @submit.prevent="confirmMerge">
-        <select v-model="mergeTargetId" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+        <select v-model="mergeTargetId" required :aria-label="$t('categories.merge')" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
           <option :value="null" disabled>-</option>
           <option v-for="cat in mergeTargets" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
         </select>
@@ -70,44 +74,46 @@ v-for="cat in filteredCategories(type)" :key="cat.id"
         <h2 class="font-display text-xl font-semibold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
         <form class="space-y-4" @submit.prevent="saveCategory">
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('common.name') }}</label>
-            <input v-model="form.name" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 focus:outline-none focus:ring-2 focus:ring-primary-400" />
+            <label :for="`${uid}-name`" class="block text-sm font-medium mb-1">{{ $t('common.name') }}</label>
+            <input :id="`${uid}-name`" v-model="form.name" required class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 focus:outline-none focus:ring-2 focus:ring-primary-400" />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('common.type') }}</label>
-            <div class="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
-              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.type === 'expense' ? 'bg-white dark:bg-slate-700 shadow-sm text-danger-500' : 'text-slate-500'" @click="form.type = 'expense'">{{ $t('categories.types.expense') }}</button>
-              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :class="form.type === 'income' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-500' : 'text-slate-500'" @click="form.type = 'income'">{{ $t('categories.types.income') }}</button>
+            <span :id="`${uid}-type`" class="block text-sm font-medium mb-1">{{ $t('common.type') }}</span>
+            <div class="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg" role="group" :aria-labelledby="`${uid}-type`">
+              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :aria-pressed="form.type === 'expense'" :class="form.type === 'expense' ? 'bg-white dark:bg-slate-700 shadow-sm text-danger-500' : 'text-slate-500'" @click="form.type = 'expense'">{{ $t('categories.types.expense') }}</button>
+              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors" :aria-pressed="form.type === 'income'" :class="form.type === 'income' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-500' : 'text-slate-500'" @click="form.type = 'income'">{{ $t('categories.types.income') }}</button>
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('categories.icon') }}</label>
-            <div class="grid grid-cols-7 gap-2 mb-2">
+            <span :id="`${uid}-icon`" class="block text-sm font-medium mb-1">{{ $t('categories.icon') }}</span>
+            <div class="grid grid-cols-7 gap-2 mb-2" role="group" :aria-labelledby="`${uid}-icon`">
               <button
 v-for="icon in presetIcons" :key="icon" type="button" class="aspect-square rounded-lg flex items-center justify-center transition-colors"
+                :aria-label="icon" :aria-pressed="form.icon === icon"
                 :class="form.icon === icon ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 ring-2 ring-primary-500' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500'"
                 @click="selectIcon(icon)">
                 <Icon :name="icon" set="category" class="w-5 h-5" />
               </button>
             </div>
-            <div class="p-3 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-center hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer" @click="triggerFileUpload">
+            <button type="button" class="block w-full p-3 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-center hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer" @click="triggerFileUpload">
               <span class="text-xs text-slate-500">{{ $t('categories.upload_svg') }}</span>
-              <input ref="fileInput" type="file" accept=".svg" class="hidden" @change="handleFileUpload" />
-            </div>
+            </button>
+            <input ref="fileInput" type="file" accept=".svg" :aria-label="$t('categories.upload_svg')" class="hidden" @change="handleFileUpload" />
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('categories.color') }}</label>
-            <div class="flex flex-wrap gap-2">
+            <span :id="`${uid}-color`" class="block text-sm font-medium mb-1">{{ $t('categories.color') }}</span>
+            <div class="flex flex-wrap gap-2" role="group" :aria-labelledby="`${uid}-color`">
               <button
 v-for="color in presetColors" :key="color" type="button" class="w-8 h-8 rounded-full transition-all"
+                :aria-label="color" :aria-pressed="form.color === color"
                 :class="form.color === color ? 'ring-2 ring-offset-2 dark:ring-offset-slate-900' : ''"
                 :style="{ backgroundColor: color, ringColor: color }"
                 @click="form.color = color"></button>
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('categories.parent') }}</label>
-            <select v-model="form.parent_id" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+            <label :for="`${uid}-parent`" class="block text-sm font-medium mb-1">{{ $t('categories.parent') }}</label>
+            <select :id="`${uid}-parent`" v-model="form.parent_id" class="w-full px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
               <option :value="null">{{ $t('categories.no_parent') }}</option>
               <option v-for="cat in parentOptions" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
             </select>
@@ -122,7 +128,7 @@ v-for="color in presetColors" :key="color" type="button" class="w-8 h-8 rounded-
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, computed } from 'vue'
+import { ref, onMounted, reactive, computed, useId } from 'vue'
 import { useCategoriesStore } from '../stores/categories'
 import { useAuthStore } from '../stores/auth'
 import SafeSvg from '../components/SafeSvg.vue'
@@ -135,6 +141,7 @@ import BaseSkeleton from '@/components/BaseSkeleton.vue'
 import { api } from '@/utils/api'
 
 const { t } = useI18n()
+const uid = useId()
 useHotkeys({
   'ctrl+enter': () => { if (showModal.value) saveCategory() },
   'esc': () => { if (showModal.value) closeModal() }

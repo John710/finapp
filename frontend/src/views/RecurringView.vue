@@ -16,32 +16,32 @@
 
     <!-- Filters -->
     <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-card dark:shadow-card-dark mb-4 flex flex-wrap gap-3">
-      <input v-model="filters.search" type="text" :placeholder="$t('common.search') + '...'" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm w-full lg:w-52 focus:outline-none focus:ring-2 focus:ring-primary-400" />
-      <select v-model="filters.status" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+      <input v-model="filters.search" type="text" :placeholder="$t('common.search') + '...'" :aria-label="$t('common.search')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-sm w-full lg:w-52 focus:outline-none focus:ring-2 focus:ring-primary-400" />
+      <select v-model="filters.status" :aria-label="$t('recurring.filters.status')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
         <option value="">{{ $t('recurring.filters.status') }}</option>
         <option v-for="status in statuses" :key="status" :value="status">{{ $t('recurring.status.' + status) }}</option>
       </select>
-      <select v-model="filters.type" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+      <select v-model="filters.type" :aria-label="$t('common.type')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
         <option value="">{{ $t('common.type') }}</option>
         <option value="income">{{ $t('categories.types.income') }}</option>
         <option value="expense">{{ $t('categories.types.expense') }}</option>
       </select>
-      <select v-model="filters.account_id" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+      <select v-model="filters.account_id" :aria-label="$t('accounts.title')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
         <option value="">{{ $t('accounts.title') }}</option>
         <option v-for="acc in accountsStore.accounts" :key="acc.id" :value="acc.id">{{ acc.name }}</option>
       </select>
-      <select v-model="filters.category_id" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+      <select v-model="filters.category_id" :aria-label="$t('categories.title')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
         <option value="">{{ $t('categories.title') }}</option>
         <option v-for="cat in categoriesStore.categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
       </select>
-      <select v-model="filters.sort" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
+      <select v-model="filters.sort" :aria-label="$t('recurring.sorts.label')" class="px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100 text-sm">
         <option value="next">{{ $t('recurring.sorts.next') }}</option>
         <option value="amount">{{ $t('recurring.sorts.amount') }}</option>
         <option value="name">{{ $t('recurring.sorts.name') }}</option>
       </select>
       <div class="flex items-center gap-2 ml-auto">
         <div class="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
-          <button v-for="mode in amountModes" :key="mode" class="px-2.5 py-1 rounded-md text-xs font-medium border-0 transition-colors" :class="amountMode === mode ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-slate-100' : 'bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'" @click="amountMode = mode">
+          <button v-for="mode in amountModes" :key="mode" type="button" :aria-pressed="amountMode === mode" class="px-2.5 py-1 rounded-md text-xs font-medium border-0 transition-colors" :class="amountMode === mode ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-slate-100' : 'bg-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'" @click="amountMode = mode">
             {{ $t('recurring.amount_modes.' + mode) }}
           </button>
         </div>
@@ -96,7 +96,7 @@
               <Icon name="share" class="w-3 h-3" />{{ rule.is_shared ? $t('sharing.shared_badge') : $t('sharing.title') }}
             </button>
             <button class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click="editRule(rule)">{{ $t('common.edit') }}</button>
-            <button class="w-11 h-6 rounded-full relative transition-colors border-0" :class="rule.is_active ? 'bg-primary-600' : 'bg-slate-300 dark:bg-slate-700'" :aria-label="$t('common.edit')" :disabled="busy === rule.id" @click="toggleActive(rule)">
+            <button class="w-11 h-6 rounded-full relative transition-colors border-0" :class="rule.is_active ? 'bg-primary-600' : 'bg-slate-300 dark:bg-slate-700'" role="switch" :aria-checked="!!rule.is_active" :aria-label="$t('recurring.toggle_active')" :disabled="busy === rule.id" @click="toggleActive(rule)">
               <span class="absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all" :class="rule.is_active ? 'right-1' : 'left-1'"></span>
             </button>
             <button class="p-2 text-slate-400 hover:text-danger-500 transition-colors border-0 bg-transparent disabled:opacity-50" :disabled="deleting" :aria-label="$t('common.delete')" @click="deleteRule(rule.id)">
@@ -133,19 +133,19 @@
         <h2 class="font-display text-xl font-semibold mb-4">{{ isEditing ? $t('common.edit') : $t('common.add') }}</h2>
         <form class="space-y-4" @submit.prevent="saveRule">
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('common.type') }}</label>
-            <div class="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
-              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors border-0" :class="form.type === 'expense' ? 'bg-white dark:bg-slate-700 shadow-sm text-danger-500' : 'bg-transparent text-slate-500'" @click="form.type = 'expense'">{{ $t('categories.types.expense') }}</button>
-              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors border-0" :class="form.type === 'income' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-500' : 'bg-transparent text-slate-500'" @click="form.type = 'income'">{{ $t('categories.types.income') }}</button>
+            <span :id="`${uid}-type`" class="block text-sm font-medium mb-1">{{ $t('common.type') }}</span>
+            <div class="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg" role="group" :aria-labelledby="`${uid}-type`">
+              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors border-0" :aria-pressed="form.type === 'expense'" :class="form.type === 'expense' ? 'bg-white dark:bg-slate-700 shadow-sm text-danger-500' : 'bg-transparent text-slate-500'" @click="form.type = 'expense'">{{ $t('categories.types.expense') }}</button>
+              <button type="button" class="flex-1 py-2 rounded-md text-sm font-medium transition-colors border-0" :aria-pressed="form.type === 'income'" :class="form.type === 'income' ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-500' : 'bg-transparent text-slate-500'" @click="form.type = 'income'">{{ $t('categories.types.income') }}</button>
             </div>
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('recurring.amount') }}</label>
-              <input v-model.number="form.amount" type="number" step="0.01" min="0" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+              <label :for="`${uid}-amount`" class="block text-sm font-medium mb-1">{{ $t('recurring.amount') }}</label>
+              <input :id="`${uid}-amount`" v-model.number="form.amount" type="number" step="0.01" min="0" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
+              <span class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</span>
               <!-- A rule is booked in its account's currency, so the account decides it. -->
               <div class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-sm text-slate-500 dark:text-slate-400" :title="$t('recurring.currency_from_account')">
                 {{ form.currency || '—' }}
@@ -154,24 +154,24 @@
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('accounts.title') }}</label>
+            <label :for="`${uid}-account`" class="block text-sm font-medium mb-1">{{ $t('accounts.title') }}</label>
             <div class="flex gap-2">
-              <select v-model="form.account_id" required class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+              <select :id="`${uid}-account`" v-model="form.account_id" required class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
                 <option v-for="acc in accountsStore.accounts" :key="acc.id" :value="acc.id">{{ acc.name }}</option>
               </select>
-              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" @click="showQuickAccount = true">
+              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" :aria-label="$t('common.add')" @click="showQuickAccount = true">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('categories.title') }}</label>
+            <label :for="`${uid}-category`" class="block text-sm font-medium mb-1">{{ $t('categories.title') }}</label>
             <div class="flex gap-2">
-              <select v-model="form.category_id" class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
+              <select :id="`${uid}-category`" v-model="form.category_id" class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100">
                 <option :value="null">-</option>
                 <option v-for="cat in filteredCategories" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
               </select>
-              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" @click="showQuickCategory = true">
+              <button type="button" class="shrink-0 p-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-primary-600" :title="$t('common.add')" :aria-label="$t('common.add')" @click="showQuickCategory = true">
                 <Icon name="plus" class="w-5 h-5" />
               </button>
             </div>
@@ -180,38 +180,38 @@
           <p class="font-display text-sm font-semibold pt-2 border-t border-slate-100 dark:border-slate-800">{{ $t('recurring.schedule') }}</p>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('recurring.interval.label') }}</label>
+              <label :for="`${uid}-interval`" class="block text-sm font-medium mb-1">{{ $t('recurring.interval.label') }}</label>
               <div class="flex gap-2">
-                <input v-model.number="form.interval_value" type="number" min="1" max="100" required class="w-20 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
-                <select v-model="form.interval_unit" class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100" @change="onUnitChange">
+                <input :id="`${uid}-interval`" v-model.number="form.interval_value" type="number" min="1" max="100" required class="w-20 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+                <select v-model="form.interval_unit" :aria-label="$t('recurring.interval.label')" class="flex-1 px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 text-slate-900 dark:text-slate-100" @change="onUnitChange">
                   <option v-for="unit in units" :key="unit" :value="unit">{{ $t('recurring.interval.units.' + unit) }}</option>
                 </select>
               </div>
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('recurring.interval.anchor_day') }}</label>
-              <input v-model.number="form.billing_anchor_day" type="number" min="1" max="31" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" @input="anchorTouched = true" />
+              <label :for="`${uid}-anchor`" class="block text-sm font-medium mb-1">{{ $t('recurring.interval.anchor_day') }}</label>
+              <input :id="`${uid}-anchor`" v-model.number="form.billing_anchor_day" type="number" min="1" max="31" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" @input="anchorTouched = true" />
               <p class="text-xs text-slate-400 mt-1">{{ $t('recurring.interval.anchor_hint') }}</p>
             </div>
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('recurring.fields.start_date') }}</label>
-              <input v-model="form.start_date" type="date" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" @input="onStartChange" />
+              <label :for="`${uid}-start`" class="block text-sm font-medium mb-1">{{ $t('recurring.fields.start_date') }}</label>
+              <input :id="`${uid}-start`" v-model="form.start_date" type="date" required class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" @input="onStartChange" />
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('recurring.fields.end_date') }}</label>
-              <input v-model="form.end_date" type="date" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+              <label :for="`${uid}-end`" class="block text-sm font-medium mb-1">{{ $t('recurring.fields.end_date') }}</label>
+              <input :id="`${uid}-end`" v-model="form.end_date" type="date" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
             </div>
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('recurring.fields.payment_limit') }}</label>
-              <input v-model.number="form.payment_limit" type="number" min="1" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" :placeholder="$t('recurring.fields.unlimited')" />
+              <label :for="`${uid}-limit`" class="block text-sm font-medium mb-1">{{ $t('recurring.fields.payment_limit') }}</label>
+              <input :id="`${uid}-limit`" v-model.number="form.payment_limit" type="number" min="1" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" :placeholder="$t('recurring.fields.unlimited')" />
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">{{ $t('recurring.fields.notify_days_before') }}</label>
-              <input v-model.number="form.notify_days_before" type="number" min="0" max="90" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+              <label :for="`${uid}-notify`" class="block text-sm font-medium mb-1">{{ $t('recurring.fields.notify_days_before') }}</label>
+              <input :id="`${uid}-notify`" v-model.number="form.notify_days_before" type="number" min="0" max="90" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
             </div>
           </div>
           <label class="flex items-center gap-2 text-sm">
@@ -219,8 +219,8 @@
             {{ $t('recurring.fields.auto_renew') }}
           </label>
           <div>
-            <label class="block text-sm font-medium mb-1">{{ $t('transactions.note') }}</label>
-            <input v-model="form.note" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
+            <label :for="`${uid}-note`" class="block text-sm font-medium mb-1">{{ $t('transactions.note') }}</label>
+            <input :id="`${uid}-note`" v-model="form.note" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0" />
           </div>
           <div class="flex gap-3 mt-6">
             <button type="button" class="flex-1 py-2.5 rounded-full border-0 bg-slate-100 dark:bg-slate-800 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800" @click="closeModal">{{ $t('common.cancel') }}</button>
@@ -238,7 +238,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, computed, watch } from 'vue'
+import { ref, onMounted, reactive, computed, watch, useId } from 'vue'
 import { useRecurringStore } from '../stores/recurring'
 import { useAccountsStore } from '../stores/accounts'
 import { useCategoriesStore } from '../stores/categories'
@@ -266,6 +266,7 @@ const EDITABLE_FIELDS = [
 const NUMERIC_FIELDS = ['amount', 'payment_limit']
 
 const { t } = useI18n()
+const uid = useId()
 const undo = useUndo('recurring')
 useHotkeys({
   'ctrl+enter': () => { if (showModal.value) saveRule() },
