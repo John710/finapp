@@ -146,6 +146,8 @@
     "locked_by_payments": "This debt already has payments, so the amount, currency, type and account can no longer be changed.",
     "confirm_delete": "Delete this debt? The transactions it created on your accounts are reversed too; transactions you edited by hand are kept.",
     "delete_kept": "{count} transaction(s) edited by hand were kept on the accounts",
+    "delete_unmatched": "{count} payment(s) had no matching transaction, so nothing was reversed for them",
+    "invalid_amount": "Enter a valid amount greater than zero",
     "installments": {
       "title": "Repayment schedule",
       "hint": "Split the debt into dated payments. They show up in the payment calendar.",
@@ -187,6 +189,7 @@
       "skip": "Skip",
       "unpay": "Cancel payment",
       "unskip": "Restore",
+      "row_action": "{action}: installment for {date}",
       "paid_toast": "Installment for {date} paid",
       "skipped_toast": "Installment for {date} skipped",
       "unpaid_toast": "Payment of the installment for {date} cancelled",

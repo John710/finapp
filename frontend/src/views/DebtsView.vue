@@ -40,9 +40,32 @@
           </div>
           <span class="text-xs text-slate-500">{{ formatConverted(debt.paid_amount, debt.currency) }} / {{ formatConverted(debt.amount, debt.currency) }}</span>
         </div>
-        <p v-if="debt.installments?.length" class="text-xs text-slate-500 mb-3">
-          {{ $t('debts.installments.progress', { paid: progressOf(debt).paid, total: progressOf(debt).total }) }}
-        </p>
+        <div v-if="debt.installments?.length" class="mb-3">
+          <button
+type="button" class="flex items-center gap-1 p-0 border-0 bg-transparent text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+            :aria-expanded="!!expanded[debt.id]" :aria-controls="`${uid}-inst-${debt.id}`" @click="toggleSchedule(debt.id)">
+            {{ $t('debts.installments.progress', { paid: progressOf(debt).paid, total: progressOf(debt).total }) }}
+            <Icon name="arrowDown" :size="14" class="transition-transform" :class="expanded[debt.id] ? 'rotate-180' : ''" />
+          </button>
+          <ul v-if="expanded[debt.id]" :id="`${uid}-inst-${debt.id}`" class="mt-2 space-y-1.5" :aria-label="$t('debts.installments.title')">
+            <li v-for="item in debt.installments" :key="item.id" class="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span class="flex items-center gap-2">
+                <span>{{ formatDate(item.due_date) }}</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-medium" :class="statusClass(item.status)">{{ $t(`debts.installments.status_${item.status}`) }}</span>
+              </span>
+              <span class="flex items-center gap-2">
+                <span class="font-medium" :class="item.status === 'skipped' ? 'line-through text-slate-400' : ''">{{ formatConverted(item.amount, debt.currency) }}</span>
+                <template v-if="canManageDebt(debt)">
+                  <button
+v-for="kind in installmentActions(item.status)" :key="kind" type="button" :disabled="rowBusy !== null"
+                    class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                    :aria-label="$t('debts.installments.row_action', { action: $t(`debts.installments.${kind}`), date: formatDate(item.due_date) })"
+                    @click="runInstallmentAction(item, kind)">{{ $t(`debts.installments.${kind}`) }}</button>
+                </template>
+              </span>
+            </li>
+          </ul>
+        </div>
         <div class="flex gap-2">
           <button v-if="debt.status !== 'paid'" class="text-xs px-2 py-1 rounded bg-primary-100 dark:bg-primary-500/15 text-primary-600 hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors" @click="openPaymentModal(debt)">{{ $t('debts.pay') }}</button>
           <button v-if="!debt.owner_login" class="text-xs px-2 py-1 rounded border-0 bg-slate-100 dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" @click="editDebt(debt)">{{ $t('common.edit') }}</button>
@@ -74,7 +97,7 @@
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label for="debt-amount" class="block text-sm font-medium mb-1">{{ $t('debts.amount') }}</label>
-              <input id="debt-amount" v-model.number="form.amount" type="number" step="0.01" required :disabled="hasPayments || sched.locked" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 disabled:opacity-60 disabled:cursor-not-allowed" />
+              <input id="debt-amount" v-model="form.amount" type="text" inputmode="decimal" autocomplete="off" required :disabled="hasPayments || sched.locked" class="w-full px-3 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border-0 disabled:opacity-60 disabled:cursor-not-allowed" />
             </div>
             <div>
               <label for="debt-currency" class="block text-sm font-medium mb-1">{{ $t('common.currency') }}</label>
@@ -281,10 +304,11 @@ import { useUndo } from '@/composables/useUndo'
 import { useHotkeys } from '@/composables/useHotkeys'
 import { formatDate, parseAmount } from '@/utils/format'
 import { logger } from '@/utils/logger.js'
-import { debtPayload } from '@/utils/debts.js'
+import { debtPayload, canUndoDebtDelete, debtHadProgress } from '@/utils/debts.js'
 import {
   currencyDigits, splitInstallments, checkSchedule, rescaleSchedule, schedulePayload,
-  isScheduleLocked, installmentProgress, parseUnits, formatUnits, shiftMonths
+  isScheduleLocked, installmentProgress, parseUnits, formatUnits, shiftMonths,
+  amountToText, sameAmount, canEditRow, installmentActions
 } from '@/utils/installments.js'
 import QuickAccountModal from '../components/QuickAccountModal.vue'
 import BaseModal from '@/components/BaseModal.vue'
@@ -321,7 +345,21 @@ const hasPayments = ref(false)
 const currentDebtId = ref(null)
 const historyPayments = ref([])
 const historyDebt = ref(null)
-const form = reactive({ id: null, name: '', counterparty: '', amount: 0, currency: '', type: 'borrow', due_date: '', description: '', account_id: null })
+// `form.amount` is the decimal string the user sees (the API's own string when
+// editing), never a Number: floats lose digits and print tiny values as "5e-7".
+const form = reactive({ id: null, name: '', counterparty: '', amount: '', currency: '', type: 'borrow', due_date: '', description: '', account_id: null })
+// Amount and currency the debt was loaded with: changing either of a debt that
+// has a schedule makes the server demand the schedule in the same PUT.
+const loaded = { amount: '', currency: '' }
+const expanded = ref({})
+const rowBusy = ref(null)
+
+const INSTALLMENT_TOASTS = {
+  pay: 'debts.installments.paid_toast',
+  skip: 'debts.installments.skipped_toast',
+  unpay: 'debts.installments.unpaid_toast',
+  unskip: 'debts.installments.unskipped_toast'
+}
 const paymentForm = reactive({ amount: 0, currency: '', note: '', account_id: null })
 
 // Repayment schedule being edited in the debt form. `rows` are the manual rows,
@@ -443,10 +481,13 @@ watch(() => form.amount, () => {
 })
 
 // null when the schedule is untouched, otherwise the rows to PUT ([] removes it).
+// A changed amount or currency counts as a change: the server refuses it
+// (409 installments_need_update) unless the schedule travels along.
 function scheduleToSave() {
   if (sched.locked) return null
   if (!sched.enabled) return sched.original.length ? [] : null
-  const unchanged = JSON.stringify(canonical(scheduleRows.value)) === JSON.stringify(sched.original)
+  const unchanged = JSON.stringify(canonical(scheduleRows.value)) === JSON.stringify(sched.original) &&
+    sameAmount(form.amount, loaded.amount) && form.currency === loaded.currency
   return unchanged ? null : schedulePayload(scheduleRows.value).rows
 }
 
@@ -454,7 +495,8 @@ function openModal() {
   isEditing.value = false
   hasPayments.value = false
   resetSchedule()
-  Object.assign(form, { id: null, name: '', counterparty: '', amount: 0, currency: baseCurrency.value, type: 'borrow', due_date: '', description: '', account_id: null })
+  Object.assign(loaded, { amount: '', currency: '' })
+  Object.assign(form, { id: null, name: '', counterparty: '', amount: '', currency: baseCurrency.value, type: 'borrow', due_date: '', description: '', account_id: null })
   showModal.value = true
 }
 
@@ -485,13 +527,14 @@ async function editDebt(debt, { schedule = false } = {}) {
       id: debt.id,
       name: debt.name,
       counterparty: debt.counterparty,
-      amount: Number(debt.amount),
+      amount: amountToText(debt.amount),
       currency: debt.currency || baseCurrency.value,
       type: debt.type,
       due_date: debt.due_date ? String(debt.due_date).slice(0, 10) : '',
       description: debt.description || '',
       account_id: debt.account_id ?? null
     })
+    Object.assign(loaded, { amount: form.amount, currency: form.currency })
     showModal.value = true
     if (schedule && !sched.enabled) enableSchedule()
   } catch (e) {
@@ -530,29 +573,39 @@ function onQuickAccountCreated(account) {
 async function saveDebt() {
   // Re-entry guard: double click / Ctrl+Enter while a request is in flight
   if (saving.value || scheduleProblem.value) return
-  form.amount = parseAmount(form.amount)
+  const units = parseUnits(form.amount)
+  if (units === null || units <= 0n) {
+    window.$toast?.error(t('debts.invalid_amount'))
+    return
+  }
+  form.amount = amountToText(form.amount)
   const rows = scheduleToSave()
   saving.value = true
   try {
-    let debtId = form.id
     if (isEditing.value) {
-      await debtsStore.updateDebt(form.id, debtPayload(form))
+      // Debt and schedule travel in ONE request, so a refused schedule (409
+      // installments_locked / installments_need_update) leaves the debt as it was.
+      const payload = debtPayload(form)
+      if (rows) payload.installments = { rows }
+      await debtsStore.updateDebt(form.id, payload)
+      if (rows) window.$toast?.success(t(rows.length ? 'debts.installments.saved_toast' : 'debts.installments.removed_toast'))
     } else {
       const created = await debtsStore.createDebt(debtPayload(form))
       // From here on a retry edits the debt that now exists instead of creating a second one.
-      debtId = created.id
       form.id = created.id
       isEditing.value = true
-    }
-    if (rows) {
-      try {
-        await debtsStore.saveInstallments(debtId, rows)
-        window.$toast?.success(t(rows.length ? 'debts.installments.saved_toast' : 'debts.installments.removed_toast'))
-      } catch (e) {
-        // The debt is saved; the form stays open so the schedule can be fixed.
-        logger.error('Failed to save installments', e)
-        window.$toast?.error(t('debts.installments.save_failed', { error: e.message || t('common.error') }))
-        return
+      Object.assign(loaded, { amount: form.amount, currency: form.currency })
+      if (rows) {
+        try {
+          await debtsStore.saveInstallments(created.id, rows)
+          window.$toast?.success(t('debts.installments.saved_toast'))
+        } catch (e) {
+          // A new debt cannot take a schedule in POST: the debt is saved and the
+          // form stays open so the schedule can be fixed and saved with a PUT.
+          logger.error('Failed to save installments', e)
+          window.$toast?.error(t('debts.installments.save_failed', { error: e.message || t('common.error') }))
+          return
+        }
       }
     }
     closeModal()
@@ -585,17 +638,23 @@ async function deleteDebt(id) {
   const item = debtsStore.debts.find(d => d.id === id)
   deleting.value = true
   try {
-    const { kept } = await debtsStore.deleteDebt(id)
-    // Transactions edited by hand stay on the account; say so instead of hiding it.
-    if (kept.length) window.$toast?.warning(t('debts.delete_kept', { count: kept.length }), 8000)
-    if (item) {
+    // Read before the delete: afterwards the payments are gone with the debt.
+    const hadProgress = item ? await hasProgress(item) : true
+    const { kept, unmatched } = await debtsStore.deleteDebt(id)
+    // What the server could not take back stays on the accounts; say so instead of hiding it.
+    const notes = []
+    if (kept.length) notes.push(t('debts.delete_kept', { count: kept.length }))
+    if (unmatched.length) notes.push(t('debts.delete_unmatched', { count: unmatched.length }))
+    if (notes.length) window.$toast?.warning(notes.join('; '), 8000)
+    // Undo would POST a new debt with a new creation booking: only the same debt when nothing else was involved.
+    if (item && canUndoDebtDelete({ hadProgress, kept, unmatched })) {
       undo.push({
         message: t('common.undo_delete'),
         action: async () => {
           try {
             const restored = await debtsStore.createDebt(debtPayload(item))
-            // A schedule that had not started comes back with the debt.
-            if (item.installments?.length && !isScheduleLocked(item.installments)) {
+            // Without progress the schedule is all 'due', so it comes back with the debt.
+            if (item.installments?.length) {
               await debtsStore.saveInstallments(restored.id, schedulePayload(item.installments).rows)
             }
           } catch (e) {
@@ -610,6 +669,44 @@ async function deleteDebt(id) {
     window.$toast?.error(e.message || t('common.error'))
   } finally {
     deleting.value = false
+  }
+}
+
+// Payments or schedule progress. The list row only knows converted sums, so an
+// unreadable answer counts as progress: the safe side, no undo.
+async function hasProgress(debt) {
+  if (debtHadProgress(debt)) return true
+  try {
+    return (await debtsStore.getPayments(debt.id)).length > 0
+  } catch (e) {
+    logger.error('Failed to load payments', e)
+    return true
+  }
+}
+
+function toggleSchedule(debtId) {
+  expanded.value = { ...expanded.value, [debtId]: !expanded.value[debtId] }
+}
+
+// Debt rows carry no permission flag yet: a debt that is not someone else's is ours.
+const canManageDebt = debt => canEditRow(debt, !debt.owner_login)
+
+// Pay / skip / undo one installment from the debt card. This also reaches a
+// paid installment of a debt that closed itself and left the calendar.
+async function runInstallmentAction(item, kind) {
+  if (rowBusy.value !== null) return
+  rowBusy.value = item.id
+  try {
+    if (kind === 'pay') await debtsStore.payInstallment(item.id)
+    if (kind === 'skip') await debtsStore.skipInstallment(item.id)
+    if (kind === 'unpay') await debtsStore.unpayInstallment(item.id)
+    if (kind === 'unskip') await debtsStore.unskipInstallment(item.id)
+    window.$toast?.success(t(INSTALLMENT_TOASTS[kind], { date: formatDate(item.due_date) }))
+  } catch (e) {
+    logger.error('Failed to update installment', e)
+    window.$toast?.error(e.message || t('common.error'))
+  } finally {
+    rowBusy.value = null
   }
 }
 
