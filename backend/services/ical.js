@@ -1,6 +1,9 @@
 import { shiftDays } from './recurring-schedule.js'
 
-// RFC 5545 feed for external calendar clients. Occurrences are materialised as
+// RFC 5545 feed for external calendar clients. It takes the merged projection
+// (subscriptions and debt installments, mergeOccurrences); every row needs
+// date, amount, currency, user_id, name and optionally account_name.
+// Occurrences are materialised as
 // plain all-day VEVENTs instead of RRULEs: the schedule needs the anchor,
 // payment-limit and skip-exception rules from recurring-schedule.js, which no
 // calendar client can express, and a client that cannot see the exceptions would
@@ -50,13 +53,23 @@ function fold(nameAndValue) {
   return lines
 }
 
+// Debt installments get their own UID namespace: an installment id and a rule
+// id may be equal, and a changed UID would duplicate the event in the client.
+function eventUid(occurrence, uidHost) {
+  const owner = occurrence.user_id ?? 0
+  if (occurrence.kind === 'debt_installment') {
+    return `finapp-debt-${owner}-${occurrence.installment_id}-${occurrence.date}@${uidHost}`
+  }
+  return `finapp-${owner}-${occurrence.rule_id}-${occurrence.date}@${uidHost}`
+}
+
 function eventLines(occurrence, uidHost, stamp) {
   const day = dayValue(occurrence.date)
   const amount = trimAmount(occurrence.amount)
   const summary = occurrence.name || `${amount} ${occurrence.currency || ''}`.trim()
   const lines = [
     'BEGIN:VEVENT',
-    `UID:finapp-${occurrence.user_id ?? 0}-${occurrence.rule_id}-${occurrence.date}@${uidHost}`,
+    `UID:${eventUid(occurrence, uidHost)}`,
     `DTSTAMP:${stamp}`,
     `SUMMARY:${escapeText(summary)}`,
     `DTSTART;VALUE=DATE:${day}`,
@@ -70,7 +83,7 @@ function eventLines(occurrence, uidHost, stamp) {
   return lines
 }
 
-export function buildFeed(occurrences, { calendarName = 'FinApp subscriptions', uidHost = 'finapp', generatedAt } = {}) {
+export function buildFeed(occurrences, { calendarName = 'FinApp payments', uidHost = 'finapp', generatedAt } = {}) {
   const stamp = utcStamp(generatedAt ?? new Date().toISOString())
   const lines = [
     'BEGIN:VCALENDAR',

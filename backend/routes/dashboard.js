@@ -2,9 +2,9 @@ import Decimal from 'decimal.js'
 import { loadRates, convertAmountDecimal, toDisplayNumber } from '../services/currency.js'
 import { visibleAccountIds } from '../services/visibility.js'
 import { loadOccurrenceFlags, loadVisibleRules } from '../services/recurring-rules.js'
-import { monthlyEquivalent, projectOccurrences, shiftDays, shiftMonth } from '../services/recurring-schedule.js'
+import { mergeOccurrences, monthlyEquivalent, projectOccurrences, shiftDays, shiftMonth } from '../services/recurring-schedule.js'
 import { FLOW_TYPE_SQL, flowSign } from '../services/flows.js'
-import { paidInDebtCurrency, remainingOnDebt } from '../services/debt-payments.js'
+import { loadInstallmentOccurrences, paidInDebtCurrency, remainingOnDebt } from '../services/debt-payments.js'
 
 // The dashboard card answers "what is coming next", so it looks a horizon ahead
 // instead of the whole calendar window the projection endpoint allows.
@@ -50,7 +50,9 @@ async function dashboardRoutes(fastify, opts) {
     // Exact Decimal totals become JSON numbers only here, in the response
     const display = value => toDisplayNumber(value, base_currency)
 
-    const [monthTotals, trendGroups, accountsRes, recentRes, recurringRules, debtsRes] = await Promise.all([
+    const horizon = shiftDays(serverToday, RECURRING_HORIZON_DAYS)
+
+    const [monthTotals, trendGroups, accountsRes, recentRes, recurringRules, debtsRes, installments] = await Promise.all([
       // Current-month income/expense (split children excluded: parents carry
       // the flow; transfer legs come back as 'transfer_in' and are not income)
       fastify.db.query(
@@ -118,7 +120,10 @@ async function dashboardRoutes(fastify, opts) {
          )
          ORDER BY d.due_date ASC NULLS LAST`,
         [userId]
-      )
+      ),
+      // Debt installments due in the card's horizon, read by the loader the
+      // calendar uses, so the card and the calendar list the same rows.
+      loadInstallmentOccurrences(fastify.db, userId, serverToday, horizon)
     ])
 
     // Month summary
@@ -200,17 +205,20 @@ async function dashboardRoutes(fastify, opts) {
     }
 
     // Recurring: what the active schedules are worth per month, and what they
-    // ask for next. Paid and skipped occurrences are settled business, so the
-    // list only carries the ones still outstanding.
+    // and the debt installments ask for next (the calendar's merged list).
+    // Paid and skipped occurrences are settled business, so the list only
+    // carries the ones still outstanding. Installments are a finite schedule,
+    // not a monthly rate, so they stay out of monthly_commitments.
     const activeRules = recurringRules.filter(r => r.is_active)
     const flags = await loadOccurrenceFlags(fastify.db, activeRules.map(r => r.id))
     let commitments = new Decimal(0)
     for (const rule of activeRules) {
       if (rule.type !== 'expense') continue
+      // Exact per-rule figure: rounding it in its own currency first would
+      // zero a small crypto rule before the conversion.
       commitments = commitments.plus(toBase(monthlyEquivalent(rule), rule.currency || base_currency))
     }
-    const horizon = shiftDays(serverToday, RECURRING_HORIZON_DAYS)
-    const upcomingOccurrence = projectOccurrences(activeRules, flags, serverToday, horizon)
+    const upcomingOccurrence = mergeOccurrences(projectOccurrences(activeRules, flags, serverToday, horizon), installments)
       .filter(o => !o.paid && !o.skipped)
       .slice(0, upcoming_limit)
 

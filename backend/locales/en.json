@@ -147,6 +147,6 @@
     "totp_failed_body": "A sign-in for {login} used the correct password but a wrong two-factor code. If it was not you, change your password. IP: {ip}"
   },
   "feed": {
-    "calendar_name": "FinApp subscriptions"
+    "calendar_name": "FinApp payments"
   }
 }

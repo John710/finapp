@@ -3,6 +3,9 @@ import crypto from 'node:crypto'
 import { t, getUserLang, getReqLang } from '../services/i18n.js'
 import { loadOccurrenceFlags, loadRule, loadVisibleRules } from '../services/recurring-rules.js'
 import { buildFeed } from '../services/ical.js'
+import { loadInstallmentOccurrences } from '../services/debt-payments.js'
+import { currencyDigits } from '../services/debt-schedule.js'
+import { visibleAccountIds } from '../services/visibility.js'
 import {
   nextOccurrenceAfter,
   occurrenceAllowed,
@@ -10,6 +13,7 @@ import {
   monthlyEquivalent,
   dueOccurrence,
   projectOccurrences,
+  mergeOccurrences,
   toLegacyFrequency,
   initialNextDate,
   resolveProjectionWindow,
@@ -66,7 +70,9 @@ async function recurringRoutes(fastify, opts) {
     return {
       ...rule,
       status: statusOf(rule, today, paidSet, skipSet),
-      monthly_equivalent: monthlyEquivalent(rule),
+      // Shown at the currency's own precision: 2 for USD, 8 for a crypto
+      // ticker, so a small crypto rule is not printed as 0.00.
+      monthly_equivalent: new Decimal(monthlyEquivalent(rule)).toFixed(currencyDigits(rule.currency)),
       // The occurrence pay/skip/run-now act on — overdue rules point backwards
       // from today here, while next_occurrence always looks forwards.
       due_date: dueOccurrence(rule, today, paidSet, skipSet),
@@ -131,9 +137,12 @@ async function recurringRoutes(fastify, opts) {
       reply.code(400)
       return { error: t(`errors.${window.error}`, {}, lang) }
     }
-    const rules = await loadVisibleRules(fastify.db, userId, { order: 'r.id ASC' })
+    const [rules, installments] = await Promise.all([
+      loadVisibleRules(fastify.db, userId, { order: 'r.id ASC' }),
+      loadInstallmentOccurrences(fastify.db, userId, window.from, window.to)
+    ])
     const flags = await loadOccurrenceFlags(fastify.db, rules.map(r => r.id))
-    const occurrences = projectOccurrences(rules, flags, window.from, window.to)
+    const occurrences = mergeOccurrences(projectOccurrences(rules, flags, window.from, window.to), installments)
     return { from: window.from, to: window.to, occurrences }
   })
 
@@ -708,6 +717,23 @@ async function recurringRoutes(fastify, opts) {
   // otherwise log the full URL with the token) and returns no body a client
   // could cache. Digest lookup mirrors routes/tokens.js: the plaintext is never
   // stored, only shown once at creation.
+  // The feed's debt installments, each with its debt's account name when the
+  // feed owner can see that account: a debt shared by family does not reveal
+  // the owner's account names (the rule GET /debts follows).
+  async function feedInstallments(userId, from, to) {
+    const installments = await loadInstallmentOccurrences(fastify.db, userId, from, to)
+    if (installments.length === 0) return installments
+    const visible = await visibleAccountIds(fastify.db, userId)
+    const { rows } = await fastify.db.query(
+      `SELECT d.id AS debt_id, a.name AS account_name
+       FROM debts d JOIN accounts a ON a.id = d.account_id
+       WHERE d.id = ANY($1::int[]) AND a.id = ANY($2::int[])`,
+      [[...new Set(installments.map(row => row.debt_id))], visible]
+    )
+    const names = new Map(rows.map(row => [row.debt_id, row.account_name]))
+    return installments.map(row => ({ ...row, account_name: names.get(row.debt_id) ?? null }))
+  }
+
   const FEED_RATE_LIMIT = {
     config: {
       public: true,
@@ -741,9 +767,13 @@ async function recurringRoutes(fastify, opts) {
 
     const today = await serverToday()
     const to = shiftDays(today, FEED_WINDOW_DAYS)
-    const rules = (await loadVisibleRules(fastify.db, token.user_id)).filter(rule => rule.is_active)
+    const [allRules, installments] = await Promise.all([
+      loadVisibleRules(fastify.db, token.user_id),
+      feedInstallments(token.user_id, today, to)
+    ])
+    const rules = allRules.filter(rule => rule.is_active)
     const flags = await loadOccurrenceFlags(fastify.db, rules.map(rule => rule.id))
-    const occurrences = projectOccurrences(rules, flags, today, to)
+    const occurrences = mergeOccurrences(projectOccurrences(rules, flags, today, to), installments)
 
     reply.header('Content-Type', 'text/calendar; charset=utf-8')
     reply.header('Cache-Control', 'no-store')

@@ -118,6 +118,17 @@ describe('GET /reports/dashboard recurring block', () => {
     expect(recurring.upcoming.find(o => o.rule_id === 1)).toMatchObject({ date: '2026-03-31' })
   })
 
+  it('converts a small crypto rule exactly instead of zeroing it in its own currency', async () => {
+    // 0.0001 BTC a month at 60000 USD: 6 USD. Rounded to cents in BTC first, it was 0.
+    const { app } = buildStubServer(dashboardRoutes, [
+      { match: /CURRENT_DATE/, rows: () => [{ today: TODAY }] },
+      { match: /FROM exchange_rates/, rows: () => [{ from_currency: 'BTC', to_currency: 'USD', rate: '60000' }] },
+      { match: /FROM recurring_rules/, rows: () => [stubRule({ currency: 'BTC', amount: '0.000100000000' })] }
+    ])
+    const recurring = await recurringBlock(app)
+    expect(recurring.monthly_commitments).toBe(6)
+  })
+
   it('projects nothing when there are no rules', async () => {
     const { app } = buildServer([])
     const recurring = await recurringBlock(app)

@@ -8,9 +8,13 @@ const RULE_JOIN = `
   FROM recurring_rules r
   LEFT JOIN accounts a ON a.id = r.account_id
   LEFT JOIN categories c ON c.id = r.category_id
-  JOIN users ou ON ou.id = r.user_id
-  LEFT JOIN entity_shares es ON es.entity_type = 'recurring' AND es.entity_id = r.id
-    AND es.owner_id = r.user_id AND (es.shared_with = $1 OR es.shared_with IS NULL)`
+  JOIN users ou ON ou.id = r.user_id`
+
+// A rule shared both to the whole family and to the user directly has two
+// share rows; an EXISTS (not a join) keeps it one row. $1 is the caller.
+const RULE_VISIBLE = `(r.user_id = $1 OR EXISTS (SELECT 1 FROM entity_shares es
+    WHERE es.entity_type = 'recurring' AND es.entity_id = r.id AND es.owner_id = r.user_id
+      AND (es.shared_with = $1 OR es.shared_with IS NULL)))`
 
 // A rule can be shared without its account: the account's name is only shown to
 // users who can see the account itself (same scope as services/visibility.js).
@@ -26,7 +30,7 @@ const RULE_SHARE_COLUMNS = `CASE WHEN a.user_id = $1 OR EXISTS (SELECT 1 FROM en
 export async function loadVisibleRules(db, userId, { order = 'r.next_date ASC' } = {}) {
   const { rows } = await db.query(
     `SELECT ${ruleColumns('r.')}, ${RULE_SHARE_COLUMNS} ${RULE_JOIN}
-     WHERE r.user_id = $1 OR es.id IS NOT NULL
+     WHERE ${RULE_VISIBLE}
      ORDER BY ${order}`,
     [userId]
   )
@@ -36,7 +40,7 @@ export async function loadVisibleRules(db, userId, { order = 'r.next_date ASC' }
 export async function loadRule(db, userId, id) {
   const { rows } = await db.query(
     `SELECT ${ruleColumns('r.')}, ${RULE_SHARE_COLUMNS} ${RULE_JOIN}
-     WHERE r.id = $2 AND (r.user_id = $1 OR es.id IS NOT NULL)`,
+     WHERE r.id = $2 AND ${RULE_VISIBLE}`,
     [userId, id]
   )
   return rows[0] ?? null

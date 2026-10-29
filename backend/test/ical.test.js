@@ -135,3 +135,63 @@ describe('buildFeed', () => {
     expect(buildFeed([occurrence({ date: null })], opts)).not.toContain('BEGIN:VEVENT')
   })
 })
+
+describe('buildFeed debt installments', () => {
+  // A row of loadInstallmentOccurrences(), with the account name the feed route adds
+  function installment(overrides = {}) {
+    return {
+      kind: 'debt_installment',
+      installment_id: 11,
+      debt_id: 4,
+      user_id: 7,
+      name: 'Car loan · Bob',
+      date: '2026-11-15',
+      amount: '33.330000000000',
+      currency: 'USD',
+      debt_type: 'borrow',
+      paid: false,
+      skipped: false,
+      is_owner: true,
+      account_name: 'Main card',
+      ...overrides
+    }
+  }
+  const lines = text => text.replace(/\r\n /g, '').split('\r\n')
+  const uids = text => lines(text).filter(line => line.startsWith('UID:'))
+
+  it('uses its own UID prefix, distinct from a subscription with the same id', () => {
+    const text = buildFeed([occurrence({ rule_id: 11, date: '2026-11-15' }), installment()], opts)
+    expect(uids(text)).toEqual([
+      'UID:finapp-7-11-2026-11-15@finapp.example',
+      'UID:finapp-debt-7-11-2026-11-15@finapp.example'
+    ])
+  })
+
+  it('summarises with the debt name and counterparty, escaped', () => {
+    const text = buildFeed([installment({ name: 'Loan, car · Smith; Jones\\Co\nLtd' })], opts)
+    expect(lines(text)).toContain('SUMMARY:Loan\\, car · Smith\\; Jones\\\\Co\\nLtd')
+  })
+
+  it('describes amount, currency and account, and leaves an unseen account out', () => {
+    const withAccount = buildFeed([installment()], opts)
+    expect(lines(withAccount)).toContain('DESCRIPTION:33.33 · USD · Main card')
+    const without = buildFeed([installment({ account_name: null })], opts)
+    expect(lines(without)).toContain('DESCRIPTION:33.33 · USD')
+  })
+
+  it('is transparent, marks only paid ones and drops skipped ones', () => {
+    const text = buildFeed([
+      installment({ installment_id: 1, date: '2026-11-15', paid: true }),
+      installment({ installment_id: 2, date: '2026-12-15', skipped: true }),
+      installment({ installment_id: 3, date: '2027-01-15' })
+    ], opts)
+    expect(uids(text)).toEqual([
+      'UID:finapp-debt-7-1-2026-11-15@finapp.example',
+      'UID:finapp-debt-7-3-2027-01-15@finapp.example'
+    ])
+    expect(text).not.toContain('20261215')
+    expect(text.match(/X-FINAPP-PAID:/g)).toEqual(['X-FINAPP-PAID:'])
+    expect(text).toContain('X-FINAPP-PAID:20261115')
+    expect(text.match(/TRANSP:TRANSPARENT/g)).toHaveLength(2)
+  })
+})
