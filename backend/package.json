@@ -20,12 +20,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fastify/cookie": "^11.0.0",
+    "@fastify/cookie": "^11.1.5",
     "@fastify/cors": "^11.3.1",
     "@fastify/helmet": "^13.2.0",
     "@fastify/multipart": "^10.0.0",
     "@fastify/rate-limit": "^11.2.1",
-    "@fastify/static": "^10.1.7",
+    "@fastify/static": "^10.1.8",
     "bcryptjs": "^3.0.3",
     "currency-codes": "^2.2.0",
     "decimal.js": "^10.6.0",
